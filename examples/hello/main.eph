@@ -1,76 +1,21 @@
-// Gossamer — Hello World Example
-//
-// Minimal Gossamer application: opens a window, loads HTML, runs.
-// Demonstrates linear ownership of the webview handle.
-//
-// Build:
-//   just build-example hello
-//
 // SPDX-License-Identifier: PMPL-1.0-or-later
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+//
+// Gossamer Hello World — minimal webview application.
+//
+// The webview handle is linear: Shell.run() consumes it.
+// Attempting to use the handle after run is a compile error.
 
-import Gossamer.Shell
-import Gossamer.Bridge
+fn main(): I32 =
+  region app {
+    // Create window — returns a LINEAR handle
+    let! webview = Shell.create("Hello Gossamer", 800, 600) in
 
-/// Minimal Gossamer application.
-///
-/// The webview handle is linear: Shell.run() consumes it.
-/// Attempting to use `webview` after Shell.run() is a compile error.
-fn main() -> i32 {
-    region app:
-        // Create a webview window. Returns a LINEAR handle.
-        let! webview = Shell.create@app({
-            title: "Hello Gossamer",
-            width: 800,
-            height: 600,
-            resizable: true,
-            decorations: true,
-            fullscreen: false,
-        })
+    // Load HTML — BORROWS the handle (returns it)
+    let! webview = Shell.loadHTML(webview, "<html><body><h1>Hello Gossamer!</h1><p>A linearly-typed webview shell.</p></body></html>") in
 
-        // Load HTML content. BORROWS the handle (returns it back).
-        let! (webview, _result) = Shell.loadHTML(webview, "
-            <!DOCTYPE html>
-            <html lang='en'>
-            <head>
-                <meta charset='UTF-8'>
-                <style>
-                    body {
-                        font-family: system-ui, sans-serif;
-                        display: flex;
-                        flex-direction: column;
-                        align-items: center;
-                        justify-content: center;
-                        height: 100vh;
-                        margin: 0;
-                        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-                        color: #e0e0e0;
-                    }
-                    h1 {
-                        font-size: 3em;
-                        margin-bottom: 0.2em;
-                        background: linear-gradient(to right, #e94560, #ff6b6b);
-                        -webkit-background-clip: text;
-                        -webkit-text-fill-color: transparent;
-                    }
-                    p { font-size: 1.2em; opacity: 0.7; }
-                    code { color: #ff6b6b; font-size: 0.9em; }
-                </style>
-            </head>
-            <body>
-                <h1>Gossamer</h1>
-                <p>A linearly-typed webview shell</p>
-                <p><code>let! webview = Shell.create@app(...)</code></p>
-            </body>
-            </html>
-        ")
+    // Run event loop — CONSUMES the handle
+    let! _ = Shell.run(webview) in
 
-        // Run the event loop. CONSUMES the handle.
-        // After this line, `webview` no longer exists in scope.
-        Shell.run(webview)
-
-        // The handle has been consumed. This would be a compile error:
-        // Shell.setTitle(webview, "Too late")  // ERROR: linear variable already consumed
-
-        0
-}
+    0
+  }

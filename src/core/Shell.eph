@@ -1,0 +1,49 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+//
+// Gossamer.Shell — Webview window lifecycle management.
+//
+// The webview handle is a LINEAR resource:
+// - create returns a linear handle (must be consumed)
+// - loadHTML borrows the handle (returns it back)
+// - navigate borrows the handle (returns it back)
+// - run CONSUMES the handle (window is destroyed)
+// - destroy CONSUMES the handle (alternative to run)
+
+// FFI declarations — these are implemented in ffi/zig/src/main.zig
+// and linked as libgossamer.so
+
+// Create a webview window. Returns a linear handle.
+// FFI: gossamer_create(title, width, height, resizable, decorations, fullscreen) -> handle
+fn create(title: String, width: I32, height: I32): I64 =
+  __ffi("gossamer_create", title, width, height, 1, 1, 0)
+
+// Load HTML content into the webview. Borrows the handle.
+// FFI: gossamer_load_html(handle, html) -> result
+fn loadHTML(handle: I64, html: String): I32 =
+  __ffi("gossamer_load_html", handle, html)
+
+// Navigate to a URL. Borrows the handle.
+// FFI: gossamer_navigate(handle, url) -> result
+fn navigate(handle: I64, url: String): I32 =
+  __ffi("gossamer_navigate", handle, url)
+
+// Evaluate JavaScript in the webview. Borrows the handle.
+// FFI: gossamer_eval(handle, js) -> result
+fn eval(handle: I64, js: String): I32 =
+  __ffi("gossamer_eval", handle, js)
+
+// Set the window title. Borrows the handle.
+// FFI: gossamer_set_title(handle, title) -> result
+fn setTitle(handle: I64, title: String): I32 =
+  __ffi("gossamer_set_title", handle, title)
+
+// Run the event loop. CONSUMES the handle — window is destroyed after.
+// FFI: gossamer_run(handle) -> void
+fn run(handle: I64): () =
+  __ffi("gossamer_run", handle)
+
+// Destroy the webview without running. CONSUMES the handle.
+// FFI: gossamer_destroy(handle) -> void
+fn destroy(handle: I64): () =
+  __ffi("gossamer_destroy", handle)

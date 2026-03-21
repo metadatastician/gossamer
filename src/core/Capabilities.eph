@@ -1,0 +1,25 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+//
+// Gossamer.Capabilities — Linear capability tokens for permission enforcement.
+//
+// Capability tokens are LINEAR resources:
+// - grant returns a linear token (must be revoked)
+// - check borrows the token (returns it back)
+// - revoke CONSUMES the token
+
+// Grant a capability token for the given resource kind.
+// Resource kinds: 0=FileSystem, 1=Network, 2=Shell, 3=Clipboard, 4=Notification, 5=Tray
+// FFI: gossamer_cap_grant(resource_kind) -> token
+fn grant(resourceKind: I32): I64 =
+  __ffi("gossamer_cap_grant", resourceKind)
+
+// Check a capability token before a gated operation. Borrows the token.
+// FFI: gossamer_cap_check(token) -> result (0=ok, 10=denied)
+fn check(token: I64): I32 =
+  __ffi("gossamer_cap_check", token)
+
+// Revoke a capability token. CONSUMES it — no further use possible.
+// FFI: gossamer_cap_revoke(token) -> void
+fn revoke(token: I64): () =
+  __ffi("gossamer_cap_revoke", token)
