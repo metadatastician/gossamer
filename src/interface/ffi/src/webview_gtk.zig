@@ -158,6 +158,6 @@ pub fn destroy(state: *WebviewState) void {
 }
 
 // Signal handler: called when the GTK window is destroyed.
-fn onWindowDestroy(_: ?*c.GtkWidget, _: ?*anyopaque) callconv(.C) void {
+fn onWindowDestroy(_: ?*c.GtkWidget, _: ?*anyopaque) callconv(.c) void {
     c.gtk_main_quit();
 }

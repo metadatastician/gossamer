@@ -82,7 +82,7 @@ pub const GossamerHandle = struct {
 
 /// IPC callback function type (C ABI).
 /// Receives a JSON-encoded request string, returns a JSON-encoded response string.
-pub const BindingCallback = *const fn ([*:0]const u8) callconv(.C) [*:0]const u8;
+pub const BindingCallback = *const fn ([*:0]const u8) callconv(.c) [*:0]const u8;
 
 /// Opaque channel handle.
 /// In v0.1, channels are lightweight wrappers around the webview's JS bridge.
@@ -353,7 +353,7 @@ export fn gossamer_channel_open(handle_ptr: u64) u64 {
 export fn gossamer_channel_bind(
     channel_ptr: u64,
     name: [*:0]const u8,
-    callback: ?*const fn ([*:0]const u8) callconv(.C) [*:0]const u8,
+    callback: ?*const fn ([*:0]const u8) callconv(.c) [*:0]const u8,
 ) Result {
     _ = channel_ptr;
     _ = name;

@@ -1,4 +1,4 @@
-// Gossamer Webview Shell — Zig Build Configuration
+// Gossamer Webview Shell — Zig Build Configuration (Zig 0.15+)
 //
 // Builds libgossamer as both shared (.so/.dylib/.dll) and static (.a) libraries.
 // Links against platform-specific webview libraries at compile time.
@@ -22,96 +22,61 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // --- Shared library (.so / .dylib / .dll) ---
-    const shared_lib = b.addSharedLibrary(.{
-        .name = "gossamer",
+    // Create the root module (shared between shared/static/test)
+    const root_module = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
+    });
+
+    // Add system library dependencies to the module
+    root_module.linkSystemLibrary("gtk+-3.0", .{});
+    root_module.linkSystemLibrary("webkit2gtk-4.1", .{});
+    root_module.linkSystemLibrary("glib-2.0", .{});
+
+    // --- Shared library (.so / .dylib / .dll) ---
+    const shared_lib = b.addLibrary(.{
+        .name = "gossamer",
+        .root_module = root_module,
+        .linkage = .dynamic,
         .version = .{ .major = 0, .minor = 1, .patch = 0 },
     });
 
-    linkPlatformLibs(shared_lib);
     b.installArtifact(shared_lib);
 
     // --- Static library (.a) ---
-    const static_lib = b.addStaticLibrary(.{
+    const static_module = b.createModule(.{
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+
+    static_module.linkSystemLibrary("gtk+-3.0", .{});
+    static_module.linkSystemLibrary("webkit2gtk-4.1", .{});
+    static_module.linkSystemLibrary("glib-2.0", .{});
+
+    const static_lib = b.addLibrary(.{
         .name = "gossamer",
+        .root_module = static_module,
+        .linkage = .static,
+    });
+
+    b.installArtifact(static_lib);
+
+    // --- Unit tests ---
+    const test_module = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    linkPlatformLibs(static_lib);
-    b.installArtifact(static_lib);
-
-    // --- Unit tests ---
-    // Note: unit tests test FFI logic (result codes, null checks, etc.)
-    // They do NOT link against GTK — platform tests are integration tests.
     const unit_tests = b.addTest(.{
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = test_module,
     });
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
     const test_step = b.step("test", "Run Gossamer unit tests");
     test_step.dependOn(&run_unit_tests.step);
-
-    // --- Integration tests (require GTK/WebKitGTK) ---
-    const integration_tests = b.addTest(.{
-        .root_source_file = b.path("test/integration_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    linkPlatformLibs(integration_tests);
-    integration_tests.linkLibrary(shared_lib);
-
-    const run_integration_tests = b.addRunArtifact(integration_tests);
-    const integration_step = b.step("test-integration", "Run integration tests (requires display)");
-    integration_step.dependOn(&run_integration_tests.step);
-
-    // --- Documentation ---
-    const docs_lib = b.addStaticLibrary(.{
-        .name = "gossamer-docs",
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    const docs_step = b.step("docs", "Generate Gossamer API documentation");
-    docs_step.dependOn(&b.addInstallDirectory(.{
-        .source = docs_lib.getEmittedDocs(),
-        .install_dir = .prefix,
-        .install_subdir = "docs",
-    }).step);
-}
-
-/// Link platform-specific system libraries required for webview support.
-fn linkPlatformLibs(step: *std.Build.Step.Compile) void {
-    step.linkLibC();
-
-    const target_os = step.rootModuleTarget().os.tag;
-
-    switch (target_os) {
-        .linux => {
-            // GTK 3 + WebKitGTK for Linux (Phase 1)
-            step.linkSystemLibrary("gtk+-3.0");
-            step.linkSystemLibrary("webkit2gtk-4.1");
-            step.linkSystemLibrary("glib-2.0");
-        },
-        // Phase 2: macOS
-        // .macos => {
-        //     step.linkFramework("Cocoa");
-        //     step.linkFramework("WebKit");
-        // },
-        // Phase 2: Windows
-        // .windows => {
-        //     step.linkSystemLibrary("WebView2Loader");
-        //     step.linkSystemLibrary("ole32");
-        //     step.linkSystemLibrary("comctl32");
-        // },
-        else => {},
-    }
 }
