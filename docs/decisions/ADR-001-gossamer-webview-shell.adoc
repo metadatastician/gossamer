@@ -1,0 +1,539 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+:toc: macro
+:toclevels: 3
+:icons: font
+:source-highlighter: rouge
+
+= ADR-001: Gossamer — A Linearly-Typed Webview Shell in Ephapax
+
+|===
+| Status | Accepted
+| Date | 2026-03-21
+| Author | Jonathan D.A. Jewell
+| Deciders | hyperpolymath
+| Category | Architecture / New Project
+|===
+
+toc::[]
+
+== Context
+
+Desktop application frameworks that wrap web frontends in native webview
+windows represent a significant segment of modern software development.
+The current landscape includes:
+
+* *Bundled-engine* approaches (Electron, NW.js, CEF) — ship an entire
+  Chromium browser, guaranteeing consistent rendering but incurring
+  150MB+ binary overhead and high RAM usage.
+* *OS-webview* approaches (Tauri, Wails, Neutralinojs, webview/webview,
+  Gluon) — use the operating system's native webview, achieving small
+  binaries but accepting cross-platform rendering inconsistency.
+* *Custom-renderer* approaches (Sciter, Ultralight, Servo) — implement
+  their own HTML/CSS engines, trading web compatibility for control.
+* *Native-UI* approaches (Dioxus, Flutter) — abandon webviews entirely
+  in favour of custom or native rendering.
+
+=== Problem Statement
+
+All existing frameworks share three fundamental weaknesses:
+
+1. **Stringly-typed IPC.** Frontend-backend communication passes through
+   a JSON boundary with no compile-time verification that both sides
+   agree on message shapes. Tauri mitigates this with code generation
+   (specta), but the guarantee is still not a proof.
+
+2. **Runtime resource lifecycle management.** Webview handles, IPC
+   channels, event listeners, and plugin resources are managed through
+   reference counting (Tauri/Wails), garbage collection (Electron/
+   Flutter), or manual tracking (CEF/Neutralinojs). Resource leaks,
+   use-after-free, and double-free remain possible in all frameworks.
+
+3. **Runtime permission enforcement.** Tauri's capability-based security
+   is the best in the field, but it enforces permissions at runtime by
+   checking a JSON configuration file. A misconfiguration permits
+   unintended access; the compiler cannot detect the error.
+
+== Decision
+
+We will build **Gossamer**, a webview shell framework in Ephapax that
+eliminates all three weaknesses through the language's dyadic type system
+(affine + linear types), region-based memory management, and the
+hyperpolymath Idris2-ABI / Zig-FFI standard.
+
+=== Core Architecture
+
+[source]
+----
+┌─────────────────────────────────────────────────┐
+│  Web Frontend (HTML/CSS/JS or ReScript)         │
+│  — Runs inside OS webview                       │
+│  — Calls backend via typed IPC                  │
+└────────────────────┬────────────────────────────┘
+                     │ IPC (typed channels)
+┌────────────────────┴────────────────────────────┐
+│  Ephapax Application Layer                      │
+│  — Command handlers (linear ownership)          │
+│  — Capability tokens (compile-time permissions) │
+│  — Plugin host (linear resource grants)         │
+└────────────────────┬────────────────────────────┘
+                     │ Safe wrappers
+┌────────────────────┴────────────────────────────┐
+│  Idris2 ABI Layer  (src/abi/)                   │
+│  — Platform type proofs                         │
+│  — Webview handle ABI (opaque, non-null)        │
+│  — IPC message ABI (serialisation proofs)       │
+│  — Capability ABI (permission encoding)         │
+└────────────────────┬────────────────────────────┘
+                     │ C ABI
+┌────────────────────┴────────────────────────────┐
+│  Zig FFI Layer  (ffi/zig/)                      │
+│  — Platform-specific webview bindings           │
+│  — WebKitGTK (Linux), WKWebView (macOS),        │
+│    WebView2 (Windows)                           │
+│  — System tray / notifications / file dialogs   │
+└─────────────────────────────────────────────────┘
+----
+
+=== Three Novel Contributions
+
+==== 1. Linearly-Owned Webview Handle
+
+The webview handle is a linear resource: created exactly once, must be
+consumed (destroyed) exactly once. Operations that borrow the handle
+return it; operations that consume it do not. The type system prevents
+use-after-free and double-free at compile time.
+
+==== 2. Compile-Time Typed IPC Protocol
+
+The IPC protocol is a type parameter on the channel. Both frontend and
+backend are checked against the same protocol definition. A message
+shape mismatch is a compile error, not a runtime `JSON.parse` failure.
+
+==== 3. Linear Capability Tokens
+
+Permissions are linear values in the type system. A plugin cannot access
+the filesystem without holding a `Cap(FileSystem scope)` value. The
+compiler enforces this — no config file, no runtime check.
+
+== Comprehensive Landscape Comparison
+
+=== Core Architecture Grid
+
+[cols="1,1,1,1,1,1"]
+|===
+| Framework | Backend | Rendering | Ships Browser? | Binary Size | IPC
+
+| Electron | Node.js | Chromium | Yes (~150MB) | 150-300MB | contextBridge
+| NW.js | Node.js | Chromium | Yes (~150MB) | 150-250MB | Shared V8
+| CEF | C++ | Chromium | Yes (~150MB) | 100-200MB | C++ message router
+| Tauri | Rust | OS webview | No | 3-8MB | JSON invoke
+| Wails | Go | OS webview | No | 5-10MB | Go struct binding
+| Neutralinojs | C++ | OS webview | No | 2-5MB | REST localhost
+| webview/webview | C/C++ | OS webview | No | <1MB | Raw fn binding
+| Gluon | Rust | Installed browser | No | <1MB | JS↔Rust bridge
+| Sciter | C++ | Custom | Custom renderer | 5-8MB | TIScript
+| Ultralight | C++ | WebCore (stripped) | Partial | 15-30MB | C++ API
+| Servo | Rust | Servo (experimental) | Embedded | 30-50MB | Rust API
+| Dioxus | Rust | Webview or native | Optional | 3-10MB | Rust signals
+| Flutter | Dart | Skia (custom) | No (not web) | 10-20MB | Platform channels
+| **Gossamer** | **Ephapax** | **OS webview** | **No** | **1-3MB** | **Typed linear channels**
+|===
+
+=== Safety & Correctness Grid
+
+[cols="1,1,1,1,1,1"]
+|===
+| Framework | Resource Lifecycle | IPC Type Safety | Permission Model | Memory Safety | GC?
+
+| Electron | GC (V8 + Node) | None (runtime JSON) | Opt-in sandbox | GC handles it | Yes
+| NW.js | GC (shared V8) | None | None | GC handles it | Yes
+| CEF | Ref-counted | None (string msgs) | Process sandbox | Manual + refcount | Partial
+| Tauri | Arc/refcounted | Codegen (specta) | Capability JSON | Rust ownership | No (Arc ≈ mini-GC)
+| Wails | Go GC | Go reflection | None | Go GC | Yes
+| Neutralinojs | Manual C++ | None (REST/JSON) | Token auth | Manual | No (leak-prone)
+| webview/webview | Manual C | None | None | Manual | No (no safety)
+| Gluon | Rust ownership | Serde types | None | Rust ownership | No
+| Sciter | Ref-counted | TIScript typed | None | Manual + refcount | Partial
+| Ultralight | Ref-counted | None | None | Manual + refcount | Partial
+| Servo | Rust ownership | Rust API | Experimental | Rust ownership | No (JS GC in content)
+| Dioxus | Rust ownership | Rust types | None | Rust ownership | No
+| Flutter | Dart GC | Codegen | None | Dart GC | Yes
+| **Gossamer** | **Linear (proved)** | **Compile-time protocol** | **Linear cap tokens** | **Proved compile-time** | **Never**
+|===
+
+=== Cross-Platform Support Grid
+
+[cols="1,1,1,1,1,1,1"]
+|===
+| Framework | Linux | macOS | Windows | iOS | Android | Web/WASM
+
+| Electron | ✓ | ✓ | ✓ | ✗ | ✗ | ✗
+| NW.js | ✓ | ✓ | ✓ | ✗ | ✗ | ✗
+| CEF | ✓ | ✓ | ✓ | ✗ | ✗ | ✗
+| Tauri | ✓ | ✓ | ✓ | ✓ | ✓ | ✗
+| Wails | ✓ | ✓ | ✓ | ✗ | ✗ | ✗
+| Neutralinojs | ✓ | ✓ | ✓ | ✗ | ✗ | ✓
+| webview/webview | ✓ | ✓ | ✓ | ✗ | ✗ | ✗
+| Gluon | ✓ | ✓ | ✓ | ✗ | ✗ | ✗
+| Sciter | ✓ | ✓ | ✓ | ✗ | ✗ | ✗
+| Ultralight | ✓ | ✓ | ✓ | ✗ | ✗ | ✗
+| Servo | ✓ | ✓ | Partial | ✗ | ✗ | ✗
+| Dioxus | ✓ | ✓ | ✓ | ✓ | ✓ | ✓
+| Flutter | ✓ | ✓ | ✓ | ✓ | ✓ | ✓
+| **Gossamer** | **✓ (P1)** | **P2** | **P2** | **P3** | **P3** | **N/A**
+|===
+
+=== Developer Experience Grid
+
+[cols="1,1,1,1,1,1"]
+|===
+| Framework | Frontend | Hot Reload | Plugins | Bundler | Maturity
+
+| Electron | Any web | ✓ | Node modules | electron-builder | Production (10y)
+| NW.js | Any web | ✓ | Node modules | nw-builder | Production (10y)
+| CEF | Any web | Manual | C++ plugins | Custom | Production (15y)
+| Tauri | Any web | ✓ | Rust plugin API | cargo-tauri | Production (3y)
+| Wails | Any web | ✓ | Go interfaces | wails build | Stable (2y)
+| Neutralinojs | Any web | ✓ | Extensions (stdio) | neu build | Stable (3y)
+| webview/webview | Raw HTML | ✗ | None | Manual | Minimal library
+| Gluon | Any web | ✗ | None | cargo build | Alpha
+| Sciter | Sciter HTML | ✓ | C++ | scapp | Production (8y)
+| Ultralight | Subset web | Limited | C++ API | Custom | Beta
+| Servo | Standard web | ✗ | Rust API | Custom | Experimental
+| Dioxus | Dioxus RSX | ✓ | Rust crates | dx bundle | Stable (2y)
+| Flutter | Dart widgets | ✓ | pub.dev | flutter build | Production (7y)
+| **Gossamer** | **Any web** | **✓ (dev server)** | **Linear cap** | **P2** | **v0.1**
+|===
+
+== Per-Framework Pros & Cons
+
+=== Electron
+
+*Pros:*
+
+* Largest ecosystem — thousands of plugins, boilerplates, tools
+* Perfect rendering consistency (same Chromium everywhere)
+* Full Node.js API — any npm package works
+* Best debugging (Chrome DevTools built in)
+* Battle-tested at massive scale (VS Code, Slack, Discord, Figma)
+
+*Cons:*
+
+* 150MB+ binary for a Hello World
+* RAM hungry — 50-200MB baseline per window
+* Chromium update treadmill — security patches require framework updates
+* IPC is runtime-checked JSON — type mismatches are runtime errors
+* No permission model by default
+* Bundles two full runtimes (V8 + Node)
+
+=== NW.js
+
+*Pros:*
+
+* Shared V8 context — simpler than Electron's process split
+* Can run Node modules directly in the browser context
+* Chrome Apps/Extensions API support
+* Very stable (longer history than Electron)
+
+*Cons:*
+
+* Same size/RAM overhead as Electron
+* Smaller and shrinking ecosystem
+* Shared context is a security nightmare — no isolation
+* No mobile support
+
+=== CEF (Chromium Embedded Framework)
+
+*Pros:*
+
+* Most flexible — embed Chromium into your app, not vice versa
+* Used by major products (Spotify, Steam, game UIs)
+* Multi-process sandboxing
+* Can strip unneeded Chromium features
+
+*Cons:*
+
+* Building from source is notoriously painful
+* Still ships ~150MB of Chromium
+* Low-level — no framework niceties
+* C++ API is complex (CefRefPtr, CefString, CefV8Value)
+* Sparse documentation
+
+=== Tauri
+
+*Pros:*
+
+* Small binaries (3-8MB) via OS webview
+* Rust backend — memory safe, fast, no GC
+* Capability-based permission system (best in field)
+* Mobile support (iOS + Android in 2.0)
+* Active development, growing plugin ecosystem
+* IPC code generation (specta) gives partial type safety
+
+*Cons:*
+
+* Three different webview engines — CSS/JS quirks
+* WebKitGTK on Linux lags behind modern web features
+* Rust learning curve
+* IPC still JSON at the wire level — codegen is not proof
+* Permission model is runtime-checked JSON config
+* WebView2 requires Edge runtime
+
+=== Wails
+
+*Pros:*
+
+* Go backend — familiar, fast compilation
+* Auto-binding of Go structs to JS — less boilerplate
+* Simple mental model
+* Small binaries
+
+*Cons:*
+
+* Go GC introduces pauses
+* No permission model
+* No mobile support
+* Smaller community than Tauri
+* Auto-binding uses reflection — runtime errors possible
+
+=== Neutralinojs
+
+*Pros:*
+
+* Extremely lightweight (~2-3MB binary)
+* Cloud mode — serve over network
+* Language-agnostic extensions (stdin/stdout)
+* Token-based IPC auth
+
+*Cons:*
+
+* REST-based IPC adds HTTP overhead per call
+* No type safety on IPC
+* C++ backend — less memory-safe than Rust
+* Smallest ecosystem of major frameworks
+* Extensions via stdio are crude
+
+=== webview/webview
+
+*Pros:*
+
+* Tiny — essentially a single C header
+* No framework opinions — use as a library
+* Bindings for many languages
+* Minimal attack surface
+
+*Cons:*
+
+* No IPC framework, plugin system, bundler, or auto-updater
+* No security model
+* No system integration (dialogs, tray, notifications)
+* Gap between "webview" and "real app" is enormous
+
+=== Gluon
+
+*Pros:*
+
+* Uses installed browser — consistent rendering AND no bundling
+* Tiny binary
+* Avoids OS webview inconsistency entirely
+
+*Cons:*
+
+* Requires user to have Firefox or Chrome
+* Can't control browser updates
+* Limited system integration
+* Alpha quality, small community
+
+=== Sciter
+
+*Pros:*
+
+* Tiny custom renderer (~5MB)
+* Very fast, GPU-accelerated
+* Built-in type-safe scripting (TIScript)
+* Good for game UIs
+
+*Cons:*
+
+* Not a real browser — partial web compatibility
+* TIScript is proprietary, not JS
+* Can't use React, Vue, or any JS framework
+* Closed-source core
+* Small ecosystem
+
+=== Ultralight
+
+*Pros:*
+
+* Lighter than full Chromium, more compatible than Sciter
+* GPU-accelerated
+* Good for game UI overlays
+* C API for embedding
+
+*Cons:*
+
+* Not a full browser — some web APIs missing
+* Proprietary (paid for commercial use)
+* Beta quality, API still changing
+* Small community
+
+=== Servo
+
+*Pros:*
+
+* Rust — memory safe, concurrent
+* Parallel CSS and layout engine (architecturally unique)
+* Embeddable as a library
+* Open source (Linux Foundation)
+
+*Cons:*
+
+* Not production ready — experimental
+* Missing many web features
+* Small maintenance team
+* Very long build times
+
+=== Dioxus
+
+*Pros:*
+
+* Multi-target from one codebase (webview, native, terminal, web)
+* Rust throughout — no JS/HTML required
+* React-like component model
+* Mobile support
+
+*Cons:*
+
+* Must write UI in Rust RSX — can't use existing web frontends
+* Not a webview shell (different category)
+* No permission/capability model
+* Young ecosystem
+
+=== Flutter
+
+*Pros:*
+
+* Best cross-platform coverage (mobile, desktop, web)
+* Custom Skia renderer — pixel-perfect consistency
+* Excellent hot reload
+* Massive ecosystem, Google backing
+
+*Cons:*
+
+* Dart GC — pauses, memory overhead
+* Can't use existing web frontends
+* Apps don't look/feel native
+* Desktop less mature than mobile
+* Accessibility can be worse than native
+
+=== Gossamer (Ephapax)
+
+*Pros:*
+
+* **Typed IPC** — protocol is a compile-time type, not runtime JSON.
+  Mismatches are impossible.
+* **Linear resource management** — webview handles, IPC channels, plugin
+  resources provably can't leak, double-free, or use-after-free. Proved
+  at compile time, not prevented at runtime.
+* **No GC, ever** — region-linear fusion categorically eliminates garbage
+  collection. No Arc/Rc, no refcounting, no tracing. Deterministic.
+* **Compile-time capabilities** — permissions are linear tokens. The
+  compiler, not a config file, enforces access control.
+* **Minimal binary** — Zig FFI to OS webview, no runtime, 1-3MB.
+* **Dyadic gradual strictness** — prototype in affine mode (forgiving),
+  ship in linear mode (strict). Same code, same FFI.
+* **Idris2 ABI proofs** — the FFI interface is formally verified.
+* **Plugin composability** — linear capability tokens prevent plugins
+  from interfering with each other.
+* **Existing compiler** — Ephapax has a working two-phase compiler
+  (Idris2 stage 1 → S-expression IR → WASM) with both affine and
+  linear modes, plus ephapaxiser for linearity enforcement.
+
+*Cons:*
+
+* **Concept stage** — no real apps built with Gossamer yet.
+* **Tiny ecosystem** — no plugins, no community, no documentation beyond
+  this project.
+* **Same webview inconsistency** as Tauri — three engines, three sets of
+  quirks.
+* **Learning curve** — linear types, regions, capabilities, dyadic modes
+  are unfamiliar to most developers.
+* **Frontend type gap** — type safety stops at the IPC boundary unless
+  ReScript is used on the frontend side.
+* **Three-compiler toolchain** — Idris2 + Zig + Ephapax in the build
+  pipeline.
+* **Mobile is Phase 3** — Tauri already has mobile support.
+* **Single maintainer** — bus factor 1.
+
+== The GC Argument: Region-Linear Fusion
+
+The central technical insight is that Ephapax's combination of regions
+and linear types eliminates the need for garbage collection entirely.
+
+Every region-based memory system has a "region escape" problem: what
+happens when a value allocated in region R needs to outlive R?
+
+[cols="1,1,1"]
+|===
+| System | Escape Solution | Cost
+
+| MLKit | Conservative region inference | Over-allocation
+| Cyclone | Existential types + runtime checks | Runtime overhead
+| Rust | `'static` / `Arc` / `Box::leak` | Reference counting (mini-GC)
+| Linear Haskell | GC underneath everything | Still GC'd
+| **Ephapax** | **Linear types prevent escape** | **Zero — proved at compile time**
+|===
+
+Linear values must be consumed within scope. The compiler rejects any
+program that tries to return a linear value out of its region. The
+region owns all its allocations; when it exits, bulk deallocation occurs.
+No individual object tracking, no tracing, no refcounting, no pauses.
+
+Affine mode provides a softer variant — implicit cleanup at region exit,
+no explicit `free` required — but still prevents escape.
+
+== Consequences
+
+*Positive:*
+
+* A genuinely novel position in the webview shell landscape.
+* Compile-time safety guarantees that no other framework can claim.
+* GC-free execution with deterministic performance characteristics.
+* Natural integration with the hyperpolymath ABI/FFI standard.
+* Advances Ephapax from "language with proven bindings" to "language
+  with a flagship application framework."
+
+*Negative:*
+
+* Significant implementation effort (Zig FFI for three platforms).
+* Depends on Ephapax compiler maturity.
+* May be difficult to attract contributors due to unfamiliar concepts.
+
+*Neutral:*
+
+* Uses the same OS webview approach as Tauri — inherits its rendering
+  inconsistency tradeoff.
+* Frontend technology is unconstrained (any web framework works), but
+  ReScript is recommended for end-to-end type safety.
+
+== Implementation Phases
+
+* **Phase 1 (v0.1):** Linux — WebKitGTK binding via Zig FFI, Idris2 ABI
+  proofs for webview handle and IPC protocol, minimal Ephapax shell
+  (open window, load HTML, typed IPC).
+* **Phase 2 (v0.2):** macOS + Windows — WKWebView and WebView2 bindings,
+  system tray, file dialogs, notifications, bundler.
+* **Phase 3 (v0.3):** Mobile — iOS (WKWebView) and Android (WebView)
+  via JNI/Objective-C bridges.
+* **Phase 4 (v1.0):** Plugin system with linear capability grants,
+  auto-updater, full documentation, example applications.
+
+== References
+
+* Tauri documentation: https://tauri.app/
+* Tofte & Talpin, "Region-Based Memory Management" (1997)
+* Walker, "Substructural Type Systems" in Advanced Topics in Types and
+  Programming Languages (2005)
+* Wadler, "Linear Types Can Change the World!" (1990)
+* zserge/webview: https://github.com/webview/webview

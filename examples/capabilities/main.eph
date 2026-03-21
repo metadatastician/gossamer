@@ -1,0 +1,163 @@
+// Gossamer — Capability-Gated Operations Example
+//
+// Demonstrates linear capability tokens for compile-time permission enforcement.
+// A plugin/handler can only access the filesystem if it holds a Cap(FileSystem) token.
+// The compiler rejects programs that attempt gated operations without the token.
+//
+// Build:
+//   just build-example capabilities
+//
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+
+import Gossamer.Shell
+import Gossamer.Bridge
+import Gossamer.Capabilities
+
+/// Capability example: filesystem access gated by linear tokens.
+///
+/// Three linear resources are managed here:
+/// 1. WebviewHandle — the window
+/// 2. Channel — the IPC channel
+/// 3. Cap(FileSystem AppData) — filesystem permission token
+///
+/// All three MUST be consumed before region exit, or the program won't compile.
+fn main() -> i32 {
+    region app:
+        // Create window
+        let! webview = Shell.create@app({
+            title: "Gossamer Capabilities Demo",
+            width: 800,
+            height: 500,
+            resizable: true,
+            decorations: true,
+            fullscreen: false,
+        })
+
+        // Open IPC channel
+        let! channel = Bridge.open@app(webview)
+
+        // Grant a filesystem capability — read-only, app data directory only.
+        // This returns a LINEAR token. It cannot be duplicated or forged.
+        let! fs_cap = Capabilities.grant@app(FileSystem(AppData))
+
+        // Register a file-reading command that REQUIRES the capability.
+        // The handler receives the Cap token and must thread it through.
+        // Without the Cap, this handler cannot be registered — type error.
+        let! (channel, fs_cap) = Bridge.handleWithCap(channel, fs_cap,
+            "readConfig",
+            fn(cap: Cap(FileSystem), path: String) -> (Cap(FileSystem), String) {
+                // Use the capability to perform a gated read.
+                // Capabilities.withCap BORROWS the cap (returns it).
+                let (cap, contents) = Capabilities.withCap(cap, fn() -> String {
+                    File.readText(path)
+                })
+                (cap, contents)
+            }
+        )
+
+        // Register a command that does NOT need filesystem access.
+        // No Cap token required — just a normal handler.
+        let! channel = Bridge.handle(channel, "echo",
+            fn(msg: String) -> String {
+                "Echo: " ++ msg
+            }
+        )
+
+        // This would be a TYPE ERROR — no Cap token in scope:
+        // let! channel = Bridge.handle(channel, "sneakyRead",
+        //     fn(path: String) -> String {
+        //         File.readText(path)  // ERROR: requires Cap(FileSystem)
+        //     }
+        // )
+
+        // Load frontend
+        let! (webview, _) = Shell.loadHTML(webview, "
+            <!DOCTYPE html>
+            <html lang='en'>
+            <head>
+                <meta charset='UTF-8'>
+                <style>
+                    body {
+                        font-family: system-ui, sans-serif;
+                        max-width: 600px;
+                        margin: 2em auto;
+                        background: #1a1a2e;
+                        color: #e0e0e0;
+                        padding: 2em;
+                    }
+                    button {
+                        padding: 0.5em 1em;
+                        border-radius: 4px;
+                        border: none;
+                        background: #e94560;
+                        color: white;
+                        cursor: pointer;
+                        margin: 0.3em;
+                    }
+                    button:hover { background: #ff6b6b; }
+                    .cap-badge {
+                        display: inline-block;
+                        padding: 0.2em 0.6em;
+                        border-radius: 3px;
+                        font-size: 0.8em;
+                        font-family: monospace;
+                    }
+                    .cap-granted { background: #2d6a4f; color: #b7e4c7; }
+                    .cap-denied  { background: #6a2d2d; color: #e4b7b7; }
+                    #output {
+                        margin-top: 1em;
+                        padding: 1em;
+                        background: #0f3460;
+                        border-radius: 4px;
+                        font-family: monospace;
+                        white-space: pre-wrap;
+                    }
+                    h2 { color: #e94560; }
+                </style>
+            </head>
+            <body>
+                <h2>Capability Demo</h2>
+                <p>
+                    <span class='cap-badge cap-granted'>Cap(FileSystem AppData)</span>
+                    readConfig — can read app data files
+                </p>
+                <p>
+                    <span class='cap-badge cap-denied'>No Cap</span>
+                    echo — no filesystem access needed
+                </p>
+                <button onclick='doRead()'>Read Config</button>
+                <button onclick='doEcho()'>Echo</button>
+                <div id='output'>Capabilities enforced at compile time, not runtime.</div>
+                <script>
+                    var out = document.getElementById('output');
+                    async function doRead() {
+                        try {
+                            var r = await gossamer.readConfig('config.toml');
+                            out.textContent += '\\nreadConfig => ' + r;
+                        } catch(e) {
+                            out.textContent += '\\nreadConfig error: ' + e;
+                        }
+                    }
+                    async function doEcho() {
+                        var r = await gossamer.echo('hello from JS');
+                        out.textContent += '\\necho => ' + r;
+                    }
+                </script>
+            </body>
+            </html>
+        ")
+
+        // Run event loop (consumes webview)
+        Shell.run(webview)
+
+        // Clean up linear resources — ALL required
+        Bridge.close(channel)           // Consume channel
+        Capabilities.revoke(fs_cap)     // Consume capability token
+
+        // Removing either line above is a COMPILE ERROR:
+        //   "Linear variable 'channel' not consumed"
+        //   "Linear variable 'fs_cap' not consumed"
+
+        0
+}

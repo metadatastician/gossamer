@@ -1,0 +1,146 @@
+// Gossamer — Typed IPC Example
+//
+// Demonstrates typed IPC channels between frontend (JS) and backend (Ephapax).
+// The IPC protocol is defined at the type level — mismatches are compile errors.
+//
+// Build:
+//   just build-example ipc
+//
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+
+import Gossamer.Shell
+import Gossamer.Bridge
+import Gossamer.Capabilities
+
+/// IPC example: frontend sends a name, backend responds with a greeting.
+///
+/// Both the webview handle and the IPC channel are linear resources.
+/// The compiler enforces that both are properly consumed before the
+/// region exits.
+fn main() -> i32 {
+    region app:
+        // Create window (linear handle)
+        let! webview = Shell.create@app({
+            title: "Gossamer IPC Demo",
+            width: 900,
+            height: 600,
+            resizable: true,
+            decorations: true,
+            fullscreen: false,
+        })
+
+        // Open a typed IPC channel (linear handle)
+        let! channel = Bridge.open@app(webview)
+
+        // Register command handlers.
+        // Each handler has typed request and response.
+        // Bridge.handle BORROWS the channel and returns it.
+
+        // "greet" command: String -> String
+        let! channel = Bridge.handle(channel, "greet",
+            fn(name: String) -> String {
+                "Hello, " ++ name ++ "! (from Ephapax)"
+            }
+        )
+
+        // "add" command: (i32, i32) -> i32
+        let! channel = Bridge.handle(channel, "add",
+            fn(args: (i32, i32)) -> i32 {
+                let (a, b) = args
+                a + b
+            }
+        )
+
+        // "timestamp" command: () -> String
+        let! channel = Bridge.handle(channel, "timestamp",
+            fn(_: ()) -> String {
+                // In production, call system time FFI
+                "2026-03-21T12:00:00Z"
+            }
+        )
+
+        // Load the frontend
+        let! (webview, _) = Shell.loadHTML(webview, "
+            <!DOCTYPE html>
+            <html lang='en'>
+            <head>
+                <meta charset='UTF-8'>
+                <style>
+                    body {
+                        font-family: system-ui, sans-serif;
+                        max-width: 600px;
+                        margin: 2em auto;
+                        background: #1a1a2e;
+                        color: #e0e0e0;
+                        padding: 2em;
+                    }
+                    input, button {
+                        padding: 0.5em 1em;
+                        border-radius: 4px;
+                        border: 1px solid #333;
+                        background: #16213e;
+                        color: #e0e0e0;
+                        font-size: 1em;
+                    }
+                    button { cursor: pointer; background: #e94560; border: none; }
+                    button:hover { background: #ff6b6b; }
+                    #output {
+                        margin-top: 1em;
+                        padding: 1em;
+                        background: #0f3460;
+                        border-radius: 4px;
+                        font-family: monospace;
+                        white-space: pre-wrap;
+                    }
+                    h2 { color: #e94560; }
+                </style>
+            </head>
+            <body>
+                <h2>Gossamer IPC Demo</h2>
+
+                <div>
+                    <input id='name' placeholder='Your name' value='World'>
+                    <button onclick='doGreet()'>Greet</button>
+                    <button onclick='doAdd()'>Add 17 + 25</button>
+                    <button onclick='doTimestamp()'>Timestamp</button>
+                </div>
+
+                <div id='output'>Ready. Click a button to invoke an IPC command.</div>
+
+                <script>
+                    var out = document.getElementById('output');
+
+                    async function doGreet() {
+                        // gossamer.greet() is typed: String -> String
+                        var result = await gossamer.greet(
+                            document.getElementById('name').value
+                        );
+                        out.textContent += '\\ngreet => ' + result;
+                    }
+
+                    async function doAdd() {
+                        // gossamer.add() is typed: (i32, i32) -> i32
+                        var result = await gossamer.add([17, 25]);
+                        out.textContent += '\\nadd(17, 25) => ' + result;
+                    }
+
+                    async function doTimestamp() {
+                        // gossamer.timestamp() is typed: () -> String
+                        var result = await gossamer.timestamp(null);
+                        out.textContent += '\\ntimestamp => ' + result;
+                    }
+                </script>
+            </body>
+            </html>
+        ")
+
+        // Run event loop (consumes webview handle)
+        Shell.run(webview)
+
+        // Close IPC channel (consumes channel handle)
+        // REQUIRED: removing this line is a compile error — linear variable unconsumed
+        Bridge.close(channel)
+
+        0
+}
