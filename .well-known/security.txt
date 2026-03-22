@@ -2,10 +2,8 @@
 # RFC 9116 - security.txt
 # https://securitytxt.org/
 
-Contact: mailto:{{SECURITY_EMAIL}}
-Expires: {{CURRENT_YEAR}}-12-31T23:59:59.000Z
-Encryption: {{PGP_KEY_URL}}
+Contact: mailto:j.d.a.jewell@open.ac.uk
+Expires: 2027-12-31T23:59:59.000Z
 Preferred-Languages: en
-Canonical: https://{{FORGE}}/{{OWNER}}/{{REPO}}/.well-known/security.txt
-Policy: https://{{FORGE}}/{{OWNER}}/{{REPO}}/blob/main/SECURITY.md
-Hiring: https://{{WEBSITE}}/careers
+Canonical: https://github.com/hyperpolymath/gossamer/.well-known/security.txt
+Policy: https://github.com/hyperpolymath/gossamer/blob/main/SECURITY.md

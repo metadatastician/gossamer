@@ -21,10 +21,11 @@ const BUILD_INFO = "Gossamer " ++ VERSION ++ " built with Zig " ++ @import("buil
 /// Platform-specific webview implementation.
 /// Compile-time dispatch — no runtime overhead.
 const platform = switch (builtin.os.tag) {
-    .linux => @import("webview_gtk.zig"),
-    // .macos => @import("webview_cocoa.zig"),   // Phase 2
-    // .windows => @import("webview_win32.zig"), // Phase 2
-    else => @compileError("Gossamer: unsupported platform. Supported: linux (Phase 1), macOS/Windows (Phase 2)"),
+    .linux, .freebsd, .openbsd, .netbsd => @import("webview_gtk.zig"),
+    .macos => @import("webview_cocoa.zig"),
+    .windows => @import("webview_win32.zig"),
+    .ios => @import("webview_ios.zig"),
+    else => @compileError("Gossamer: unsupported platform. Supported: linux, BSD, macOS, Windows, iOS. Android requires NDK target."),
 };
 
 //==============================================================================
@@ -316,20 +317,45 @@ export fn gossamer_channel_open(handle_ptr: u64) u64 {
         .allocator = allocator,
     };
 
-    // Inject the Gossamer IPC bridge JavaScript into the webview
+    // Register the platform-specific IPC message handler BEFORE injecting JS.
+    // On GTK this sets up webkit_user_content_manager_register_script_message_handler.
+    // The handler dispatches incoming messages to bound callbacks.
+    platform.registerIPCHandler(&handle.webview, handle) catch {
+        setError("Failed to register IPC handler");
+        allocator.destroy(channel);
+        return 0;
+    };
+
+    // Inject the Gossamer IPC bridge JavaScript into the webview.
+    // Uses platform-specific message passing:
+    //   GTK:     window.webkit.messageHandlers.gossamer_ipc.postMessage(msg)
+    //   Cocoa:   window.webkit.messageHandlers.gossamer_ipc.postMessage(msg)
+    //   Win32:   window.chrome.webview.postMessage(msg)
+    //   Android: GossamerBridge.postMessage(msg)
     const bridge_js =
         \\window.__gossamer_callbacks = {};
         \\window.__gossamer_invoke = function(name, payload) {
         \\  return new Promise(function(resolve, reject) {
         \\    var id = Date.now().toString(36) + Math.random().toString(36);
         \\    window.__gossamer_callbacks[id] = { resolve: resolve, reject: reject };
-        \\    window.__gossamer_ipc_send(JSON.stringify({
-        \\      id: id, name: name, payload: JSON.stringify(payload)
-        \\    }));
+        \\    var msg = JSON.stringify({
+        \\      id: id, name: name, payload: JSON.stringify(payload || {})
+        \\    });
+        \\    if (window.webkit && window.webkit.messageHandlers &&
+        \\        window.webkit.messageHandlers.gossamer_ipc) {
+        \\      window.webkit.messageHandlers.gossamer_ipc.postMessage(msg);
+        \\    } else if (window.chrome && window.chrome.webview) {
+        \\      window.chrome.webview.postMessage(msg);
+        \\    } else if (window.GossamerBridge) {
+        \\      window.GossamerBridge.postMessage(msg);
+        \\    } else {
+        \\      reject(new Error("Gossamer IPC transport not available"));
+        \\    }
         \\  });
         \\};
         \\window.gossamer = new Proxy({}, {
         \\  get: function(target, name) {
+        \\    if (typeof name !== "string") return undefined;
         \\    return function(payload) {
         \\      return window.__gossamer_invoke(name, payload);
         \\    };
@@ -349,21 +375,48 @@ export fn gossamer_channel_open(handle_ptr: u64) u64 {
 
 /// Bind a named command handler to the IPC channel.
 ///
+/// Stores the callback in the parent handle's bindings map, keyed by name.
+/// When the webview sends an IPC message with this name via
+/// `window.gossamer.commandName(payload)`, the callback is invoked with
+/// the JSON-encoded payload and its return value is sent back to JS.
+///
 /// Matches: Gossamer.ABI.Foreign.prim__channelBind
 export fn gossamer_channel_bind(
     channel_ptr: u64,
     name: [*:0]const u8,
     callback: ?*const fn ([*:0]const u8) callconv(.c) [*:0]const u8,
 ) Result {
-    _ = channel_ptr;
-    _ = name;
-    _ = callback;
-    // TODO: implement binding registration
-    // Store the callback in the parent handle's bindings map,
-    // keyed by name. When the webview sends an IPC message with
-    // this name, dispatch to the callback.
-    setError("Channel bind not yet implemented");
-    return .@"error";
+    const channel = channelFromU64(channel_ptr) orelse {
+        setError("Null channel handle");
+        return .null_pointer;
+    };
+
+    if (!channel.open) {
+        setError("Channel is closed");
+        return .@"error";
+    }
+
+    const cb = callback orelse {
+        setError("Null callback");
+        return .invalid_param;
+    };
+
+    // Duplicate the name string — caller may free it after this returns
+    const name_slice = std.mem.span(name);
+    const duped_name = channel.allocator.dupeZ(u8, name_slice) catch {
+        setError("Failed to allocate name string");
+        return .out_of_memory;
+    };
+
+    // Register the callback in the parent handle's bindings map
+    channel.parent.bindings.put(duped_name, cb) catch {
+        channel.allocator.free(duped_name);
+        setError("Failed to register binding");
+        return .out_of_memory;
+    };
+
+    clearError();
+    return .ok;
 }
 
 /// Close the IPC channel. Consumes the channel handle.
@@ -379,44 +432,159 @@ export fn gossamer_channel_close(channel_ptr: u64) void {
 // Capability Operations
 //==============================================================================
 
-/// Grant a capability token.
-/// resource_kind is the ordinal of ResourceKind in Types.idr.
+/// Maximum number of active capability tokens.
+/// Keeps memory bounded without dynamic allocation for the cap registry.
+const MAX_CAPABILITIES = 256;
+
+/// Maximum number of revoked tokens to track.
+/// Once full, oldest revocations are evicted (safe — prevents re-use
+/// only as a belt-and-suspenders check alongside Ephapax linear types).
+const MAX_REVOKED = 512;
+
+/// Registry entry mapping a token to its resource kind.
+const CapEntry = struct {
+    token: u64,
+    resource_kind: u32,
+    active: bool,
+};
+
+/// Active capability registry.
+/// Fixed-size array avoids dynamic allocation in the capability hot path.
+var cap_registry: [MAX_CAPABILITIES]CapEntry = [_]CapEntry{.{
+    .token = 0,
+    .resource_kind = 0,
+    .active = false,
+}} ** MAX_CAPABILITIES;
+
+/// Number of active capabilities.
+var cap_count: usize = 0;
+
+/// Revocation set — tokens that have been revoked.
+/// Checked on gossamer_cap_check to reject revoked tokens.
+var revoked_tokens: [MAX_REVOKED]u64 = [_]u64{0} ** MAX_REVOKED;
+
+/// Number of revoked tokens currently tracked.
+var revoked_count: usize = 0;
+
+/// Grant a capability token for the given resource kind.
+/// resource_kind is the ordinal of ResourceKind in Types.idr:
+///   0=FileSystem, 1=Network, 2=Shell, 3=Clipboard, 4=Notification, 5=Tray
 /// Returns a unique token ID, or 0 on failure.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__capGrant
 export fn gossamer_cap_grant(resource_kind: u32) u64 {
-    _ = resource_kind;
-    // TODO: implement capability token generation
-    // In v0.1, this is a stub — capabilities are enforced by the
-    // Ephapax type system, not at the FFI level. The FFI layer
-    // just provides token lifecycle management.
-    //
-    // Generate a unique token ID (cryptographic randomness in production)
+    // Validate resource kind (0..5 matches Types.idr ResourceKind constructors)
+    if (resource_kind > 5) {
+        setError("Invalid resource kind (must be 0-5)");
+        return 0;
+    }
+
+    // Check capacity
+    if (cap_count >= MAX_CAPABILITIES) {
+        setError("Capability registry full");
+        return 0;
+    }
+
+    // Generate a unique token ID using cryptographic randomness
     var buf: [8]u8 = undefined;
     std.crypto.random.bytes(&buf);
-    return std.mem.readInt(u64, &buf, .little);
+    var token = std.mem.readInt(u64, &buf, .little);
+
+    // Ensure non-zero (zero is the null/invalid sentinel)
+    if (token == 0) token = 1;
+
+    // Find an empty slot in the registry
+    for (&cap_registry) |*entry| {
+        if (!entry.active) {
+            entry.* = .{
+                .token = token,
+                .resource_kind = resource_kind,
+                .active = true,
+            };
+            cap_count += 1;
+            clearError();
+            return token;
+        }
+    }
+
+    // Should not reach here given the count check above
+    setError("Capability registry inconsistency");
+    return 0;
 }
 
-/// Check a capability before a gated operation.
+/// Check a capability token before a gated operation.
+/// Verifies the token is active and not revoked.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__capCheck
 export fn gossamer_cap_check(token: u64) Result {
     if (token == 0) {
-        setError("Invalid capability token");
+        setError("Invalid capability token (null)");
         return .capability_denied;
     }
-    // In v0.1, all non-zero tokens are valid.
-    // The real enforcement is in the Ephapax type system.
-    clearError();
-    return .ok;
+
+    // Check the revocation set first (fast rejection)
+    for (revoked_tokens[0..revoked_count]) |revoked| {
+        if (revoked == token) {
+            setError("Capability token has been revoked");
+            return .capability_denied;
+        }
+    }
+
+    // Verify the token exists in the active registry
+    for (cap_registry[0..]) |entry| {
+        if (entry.active and entry.token == token) {
+            clearError();
+            return .ok;
+        }
+    }
+
+    setError("Capability token not found in registry");
+    return .capability_denied;
 }
 
-/// Revoke a capability token. Consumes it.
+/// Query the resource kind associated with a capability token.
+/// Returns the resource kind ordinal, or 0xFFFFFFFF if the token is invalid.
+///
+/// This allows callers to verify a token grants the expected permission
+/// without exposing the full registry.
+export fn gossamer_cap_resource_kind(token: u64) u32 {
+    if (token == 0) return 0xFFFFFFFF;
+
+    for (cap_registry[0..]) |entry| {
+        if (entry.active and entry.token == token) {
+            return entry.resource_kind;
+        }
+    }
+    return 0xFFFFFFFF;
+}
+
+/// Revoke a capability token. Consumes it — future checks will fail.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__capRevoke
 export fn gossamer_cap_revoke(token: u64) void {
-    _ = token;
-    // TODO: add to revocation set so future checks fail
+    if (token == 0) return;
+
+    // Remove from active registry
+    for (&cap_registry) |*entry| {
+        if (entry.active and entry.token == token) {
+            entry.active = false;
+            if (cap_count > 0) cap_count -= 1;
+            break;
+        }
+    }
+
+    // Add to revocation set (belt-and-suspenders alongside Ephapax linear types)
+    if (revoked_count < MAX_REVOKED) {
+        revoked_tokens[revoked_count] = token;
+        revoked_count += 1;
+    } else {
+        // Evict oldest revocation to make room
+        // Safe: the primary enforcement is Ephapax's linear type system;
+        // the revocation set is a runtime safety net, not the authority.
+        std.mem.copyForwards(u64, revoked_tokens[0 .. MAX_REVOKED - 1], revoked_tokens[1..MAX_REVOKED]);
+        revoked_tokens[MAX_REVOKED - 1] = token;
+    }
+
     clearError();
 }
 
@@ -488,8 +656,14 @@ export fn gossamer_build_info() [*:0]const u8 {
 // Internal Helpers
 //==============================================================================
 
-/// Convert a u64 from Idris2 FFI to a typed pointer.
+/// Convert a u64 from Idris2 FFI to a typed GossamerHandle pointer.
 fn ptrFromU64(val: u64) ?*GossamerHandle {
+    if (val == 0) return null;
+    return @ptrFromInt(@as(usize, @intCast(val)));
+}
+
+/// Convert a u64 from Idris2 FFI to a typed ChannelHandle pointer.
+fn channelFromU64(val: u64) ?*ChannelHandle {
     if (val == 0) return null;
     return @ptrFromInt(@as(usize, @intCast(val)));
 }
@@ -542,11 +716,39 @@ test "version string" {
 }
 
 test "capability grant returns non-zero token" {
-    const token = gossamer_cap_grant(0);
+    const token = gossamer_cap_grant(0); // FileSystem
     try std.testing.expect(token != 0);
+    // Clean up
+    gossamer_cap_revoke(token);
 }
 
 test "capability check with zero token fails" {
     const result = gossamer_cap_check(0);
     try std.testing.expectEqual(Result.capability_denied, result);
+}
+
+test "capability grant-check-revoke lifecycle" {
+    // Grant a Network capability (kind=1)
+    const token = gossamer_cap_grant(1);
+    try std.testing.expect(token != 0);
+
+    // Check should succeed while active
+    try std.testing.expectEqual(Result.ok, gossamer_cap_check(token));
+
+    // Resource kind should be Network (1)
+    try std.testing.expectEqual(@as(u32, 1), gossamer_cap_resource_kind(token));
+
+    // Revoke the token
+    gossamer_cap_revoke(token);
+
+    // Check should fail after revocation
+    try std.testing.expectEqual(Result.capability_denied, gossamer_cap_check(token));
+
+    // Resource kind should be invalid after revocation
+    try std.testing.expectEqual(@as(u32, 0xFFFFFFFF), gossamer_cap_resource_kind(token));
+}
+
+test "capability grant rejects invalid resource kind" {
+    const token = gossamer_cap_grant(99); // Invalid kind
+    try std.testing.expectEqual(@as(u64, 0), token);
 }

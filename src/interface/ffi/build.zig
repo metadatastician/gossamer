@@ -8,19 +8,59 @@
 //   zig build test                    # Run unit tests
 //   zig build -Doptimize=ReleaseSafe  # Optimised build with safety checks
 //
-// Dependencies (Linux — Phase 1):
-//   Fedora: gtk3-devel webkit2gtk4.1-devel
-//   Debian: libgtk-3-dev libwebkit2gtk-4.1-dev
-//   Arch:   gtk3 webkit2gtk-4.1
+// Cross-compilation examples:
+//   zig build -Dtarget=x86_64-macos     # macOS (Intel)
+//   zig build -Dtarget=aarch64-macos    # macOS (Apple Silicon)
+//   zig build -Dtarget=x86_64-windows   # Windows
+//   zig build -Dtarget=riscv64-linux    # Linux RISC-V
+//   zig build -Dtarget=aarch64-linux    # Linux ARM64
+//
+// Platform dependencies:
+//   Linux/BSD: gtk3-devel webkit2gtk4.1-devel (Fedora) or equivalent
+//   macOS:     Cocoa.framework WebKit.framework (system)
+//   Windows:   WebView2Loader.dll ole32.lib user32.lib
+//   iOS:       UIKit.framework WebKit.framework (Xcode SDK)
+//   Android:   Android NDK (separate build target)
 //
 // SPDX-License-Identifier: PMPL-1.0-or-later
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 const std = @import("std");
 
+/// Link platform-specific system libraries to a module.
+fn linkPlatformLibs(module: *std.Build.Module, os: std.Target.Os.Tag) void {
+    switch (os) {
+        .linux, .freebsd, .openbsd, .netbsd => {
+            // GTK 3 + WebKitGTK 4.1 (same across Linux and BSD)
+            module.linkSystemLibrary("gtk+-3.0", .{});
+            module.linkSystemLibrary("webkit2gtk-4.1", .{});
+            module.linkSystemLibrary("glib-2.0", .{});
+        },
+        .macos => {
+            // Cocoa + WebKit frameworks
+            module.linkFramework("Cocoa", .{});
+            module.linkFramework("WebKit", .{});
+        },
+        .windows => {
+            // Win32 + COM
+            module.linkSystemLibrary("ole32", .{});
+            module.linkSystemLibrary("user32", .{});
+            module.linkSystemLibrary("kernel32", .{});
+            // WebView2Loader.dll loaded at runtime via LoadLibrary
+        },
+        .ios => {
+            // UIKit + WebKit frameworks
+            module.linkFramework("UIKit", .{});
+            module.linkFramework("WebKit", .{});
+        },
+        else => {},
+    }
+}
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const os = target.query.os_tag orelse builtin.os.tag;
 
     // Create the root module (shared between shared/static/test)
     const root_module = b.createModule(.{
@@ -30,17 +70,14 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
 
-    // Add system library dependencies to the module
-    root_module.linkSystemLibrary("gtk+-3.0", .{});
-    root_module.linkSystemLibrary("webkit2gtk-4.1", .{});
-    root_module.linkSystemLibrary("glib-2.0", .{});
+    linkPlatformLibs(root_module, os);
 
     // --- Shared library (.so / .dylib / .dll) ---
     const shared_lib = b.addLibrary(.{
         .name = "gossamer",
         .root_module = root_module,
         .linkage = .dynamic,
-        .version = .{ .major = 0, .minor = 1, .patch = 0 },
+        .version = .{ .major = 0, .minor = 2, .patch = 0 },
     });
 
     b.installArtifact(shared_lib);
@@ -53,9 +90,7 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
 
-    static_module.linkSystemLibrary("gtk+-3.0", .{});
-    static_module.linkSystemLibrary("webkit2gtk-4.1", .{});
-    static_module.linkSystemLibrary("glib-2.0", .{});
+    linkPlatformLibs(static_module, os);
 
     const static_lib = b.addLibrary(.{
         .name = "gossamer",
@@ -80,3 +115,5 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run Gossamer unit tests");
     test_step.dependOn(&run_unit_tests.step);
 }
+
+const builtin = @import("builtin");

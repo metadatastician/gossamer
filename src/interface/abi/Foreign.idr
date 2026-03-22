@@ -217,6 +217,20 @@ export
 %foreign "C:gossamer_cap_check, libgossamer"
 prim__capCheck : Bits64 -> PrimIO Bits32
 
+||| Query the resource kind associated with a capability token.
+||| Returns the resource kind ordinal, or 0xFFFFFFFF if the token is invalid.
+export
+%foreign "C:gossamer_cap_resource_kind, libgossamer"
+prim__capResourceKind : Bits64 -> PrimIO Bits32
+
+||| Safe wrapper for querying a capability's resource kind.
+||| BORROWING operation — the token is returned alongside the result.
+export
+capResourceKind : Cap resource -> IO (Cap resource, Bits32)
+capResourceKind cap@(MkCap token) = do
+  kind <- primIO (prim__capResourceKind token)
+  pure (cap, kind)
+
 ||| Revoke a capability token.
 ||| CONSUMING operation — the token is destroyed.
 export
@@ -224,6 +238,7 @@ export
 prim__capRevoke : Bits64 -> PrimIO ()
 
 ||| Safe wrapper for revoking a capability.
+||| CONSUMING operation — the token cannot be used after this call.
 export
 capRevoke : (1 _ : Cap resource) -> IO ()
 capRevoke (MkCap token) = primIO (prim__capRevoke token)

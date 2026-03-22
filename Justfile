@@ -88,8 +88,12 @@ test-conformance:
     done
     echo "All conformance tests passed."
 
+# Run Zig FFI integration tests
+test-integration:
+    cd src/interface/ffi && zig test test/integration_test.zig
+
 # Run all tests
-test: test-ffi test-conformance
+test: test-ffi test-integration test-conformance
 
 # ═══════════════════════════════════════════════════════════════
 # Clean

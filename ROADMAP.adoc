@@ -1,22 +1,136 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-= YOUR Template Repo Roadmap
+= Gossamer Webview Shell — Roadmap
+
+Gossamer is a linearly-typed webview shell built in Ephapax with Idris2 ABI
+proofs and Zig FFI. Three novel contributions: linearly-owned webview handles,
+typed IPC protocol, and linear capability tokens.
 
 == Current Status
 
-Initial development phase.
+**v0.1.0 released** — Linux (WebKitGTK) is fully operational with formal ABI
+proofs, typed IPC, and capability token lifecycle. All Phase 1 targets met.
 
-== Milestones
+== Phase 1 — Foundation (v0.1.x) ✓
 
-=== v0.1.0 - Foundation
-* [ ] Core functionality
-* [ ] Basic documentation
-* [ ] CI/CD pipeline
+Linux-only, proving the core architecture works end-to-end.
 
-=== v1.0.0 - Stable Release
-* [ ] Full feature set
-* [ ] Comprehensive tests
-* [ ] Production ready
+* [x] Idris2 ABI specification (Types.idr, Layout.idr, Foreign.idr)
+* [x] Memory layout proofs and C ABI compliance certificates
+* [x] Zig FFI implementation — libgossamer.so + libgossamer.a
+* [x] WebKitGTK platform backend (Linux/BSD)
+* [x] 20 exported C-compatible gossamer_* symbols
+* [x] Webview lifecycle: create, loadHTML, navigate, eval, setTitle, resize, run, destroy
+* [x] Typed IPC: channel open/bind/close with JS bridge injection
+* [x] Capability token system: grant/check/revoke with revocation set
+* [x] Ephapax modules: Shell.eph, Bridge.eph, Capabilities.eph
+* [x] Region-linear fusion in Ephapax compiler (__ffi() intrinsic)
+* [x] WebviewState lifecycle state machine (Created → Loaded → Running → Destroyed)
+* [x] MainThreadProof witness (zero-runtime-cost)
+* [x] DecEq instance for Result codes
+* [x] Platform-specific type calculations (CInt, CSize, CPtr, ptrSize)
+* [x] arXiv paper with 14-framework comparison
+* [x] ADR-001 architecture decision record
+* [x] Unit tests for result codes, null handling, version, capabilities
+* [x] Integration tests for FFI API
+* [x] Three examples: hello, ipc, SafeDOM
+* [x] GitHub Pages site + dev.to draft
+* [x] v0.1.0 release on GitHub/GitLab/Bitbucket
 
-== Future Directions
+=== v0.1.1 — IPC Wiring
 
-_To be determined based on community feedback._
+* [ ] Wire gossamer_channel_bind for real button interaction in IDApTIK UMS
+* [ ] IPC response delivery (JS Promise resolution from native callbacks)
+* [ ] Error propagation from native callbacks to JS rejection
+
+=== v0.1.2 — Developer Experience
+
+* [ ] Justfile with complete build/test/run recipes
+* [ ] Ephapax SSG for generating Gossamer website
+* [ ] OpenSSF Scorecard badge
+
+== Phase 2 — Cross-Platform (v0.2.x)
+
+Desktop platforms beyond Linux.
+
+=== macOS (webview_cocoa.zig) — Implemented
+
+* [x] Objective-C runtime bindings (objc_msgSend, sel_registerName)
+* [x] NSApplication / NSWindow / WKWebView lifecycle
+* [x] IPC via WKScriptMessageHandler
+* [x] Window management (setTitle, resize)
+* [ ] Code signing and notarisation support
+* [ ] NSMenu integration for system tray
+* [ ] Touch Bar support (if applicable)
+
+=== Windows (webview_win32.zig) — Partial
+
+* [x] Win32 window creation (RegisterClassExW, CreateWindowExW)
+* [x] COM initialisation (CoInitializeEx)
+* [x] Window procedure and message loop
+* [x] Window title and resize
+* [ ] WebView2 environment creation (CreateCoreWebView2EnvironmentWithOptions)
+* [ ] WebView2 COM vtable bindings (ICoreWebView2, ICoreWebView2Controller)
+* [ ] NavigateToString / Navigate / ExecuteScript via COM interface
+* [ ] WebMessageReceived event handler for IPC
+* [ ] WebView2Loader.dll dynamic loading
+
+=== System Integration
+
+* [ ] System tray icons (gossamer_tray_create)
+* [ ] Desktop notifications (gossamer_notify)
+* [ ] File open/save dialogs (gossamer_dialog_open, gossamer_dialog_save)
+* [ ] Clipboard access (read/write with capability gating)
+
+== Phase 3 — Mobile (v0.3.x)
+
+Mobile platforms using platform-native webviews.
+
+=== iOS (webview_ios.zig) — Implemented
+
+* [x] UIKit / WKWebView bindings via Objective-C runtime
+* [x] UIWindow / UIViewController lifecycle
+* [x] WKScriptMessageHandler for IPC
+* [x] Screen-filling layout
+* [ ] App Store packaging and signing
+* [ ] Push notification integration
+* [ ] Safe area insets handling
+
+=== Android (webview_android.zig) — Scaffolded
+
+* [x] JNI type definitions and entry points
+* [x] GossamerActivity native init/destroy via JNI_OnLoad
+* [x] WebviewState with JNI references
+* [ ] JNI FindClass / GetMethodID / CallVoidMethod for WebView operations
+* [ ] loadData / loadUrl / evaluateJavascript via JNI
+* [ ] addJavascriptInterface for IPC bridge
+* [ ] Android NDK build integration
+* [ ] Gradle project scaffolding for Java launcher
+
+== Phase 4 — Production (v1.0.0)
+
+Full-featured framework ready for production use.
+
+* [ ] Plugin system (load/unload .so/.dylib/.dll at runtime)
+* [ ] Auto-updater with delta updates
+* [ ] Application bundler (single binary with embedded assets)
+* [ ] WASM build target for web fallback
+* [ ] Multi-window support (multiple WebviewHandle instances)
+* [ ] DevTools integration (debug inspector toggle)
+* [ ] Accessibility (ARIA, screen reader passthrough)
+* [ ] Theme system (light/dark/custom CSS injection)
+* [ ] Benchmarks vs. Tauri, Electron, Neutralinojs
+* [ ] arXiv submission of formal verification paper
+* [ ] awesome-zig PR, awesome-webview PR
+
+== Integration Targets
+
+* [ ] **IDApTIK** — Replace Tauri for desktop builds (same ReScript frontend)
+* [ ] **PanLL** — Gossamer as native panel shell
+* [ ] **Burble** — Gossamer as voice client UI
+
+== Non-Goals (Explicit)
+
+* Garbage collection — regions + linear types only
+* Runtime type information — all types erased at compile time
+* Node.js/npm dependency — Deno or nothing
+* Electron compatibility layer — clean break, not a shim

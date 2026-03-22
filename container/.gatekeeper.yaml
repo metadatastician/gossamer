@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 #
-# Svalinn gatekeeper policy for {{PROJECT_NAME}}
+# Svalinn gatekeeper policy for gossamer
 #
 # Controls which operations are permitted through the edge gateway.
 # This template provides moderate security defaults — not wide-open test
@@ -65,9 +65,9 @@ rate_limits:
 trust:
   # Only accept .ctp bundles signed by these keys.
   trusted_signers:
-    - key_id: "{{SERVICE_NAME}}-release"
+    - key_id: "gossamer-release"
       algorithm: "Ed25519"
-      public_key_file: "/etc/svalinn/keys/{{SERVICE_NAME}}-release.pub"
+      public_key_file: "/etc/svalinn/keys/gossamer-release.pub"
 
   # Require these attestations on all .ctp bundles.
   required_attestations:

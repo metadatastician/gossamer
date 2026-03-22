@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
-# Copyright (c) {{CURRENT_YEAR}} {{AUTHOR}} ({{OWNER}}) <{{AUTHOR_EMAIL}}>
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
 # ANCHOR.a2ml - authoritative anchor for this repository
 
 [metadata]
 version = "1.0.0"
-last-updated = "{{CURRENT_DATE}}"
+last-updated = "2026-03-22"
 
 [anchor]
 schema = "hyperpolymath.anchor/1"
-repo = "{{OWNER}}/{{REPO}}"
+repo = "hyperpolymath/gossamer"
 authority = "upstream-canonical"
 
 purpose = [
@@ -19,10 +19,10 @@ purpose = [
 ]
 
 [identity]
-project = "{{PROJECT_NAME}}"
-kind = "{{PROJECT_KIND}}"                # language | library | service | tool
-one-sentence = "{{PROJECT_PURPOSE}}"
-domain = "{{PROJECT_DOMAIN}}"
+project = "gossamer"
+kind = "library"                # language | library | service | tool
+one-sentence = "Linearly-typed webview shell with formal ABI proofs"
+domain = "desktop-applications"
 
 [semantic-authority]
 policy = "canonical"

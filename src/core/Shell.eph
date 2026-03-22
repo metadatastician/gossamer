@@ -43,7 +43,28 @@ fn setTitle(handle: I64, title: String): I32 =
 fn run(handle: I64): () =
   __ffi("gossamer_run", handle)
 
+// Resize the webview window. Borrows the handle.
+// FFI: gossamer_resize(handle, width, height) -> result
+fn resize(handle: I64, width: I32, height: I32): I32 =
+  __ffi("gossamer_resize", handle, width, height)
+
 // Destroy the webview without running. CONSUMES the handle.
 // FFI: gossamer_destroy(handle) -> void
 fn destroy(handle: I64): () =
   __ffi("gossamer_destroy", handle)
+
+// Get the last error message from the FFI layer.
+// Returns a pointer to the error string, or 0 if no error.
+// FFI: gossamer_last_error() -> ptr
+fn lastError(): I64 =
+  __ffi("gossamer_last_error")
+
+// Get the library version string (e.g. "0.1.0").
+// FFI: gossamer_version() -> ptr
+fn version(): I64 =
+  __ffi("gossamer_version")
+
+// Get build information string.
+// FFI: gossamer_build_info() -> ptr
+fn buildInfo(): I64 =
+  __ffi("gossamer_build_info")

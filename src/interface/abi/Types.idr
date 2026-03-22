@@ -30,13 +30,15 @@ import Data.Vect
 
 ||| Supported platforms for this ABI.
 ||| Each platform uses a different webview engine:
-||| - Linux:   WebKitGTK
-||| - MacOS:   WKWebView
+||| - Linux:   WebKitGTK (also RISC-V and other Linux architectures)
+||| - MacOS:   WKWebView (Cocoa/AppKit)
 ||| - Windows: WebView2 (Edge/Chromium)
-||| - BSD:     WebKitGTK (same as Linux)
+||| - BSD:     WebKitGTK (same as Linux — FreeBSD, OpenBSD, NetBSD)
+||| - iOS:     WKWebView (UIKit — shares WebKit engine with macOS)
+||| - Android: Android WebView (JNI bridge)
 ||| - WASM:    not applicable (Gossamer is a native shell)
 public export
-data Platform = Linux | Windows | MacOS | BSD | WASM
+data Platform = Linux | Windows | MacOS | BSD | iOS | Android | WASM
 
 ||| Compile-time platform detection.
 ||| Override with compiler flags for cross-compilation.

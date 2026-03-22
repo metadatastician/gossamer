@@ -2,13 +2,13 @@
 # humanstxt.org
 
 /* TEAM */
-Maintainer: {{AUTHOR}} ({{OWNER}})
-Contact: {{AUTHOR_EMAIL}}
+Maintainer: Jonathan D.A. Jewell (hyperpolymath)
+Contact: j.d.a.jewell@open.ac.uk
 From: United Kingdom
 
 /* SITE */
-Last update: {{CURRENT_DATE}}
+Last update: 2026-03-22
 Standards: RSR (Rhodium Standard Repository)
 License: PMPL-1.0-or-later (Palimpsest MPL)
-Components: Idris2 ABI, Zig FFI
+Components: Idris2 ABI, Zig FFI, Ephapax core
 Tools: just, Podman, Guix

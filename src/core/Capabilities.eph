@@ -8,18 +8,36 @@
 // - check borrows the token (returns it back)
 // - revoke CONSUMES the token
 
+// Resource kind constants matching Types.idr ResourceKind constructors.
+// Used as the resourceKind parameter to grant().
+let RESOURCE_FILESYSTEM: I32 = 0
+let RESOURCE_NETWORK: I32 = 1
+let RESOURCE_SHELL: I32 = 2
+let RESOURCE_CLIPBOARD: I32 = 3
+let RESOURCE_NOTIFICATION: I32 = 4
+let RESOURCE_TRAY: I32 = 5
+
 // Grant a capability token for the given resource kind.
-// Resource kinds: 0=FileSystem, 1=Network, 2=Shell, 3=Clipboard, 4=Notification, 5=Tray
+// Use the RESOURCE_* constants above for the kind parameter.
+// Returns a unique token (linear — must be revoked), or 0 on failure.
 // FFI: gossamer_cap_grant(resource_kind) -> token
 fn grant(resourceKind: I32): I64 =
   __ffi("gossamer_cap_grant", resourceKind)
 
 // Check a capability token before a gated operation. Borrows the token.
+// Returns 0 (ok) if the token is active and not revoked, 10 (denied) otherwise.
 // FFI: gossamer_cap_check(token) -> result (0=ok, 10=denied)
 fn check(token: I64): I32 =
   __ffi("gossamer_cap_check", token)
 
+// Query the resource kind associated with a capability token.
+// Returns the resource kind ordinal (0-5), or 0xFFFFFFFF if invalid.
+// FFI: gossamer_cap_resource_kind(token) -> resource_kind
+fn resourceKind(token: I64): I32 =
+  __ffi("gossamer_cap_resource_kind", token)
+
 // Revoke a capability token. CONSUMES it — no further use possible.
+// The token is added to a revocation set; future check() calls will fail.
 // FFI: gossamer_cap_revoke(token) -> void
 fn revoke(token: I64): () =
   __ffi("gossamer_cap_revoke", token)
