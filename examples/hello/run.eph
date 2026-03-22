@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+//
+// Gossamer Hello World — opens a real GTK/WebKitGTK window.
+//
+// Run from desktop:
+//   bash examples/hello/run.sh
+//
+// The webview handle is LINEAR (let!):
+// - gossamer_create returns a handle that MUST be consumed
+// - gossamer_load_html borrows the handle (takes and returns it)
+// - gossamer_run CONSUMES the handle (window destroyed after close)
+
+fn main(): I64 =
+  let! handle = __ffi("gossamer_create", "Hello Gossamer", 800, 600, 1, 1, 0) in
+  let! _ = __ffi("gossamer_load_html", handle, "<html><head><style>body{font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);color:#e0e0e0}h1{font-size:3em;margin-bottom:0.2em;background:linear-gradient(to right,#e94560,#ff6b6b);-webkit-background-clip:text;-webkit-text-fill-color:transparent}p{font-size:1.2em;opacity:0.7}code{color:#ff6b6b;font-size:0.9em}</style></head><body><h1>Gossamer</h1><p>A linearly-typed webview shell</p><p><code>let! handle = __ffi(gossamer_create, ...)</code></p><p>Close this window to exit.</p></body></html>") in
+  __ffi("gossamer_run", handle)
