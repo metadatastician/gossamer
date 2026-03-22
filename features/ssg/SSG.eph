@@ -1,0 +1,67 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+//
+// Gossamer.SSG — Static Site Generator in Ephapax.
+//
+// Generates static HTML from a source directory of templates + content.
+// Designed to dogfood Gossamer's own website (https://hyperpolymath.github.io/gossamer/).
+//
+// Architecture:
+//   1. Read source directory (content/*.md, templates/*.html)
+//   2. Parse front matter (--- yaml ---) from each content file
+//   3. Convert Markdown to HTML (minimal subset: headings, paragraphs, code, links)
+//   4. Inject into template slots ({{title}}, {{content}}, {{date}})
+//   5. Write output to dist/ directory
+//
+// Linear resource safety:
+//   - File handles are LINEAR: opened once, closed once
+//   - Directory iterators are LINEAR: created once, consumed by iteration
+//   - Output buffers are region-allocated (no GC)
+
+// Read a file's contents as a string.
+// The file handle is LINEAR — opened and consumed in one step.
+// FFI: reads via standard C fopen/fread/fclose
+fn readFile(path: String): String =
+  __ffi("gossamer_ssg_read_file", path)
+
+// Write content to a file at the given path.
+// Creates parent directories if needed.
+// FFI: writes via standard C fopen/fwrite/fclose
+fn writeFile(path: String, content: String): I32 =
+  __ffi("gossamer_ssg_write_file", path, content)
+
+// List files in a directory matching a glob pattern.
+// Returns a newline-separated list of file paths.
+// FFI: uses opendir/readdir/closedir
+fn listFiles(dir: String, extension: String): String =
+  __ffi("gossamer_ssg_list_files", dir, extension)
+
+// Parse front matter from a Markdown file.
+// Returns the YAML front matter block (between --- delimiters).
+// Returns empty string if no front matter found.
+fn parseFrontMatter(content: String): String =
+  __ffi("gossamer_ssg_parse_front_matter", content)
+
+// Extract the body (post-front-matter) from a Markdown file.
+fn parseBody(content: String): String =
+  __ffi("gossamer_ssg_parse_body", content)
+
+// Convert a minimal Markdown subset to HTML.
+// Supports: # headings, paragraphs, `code`, [links](url), **bold**, *italic*
+fn markdownToHtml(markdown: String): String =
+  __ffi("gossamer_ssg_md_to_html", markdown)
+
+// Substitute template variables: {{key}} → value.
+// Takes a template string and a key=value pairs string (newline-separated).
+fn templateSubstitute(template: String, vars: String): String =
+  __ffi("gossamer_ssg_template_substitute", template, vars)
+
+// Build the entire site from source to output directory.
+// Reads all .md files from contentDir, applies template, writes to outDir.
+fn buildSite(contentDir: String, templateFile: String, outDir: String): I32 =
+  let! files = listFiles(contentDir, ".md") in
+  let! template = readFile(templateFile) in
+  // Process each content file
+  // (In a full Ephapax compiler with closures, this would use map/forEach.
+  //  For now, the build logic is in the Zig FFI layer.)
+  __ffi("gossamer_ssg_build_site", contentDir, templateFile, outDir)
