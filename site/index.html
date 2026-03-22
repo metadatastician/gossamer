@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gossamer — A Linearly-Typed Webview Shell</title>
+    <meta name="description" content="Desktop application framework with compile-time proofs of resource safety. No GC. No refcounting. Just linear types and regions.">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <a href="#" class="logo">Gossamer</a>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#comparison">Comparison</a>
+                <a href="#quickstart">Quick Start</a>
+                <a href="https://github.com/hyperpolymath/gossamer" target="_blank">GitHub</a>
+            </div>
+        </nav>
+    </header>
+
+    <section class="hero">
+        <h1>Gossamer</h1>
+        <p class="subtitle">A linearly-typed webview shell with provable resource safety</p>
+        <p class="tagline">No GC. No refcounting. No runtime overhead.<br>Just linear types, regions, and compile-time proofs.</p>
+        <div class="hero-buttons">
+            <a href="https://github.com/hyperpolymath/gossamer" class="btn btn-primary">View on GitHub</a>
+            <a href="#quickstart" class="btn btn-secondary">Quick Start</a>
+        </div>
+    </section>
+
+    <section class="code-preview">
+        <pre><code><span class="kw">fn</span> <span class="fn">main</span>(): <span class="ty">I64</span> =
+  <span class="kw">let!</span> <span class="var">handle</span> = <span class="ffi">__ffi</span>(<span class="str">"gossamer_create"</span>, <span class="str">"Hello"</span>, <span class="num">800</span>, <span class="num">600</span>, <span class="num">1</span>, <span class="num">1</span>, <span class="num">0</span>) <span class="kw">in</span>
+  <span class="kw">let!</span> <span class="var">_</span> = <span class="ffi">__ffi</span>(<span class="str">"gossamer_load_html"</span>, <span class="var">handle</span>, <span class="str">"&lt;h1&gt;Hello!&lt;/h1&gt;"</span>) <span class="kw">in</span>
+  <span class="ffi">__ffi</span>(<span class="str">"gossamer_run"</span>, <span class="var">handle</span>)
+<span class="comment">// handle is CONSUMED by gossamer_run</span>
+<span class="comment">// using it after this line = compile error</span></code></pre>
+    </section>
+
+    <section id="features" class="features">
+        <h2>Three guarantees no other framework provides</h2>
+        <div class="feature-grid">
+            <div class="feature">
+                <h3>Linear Resource Ownership</h3>
+                <p>Webview handles, IPC channels, and capability tokens are <strong>linear types</strong>.
+                Use-after-free and double-free are <em>compile errors</em>, not runtime panics.
+                No <code>Arc</code>, no <code>Rc</code>, no reference counting.</p>
+            </div>
+            <div class="feature">
+                <h3>Typed IPC Protocol</h3>
+                <p>The frontend-backend communication protocol is a <strong>compile-time type</strong>.
+                Message shape mismatches between JavaScript and the backend are impossible.
+                No JSON parsing failures at runtime.</p>
+            </div>
+            <div class="feature">
+                <h3>Linear Capability Tokens</h3>
+                <p>Permissions are <strong>linear values</strong> in the type system.
+                A plugin can't access the filesystem without holding a capability token.
+                The <em>compiler</em> enforces this, not a config file.</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="comparison" class="comparison">
+        <h2>How Gossamer compares</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>Electron</th>
+                    <th>Tauri</th>
+                    <th>Wails</th>
+                    <th class="highlight">Gossamer</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Resource lifecycle</td>
+                    <td>GC</td>
+                    <td>Arc (refcount)</td>
+                    <td>GC</td>
+                    <td class="highlight">Proved (linear)</td>
+                </tr>
+                <tr>
+                    <td>IPC type safety</td>
+                    <td>None</td>
+                    <td>Codegen</td>
+                    <td>Reflection</td>
+                    <td class="highlight">Compile-time</td>
+                </tr>
+                <tr>
+                    <td>Permissions</td>
+                    <td>Opt-in</td>
+                    <td>Runtime JSON</td>
+                    <td>None</td>
+                    <td class="highlight">Linear tokens</td>
+                </tr>
+                <tr>
+                    <td>GC required?</td>
+                    <td>Yes</td>
+                    <td>No*</td>
+                    <td>Yes</td>
+                    <td class="highlight">Never</td>
+                </tr>
+                <tr>
+                    <td>Binary size</td>
+                    <td>150-300MB</td>
+                    <td>3-8MB</td>
+                    <td>5-10MB</td>
+                    <td class="highlight">1-3MB</td>
+                </tr>
+            </tbody>
+        </table>
+        <p class="footnote">* Tauri uses <code>Arc&lt;Mutex&lt;...&gt;&gt;</code>, which is reference counting.</p>
+    </section>
+
+    <section class="stack">
+        <h2>The stack</h2>
+        <div class="stack-diagram">
+            <div class="stack-layer layer-app">
+                <strong>Ephapax</strong> (.eph) &mdash; Application code with linear types
+            </div>
+            <div class="stack-arrow">&darr; __ffi()</div>
+            <div class="stack-layer layer-ffi">
+                <strong>Zig</strong> (.zig) &mdash; Platform webview bindings (GTK/WebKit/Win32)
+            </div>
+            <div class="stack-arrow">&darr; C ABI</div>
+            <div class="stack-layer layer-abi">
+                <strong>Idris2</strong> (.idr) &mdash; Formal ABI proofs (compile-time only, erased)
+            </div>
+        </div>
+        <p class="stack-note">At runtime: just Zig + GTK. No GC runtime, no VM, no interpreter overhead in production.</p>
+    </section>
+
+    <section id="quickstart" class="quickstart">
+        <h2>Quick start</h2>
+        <pre><code class="shell"><span class="comment"># Prerequisites (Fedora)</span>
+sudo dnf install gtk3-devel webkit2gtk4.1-devel zig
+
+<span class="comment"># Clone and build</span>
+git clone https://github.com/hyperpolymath/gossamer
+cd gossamer/src/interface/ffi
+zig build
+
+<span class="comment"># Build the Ephapax compiler</span>
+git clone https://github.com/hyperpolymath/ephapax
+cd ephapax && cargo build -p ephapax-cli
+
+<span class="comment"># Run the hello example</span>
+cd gossamer
+bash examples/hello/run.sh</code></pre>
+    </section>
+
+    <section class="paper">
+        <h2>Academic paper</h2>
+        <p>Gossamer is backed by formal research. The design, type system, and proofs
+        are documented in an arXiv paper:</p>
+        <p><em>Gossamer: A Linearly-Typed Webview Shell with Provable Resource Safety</em></p>
+        <p>Jonathan D.A. Jewell, 2026</p>
+        <a href="https://github.com/hyperpolymath/gossamer/blob/main/docs/whitepapers/gossamer-arxiv-paper.tex" class="btn btn-secondary">Read the paper (LaTeX source)</a>
+    </section>
+
+    <footer>
+        <p>Gossamer is built on <a href="https://github.com/hyperpolymath/ephapax">Ephapax</a>,
+        a dyadic language with affine and linear types.</p>
+        <p>PMPL-1.0-or-later &mdash; &copy; 2026 Jonathan D.A. Jewell (hyperpolymath)</p>
+        <div class="footer-links">
+            <a href="https://github.com/hyperpolymath/gossamer">GitHub</a>
+            <a href="https://gitlab.com/hyperpolymath/gossamer">GitLab</a>
+            <a href="https://bitbucket.org/hyperpolymath/gossamer">Bitbucket</a>
+        </div>
+    </footer>
+</body>
+</html>
