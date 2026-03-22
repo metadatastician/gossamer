@@ -14,6 +14,12 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+// Static Site Generator FFI functions (gossamer_ssg_*).
+// Imported here to ensure all exports are included in the shared library.
+comptime {
+    _ = @import("ssg.zig");
+}
+
 // Version information
 const VERSION = "0.1.0";
 const BUILD_INFO = "Gossamer " ++ VERSION ++ " built with Zig " ++ @import("builtin").zig_version_string;

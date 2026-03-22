@@ -105,7 +105,10 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
     });
+
+    linkPlatformLibs(test_module, os);
 
     const unit_tests = b.addTest(.{
         .root_module = test_module,

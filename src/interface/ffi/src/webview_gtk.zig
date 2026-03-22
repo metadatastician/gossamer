@@ -271,10 +271,11 @@ fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8
     const escaped = escapeForJS(allocator, response) catch return;
     defer allocator.free(escaped);
 
-    const js = std.fmt.allocPrintZ(
+    const js = std.fmt.allocPrintSentinel(
         allocator,
         "if (window.__gossamer_callbacks[\"{s}\"]) {{ window.__gossamer_callbacks[\"{s}\"].resolve(JSON.parse(\"{s}\")); delete window.__gossamer_callbacks[\"{s}\"]; }}",
         .{ id, id, escaped, id },
+        0,
     ) catch return;
     defer allocator.free(js);
 
@@ -284,10 +285,11 @@ fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8
 /// Send an error response back to the JavaScript IPC bridge.
 fn sendIPCError(handle: *GossamerHandle, id: []const u8, msg: []const u8) void {
     const allocator = std.heap.c_allocator;
-    const js = std.fmt.allocPrintZ(
+    const js = std.fmt.allocPrintSentinel(
         allocator,
         "if (window.__gossamer_callbacks[\"{s}\"]) {{ window.__gossamer_callbacks[\"{s}\"].reject(new Error(\"{s}\")); delete window.__gossamer_callbacks[\"{s}\"]; }}",
         .{ id, id, msg, id },
+        0,
     ) catch return;
     defer allocator.free(js);
 
