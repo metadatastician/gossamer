@@ -53,3 +53,16 @@ Containerfile  text eol=lf
 # Lock files
 Cargo.lock  text eol=lf -diff
 flake.lock  text eol=lf -diff
+
+# Linguist overrides — ensure correct language detection
+*.eph linguist-language=Ephapax
+*.idr linguist-language=Idris
+*.zig linguist-language=Zig
+*.a2ml linguist-documentation
+docs/** linguist-documentation
+.github/** linguist-generated
+.machine_readable/** linguist-generated
+container/** linguist-generated
+features/** linguist-generated
+verification/** linguist-generated
+contractile.just linguist-generated
