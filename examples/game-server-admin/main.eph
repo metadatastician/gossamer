@@ -1,0 +1,130 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+//
+// Gossamer Game Server Admin — Remote server settings panel.
+//
+// Provides a Gossamer webview that connects to game servers on a VPS via SSH,
+// auto-detects config format (XML attributes, INI key=value), and renders
+// appropriate controls. All changes are applied live and the container is
+// restarted automatically.
+//
+// Linear resource lifecycle:
+//   webview handle: create -> loadHTML -> run (consumed)
+//   IPC channel:    open -> handle* -> close (consumed)
+//   network cap:    grant -> check* -> revoke (consumed)
+//   shell cap:      grant -> check* -> revoke (consumed)
+//
+// Build:
+//   just build-example game-server-admin
+//
+// PanLL integration:
+//   Registered via panels/manifest.json (panll-harness/v1 schema).
+//   PanelHarness discovers this manifest and wires the panel into any
+//   PanLL workspace automatically.
+
+import Gossamer.Shell
+import Gossamer.Bridge
+import Gossamer.Capabilities
+
+/// Game server admin entry point.
+///
+/// Creates a Gossamer webview with typed IPC bindings for:
+///   - "list_servers"   : () -> JSON array of registered servers
+///   - "get_config"     : server_id -> parsed config as JSON object
+///   - "set_config"     : {server, key, value} -> result string
+///   - "server_action"  : {server, action} -> result string
+///   - "scan_config"    : server_id -> auto-detected config schema as JSON
+///
+/// The frontend renders controls based on the scanned schema and dispatches
+/// changes back through the IPC channel to the bridge layer.
+fn main() -> i32 {
+    region app:
+        // Grant capability tokens (linear — must be revoked before region exit).
+        // Network capability: required for SSH to VPS.
+        let! netCap = Capabilities.grant@app(Capabilities.RESOURCE_NETWORK)
+
+        // Shell capability: required for executing SSH commands.
+        let! shellCap = Capabilities.grant@app(Capabilities.RESOURCE_SHELL)
+
+        // Create the webview window (linear handle).
+        let! webview = Shell.create@app({
+            title: "Game Server Admin — 209.42.26.106",
+            width: 1100,
+            height: 750,
+            resizable: true,
+            decorations: true,
+            fullscreen: false,
+        })
+
+        // Open IPC channel (linear handle).
+        let! channel = Bridge.open@app(webview)
+
+        // ── IPC command handlers ─────────────────────────────────────────
+        // Each handler is typed at the Ephapax level.
+        // The bridge.eph module contains the actual SSH dispatch logic.
+        // These handlers delegate to __ffi calls that invoke the bridge.
+
+        // "list_servers": () -> String (JSON array)
+        // Returns the registry of all configured game servers.
+        let! channel = Bridge.handle(channel, "list_servers",
+            fn(_: ()) -> String {
+                __ffi("bridge_list_servers")
+            }
+        )
+
+        // "get_config": String -> String (JSON object)
+        // Reads the config file for a given server and returns parsed key-value pairs.
+        let! channel = Bridge.handle(channel, "get_config",
+            fn(serverId: String) -> String {
+                // Check network capability before SSH
+                let _ = Capabilities.check(netCap)
+                __ffi("bridge_get_config", serverId)
+            }
+        )
+
+        // "set_config": String -> String
+        // Accepts JSON: {"server": "...", "key": "...", "value": "..."}
+        // Writes the setting and restarts the container.
+        let! channel = Bridge.handle(channel, "set_config",
+            fn(payload: String) -> String {
+                let _ = Capabilities.check(netCap)
+                let _ = Capabilities.check(shellCap)
+                __ffi("bridge_set_config", payload)
+            }
+        )
+
+        // "server_action": String -> String
+        // Accepts JSON: {"server": "...", "action": "start|stop|restart|status|logs"}
+        let! channel = Bridge.handle(channel, "server_action",
+            fn(payload: String) -> String {
+                let _ = Capabilities.check(shellCap)
+                __ffi("bridge_server_action", payload)
+            }
+        )
+
+        // "scan_config": String -> String (JSON schema)
+        // Auto-detects config format and returns field metadata:
+        // [{key, value, type, label, min, max, options}]
+        let! channel = Bridge.handle(channel, "scan_config",
+            fn(serverId: String) -> String {
+                let _ = Capabilities.check(netCap)
+                __ffi("bridge_scan_config", serverId)
+            }
+        )
+
+        // ── Load the admin UI ────────────────────────────────────────────
+        // The HTML is loaded from the adjacent admin.html file via navigate.
+        // In production, this resolves to a file:// URI pointing at the
+        // installed panel asset directory.
+        let! (webview, _) = Shell.navigate(webview, "file://admin.html")
+
+        // ── Run event loop (consumes webview) ────────────────────────────
+        Shell.run(webview)
+
+        // ── Cleanup: consume all linear resources ────────────────────────
+        Bridge.close(channel)
+        Capabilities.revoke(netCap)
+        Capabilities.revoke(shellCap)
+
+        0
+}

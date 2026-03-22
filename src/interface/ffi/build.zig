@@ -77,7 +77,7 @@ pub fn build(b: *std.Build) void {
         .name = "gossamer",
         .root_module = root_module,
         .linkage = .dynamic,
-        .version = .{ .major = 0, .minor = 2, .patch = 0 },
+        .version = .{ .major = 0, .minor = 1, .patch = 0 },
     });
 
     b.installArtifact(shared_lib);

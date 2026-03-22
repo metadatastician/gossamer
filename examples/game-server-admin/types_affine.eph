@@ -1,0 +1,197 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+//
+// Game Server Admin — Affine Types
+//
+// Affine types model data that CAN be dropped without consuming.
+// Use-at-most-once: read it, pass it, or ignore it. No obligation
+// to consume. The type checker (Mode::Affine) permits implicit drops.
+//
+// These types represent:
+//   - Server registry entries (read-only lookup data)
+//   - Config field descriptions (metadata about settings)
+//   - Config values (current setting values, freely copyable)
+//   - Scan results (auto-detected schema, intermediate data)
+//   - Action responses (SSH command output, fire-and-forget)
+//
+// Affine types are SAFE to:
+//   ✓ Read multiple fields without consuming
+//   ✓ Pass to functions that may or may not use them
+//   ✓ Drop at scope exit without explicit destruction
+//   ✓ Store in collections
+//
+// Affine types CANNOT:
+//   ✗ Alias a linear resource (that would violate linearity)
+//   ✗ Hold mutable references to shared state (no aliased mutation)
+
+// ── Server Registry ──────────────────────────────────────────────────────────
+
+// ConfigFormat: the serialisation format of a server's config file.
+// Affine — can be compared, passed, or dropped freely.
+//
+// Equivalent to Idris2:
+//   data ConfigFormat = XML | INI | JSON | ENV | None
+fn configFormatFromString(s: String): I32 =
+    // 0=xml, 1=ini, 2=json, 3=env, 4=none
+    // In a full implementation this would be a proper enum;
+    // Ephapax v0.1 models enums as tagged integers.
+    __ffi("bridge_config_format_ordinal", s)
+
+// ServerInfo: metadata about a registered game server.
+// All fields are affine — freely readable, droppable.
+//
+// In memory layout (matching Zig bridge_game_server.zig Server struct):
+//   id:        String   — unique identifier ("barotrauma", "dst", etc.)
+//   name:      String   — human-readable display name
+//   container: String   — Podman container name on VPS
+//   port:      I32      — network port
+//   config:    String   — path to config file on VPS (empty if none)
+//   format:    I32      — ConfigFormat ordinal
+//
+// Usage pattern:
+//   let info = getServerInfo("barotrauma")
+//   let name = serverName(&info)     // borrow — info still alive
+//   let port = serverPort(&info)     // borrow — info still alive
+//   // info dropped implicitly at scope exit (affine allows this)
+
+fn getServerInfo(serverId: String): I64 =
+    __ffi("bridge_resolve_server_info", serverId)
+
+fn serverName(infoPtr: I64): String =
+    __ffi("bridge_server_field", infoPtr, "name")
+
+fn serverPort(infoPtr: I64): I32 =
+    __ffi("bridge_server_field_int", infoPtr, "port")
+
+fn serverContainer(infoPtr: I64): String =
+    __ffi("bridge_server_field", infoPtr, "container")
+
+fn serverConfigPath(infoPtr: I64): String =
+    __ffi("bridge_server_field", infoPtr, "config")
+
+fn serverFormat(infoPtr: I64): I32 =
+    __ffi("bridge_server_field_int", infoPtr, "format")
+
+// ── Config Field Schema ──────────────────────────────────────────────────────
+
+// FieldType: the detected or declared type of a config field.
+// Affine — type metadata is pure data, freely droppable.
+//
+// Ordinal encoding (matching bridge_game_server.zig):
+//   0 = bool     (rendered as toggle switch)
+//   1 = int      (rendered as slider if range known, else number input)
+//   2 = float    (rendered as number input with step)
+//   3 = string   (rendered as text input)
+//   4 = enum     (rendered as dropdown select)
+
+fn fieldTypeBool(): I32 = 0
+fn fieldTypeInt(): I32 = 1
+fn fieldTypeFloat(): I32 = 2
+fn fieldTypeString(): I32 = 3
+fn fieldTypeEnum(): I32 = 4
+
+// ConfigField: metadata about a single setting in a config file.
+// Affine — schema data is read-only and freely droppable.
+//
+// Fields:
+//   key:     String — raw config key name (e.g. "MaxPlayers")
+//   label:   String — human-readable label (e.g. "Max Players")
+//   type:    I32    — FieldType ordinal
+//   group:   String — category for UI grouping (e.g. "Gameplay")
+//   value:   String — current value as string
+//   min:     I32    — minimum value (for int/float types, -1 if unset)
+//   max:     I32    — maximum value (for int/float types, -1 if unset)
+//   options: String — JSON array of enum options (empty string if not enum)
+//
+// Created by bridge_scan_config → bridge_overlay_schema pipeline.
+// The auto-detector examines raw config content:
+//   "True"/"False"    → bool
+//   digits only       → int
+//   digits with '.'   → float
+//   known enum values → enum (from game schema overlay)
+//   everything else   → string
+//
+// Game schema overlays (baro_fields in Zig) add labels, ranges, enums.
+
+fn fieldKey(fieldPtr: I64): String =
+    __ffi("bridge_field_meta", fieldPtr, "key")
+
+fn fieldLabel(fieldPtr: I64): String =
+    __ffi("bridge_field_meta", fieldPtr, "label")
+
+fn fieldType(fieldPtr: I64): I32 =
+    __ffi("bridge_field_meta_int", fieldPtr, "type")
+
+fn fieldGroup(fieldPtr: I64): String =
+    __ffi("bridge_field_meta", fieldPtr, "group")
+
+fn fieldValue(fieldPtr: I64): String =
+    __ffi("bridge_field_meta", fieldPtr, "value")
+
+fn fieldMin(fieldPtr: I64): I32 =
+    __ffi("bridge_field_meta_int", fieldPtr, "min")
+
+fn fieldMax(fieldPtr: I64): I32 =
+    __ffi("bridge_field_meta_int", fieldPtr, "max")
+
+fn fieldOptions(fieldPtr: I64): String =
+    __ffi("bridge_field_meta", fieldPtr, "options")
+
+// ── Config Value ─────────────────────────────────────────────────────────────
+
+// ConfigValue: a typed representation of a setting's current value.
+// Affine — config values are pure data, freely copyable and droppable.
+//
+// The type checker infers the appropriate Ephapax type from FieldType:
+//   bool   → Bool
+//   int    → I32
+//   float  → F64
+//   string → String
+//   enum   → String (validated against options list)
+
+fn configValueAsBool(valStr: String): Bool =
+    // "True" -> true, everything else -> false
+    __ffi("bridge_parse_bool", valStr)
+
+fn configValueAsInt(valStr: String): I32 =
+    __ffi("bridge_parse_int", valStr)
+
+fn configValueAsFloat(valStr: String): F64 =
+    __ffi("bridge_parse_float", valStr)
+
+// ── Action Response ──────────────────────────────────────────────────────────
+
+// ActionResponse: the result of a server action (start/stop/restart/status/logs).
+// Affine — response data is fire-and-forget, can be read or discarded.
+//
+// Contains:
+//   success: Bool   — whether the action completed without error
+//   output:  String — stdout/stderr from the SSH command
+//   status:  String — container status after action (e.g. "Up 5 minutes")
+
+fn actionSuccess(responsePtr: I64): Bool =
+    __ffi("bridge_response_field_bool", responsePtr, "success")
+
+fn actionOutput(responsePtr: I64): String =
+    __ffi("bridge_response_field", responsePtr, "output")
+
+fn actionStatus(responsePtr: I64): String =
+    __ffi("bridge_response_field", responsePtr, "status")
+
+// ── Scan Result ──────────────────────────────────────────────────────────────
+
+// ScanResult: the output of config scanning — a list of ConfigField entries.
+// Affine — intermediate scan data, consumed once by the UI renderer or dropped.
+//
+// The scan pipeline:
+//   1. bridge_get_config  → raw file content (String)
+//   2. bridge_parse_config → key-value pairs (JSON array)
+//   3. bridge_infer_types  → add type annotations
+//   4. bridge_overlay_schema → add game-specific metadata
+//   5. Result: JSON array of ConfigField objects → rendered by admin.html
+
+fn scanFieldCount(scanPtr: I64): I32 =
+    __ffi("bridge_scan_field_count", scanPtr)
+
+fn scanFieldAt(scanPtr: I64, index: I32): I64 =
+    __ffi("bridge_scan_field_at", scanPtr, index)

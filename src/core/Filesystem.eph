@@ -1,0 +1,47 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+//
+// Gossamer.Filesystem — File I/O operations guarded by capability tokens.
+//
+// All filesystem operations require a valid RESOURCE_FILESYSTEM capability
+// token (from Capabilities.grant). The token is borrowed (not consumed) by
+// read/write operations.
+//
+// These are IPC commands dispatched through the Gossamer bridge, not direct
+// file I/O from the webview. The Zig FFI backend performs the actual I/O
+// after validating the capability token.
+
+// Read a text file and return its contents as a string pointer.
+// Requires a valid filesystem capability token.
+// Returns 0 on error (check Shell.lastError for details).
+// FFI: gossamer_fs_read_text(path, cap_token) -> string_ptr
+fn readText(path: String, capToken: I64): I64 =
+  __ffi("gossamer_fs_read_text", path, capToken)
+
+// Write text to a file. Creates the file if it doesn't exist.
+// Requires a valid filesystem capability token with write scope.
+// Returns 0 (ok) or non-zero error code.
+// FFI: gossamer_fs_write_text(path, contents, cap_token) -> result
+fn writeText(path: String, contents: String, capToken: I64): I32 =
+  __ffi("gossamer_fs_write_text", path, contents, capToken)
+
+// Check if a file or directory exists.
+// Requires a valid filesystem capability token.
+// Returns 1 (true) or 0 (false).
+// FFI: gossamer_fs_exists(path, cap_token) -> bool
+fn exists(path: String, capToken: I64): I32 =
+  __ffi("gossamer_fs_exists", path, capToken)
+
+// List directory contents. Returns a JSON array of filenames as a
+// string pointer, or 0 on error.
+// Requires a valid filesystem capability token.
+// FFI: gossamer_fs_list_dir(path, cap_token) -> json_ptr
+fn listDir(path: String, capToken: I64): I64 =
+  __ffi("gossamer_fs_list_dir", path, capToken)
+
+// Delete a file. Requires a valid filesystem capability token with
+// write scope.
+// Returns 0 (ok) or non-zero error code.
+// FFI: gossamer_fs_remove(path, cap_token) -> result
+fn remove(path: String, capToken: I64): I32 =
+  __ffi("gossamer_fs_remove", path, capToken)

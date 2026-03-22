@@ -1,0 +1,139 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+//
+// Game Server Admin — Bridge layer.
+//
+// Implements the backend logic for IPC commands declared in main.eph.
+// Each function is registered as an __ffi symbol and called by the Bridge
+// handlers. The actual VPS communication uses SSH via shell exec FFI.
+//
+// Config format detection:
+//   - XML attributes:  key="value" patterns (Barotrauma, Void Expanse)
+//   - INI key=value:   key = value patterns (DST cluster.ini)
+//   - JSON:            standard JSON parse (future games)
+//   - ENV:             KEY=VALUE patterns (Elixir services)
+//
+// The scanner examines config file content and infers field types:
+//   - "True"/"False"         -> bool    (rendered as toggle)
+//   - integer string         -> int     (rendered as slider if range known)
+//   - float string           -> float   (rendered as slider)
+//   - known enum values      -> enum    (rendered as dropdown)
+//   - everything else        -> string  (rendered as text input)
+//
+// Known game schemas provide additional metadata (labels, ranges, enums)
+// layered on top of the auto-detected types.
+
+import Gossamer.Capabilities
+
+// ── Server Registry ──────────────────────────────────────────────────────────
+// Hardcoded registry of managed servers. In production this would be read
+// from a config file, but for the panel we define it statically to avoid
+// an extra config layer.
+
+let VPS: String = "root@209.42.26.106"
+
+// bridge_list_servers: () -> String (JSON array)
+// Returns the full server registry as a JSON string.
+fn bridge_list_servers(): String =
+    "[" ++
+    "{\"id\":\"barotrauma\",\"name\":\"Barotrauma\",\"container\":\"barotrauma\",\"port\":27015," ++
+     "\"config\":\"/opt/barotrauma-game/serversettings.xml\",\"format\":\"xml\"}," ++
+    "{\"id\":\"dst\",\"name\":\"Don't Starve Together\",\"container\":\"dst-server\",\"port\":10999," ++
+     "\"config\":\"/opt/dst-server/DoNotStarveTogether/Cluster_1/cluster.ini\",\"format\":\"ini\"}," ++
+    "{\"id\":\"ass\",\"name\":\"Airborne Submarine Squadron\",\"container\":\"ass-server\",\"port\":8081," ++
+     "\"config\":\"\",\"format\":\"none\"}," ++
+    "{\"id\":\"idaptik\",\"name\":\"IDApTIK Sync\",\"container\":\"idaptik-sync\",\"port\":4000," ++
+     "\"config\":\"\",\"format\":\"env\"}," ++
+    "{\"id\":\"burble\",\"name\":\"Burble\",\"container\":\"burble\",\"port\":4001," ++
+     "\"config\":\"\",\"format\":\"env\"}," ++
+    "{\"id\":\"voidexpanse\",\"name\":\"Void Expanse\",\"container\":\"voidexpanse\",\"port\":6100," ++
+     "\"config\":\"/opt/voidexpanse/SettingsServer.xml\",\"format\":\"xml\"}" ++
+    "]"
+
+// bridge_get_config: String -> String
+// SSHes to VPS and reads the config file for the given server ID.
+// Returns the raw file content as a string.
+fn bridge_get_config(serverId: String): String =
+    let configPath = __ffi("bridge_resolve_config_path", serverId) in
+    __ffi("ssh_exec", VPS, "cat " ++ configPath)
+
+// bridge_set_config: String -> String
+// Accepts JSON payload: {"server": "...", "key": "...", "value": "..."}
+// Detects config format and applies the change via sed, then restarts.
+//
+// XML format:  sed -i 's/Key="[^"]*"/Key="NewValue"/' file
+// INI format:  sed -i 's/^key *=.*/key = newvalue/' file
+fn bridge_set_config(payload: String): String =
+    // Parse the payload fields via FFI (JSON.parse equivalent)
+    let server = __ffi("json_field", payload, "server") in
+    let key = __ffi("json_field", payload, "key") in
+    let value = __ffi("json_field", payload, "value") in
+    let format = __ffi("bridge_resolve_config_format", server) in
+    let configPath = __ffi("bridge_resolve_config_path", server) in
+    let container = __ffi("bridge_resolve_container", server) in
+
+    // Build the sed command based on config format
+    let sedCmd = __ffi("bridge_build_sed", format, key, value, configPath) in
+
+    // Execute: apply change + restart container
+    let _ = __ffi("ssh_exec", VPS, sedCmd) in
+    let _ = __ffi("ssh_exec", VPS, "podman restart " ++ container) in
+    "{\"status\":\"ok\",\"key\":\"" ++ key ++ "\",\"value\":\"" ++ value ++ "\"}"
+
+// bridge_server_action: String -> String
+// Accepts JSON: {"server": "...", "action": "start|stop|restart|status|logs"}
+fn bridge_server_action(payload: String): String =
+    let server = __ffi("json_field", payload, "server") in
+    let action = __ffi("json_field", payload, "action") in
+    let container = __ffi("bridge_resolve_container", server) in
+
+    let cmd = __ffi("bridge_build_action_cmd", action, container) in
+    __ffi("ssh_exec", VPS, cmd)
+
+// bridge_scan_config: String -> String (JSON schema array)
+// Reads a config file and auto-detects field types.
+// Returns: [{"key": "...", "value": "...", "type": "bool|int|float|string|enum", ...}]
+//
+// For known games (barotrauma, dst), overlays game-specific metadata:
+//   - Human-readable labels
+//   - Min/max ranges for numeric fields
+//   - Enum option lists for dropdown fields
+//   - Grouping by category
+fn bridge_scan_config(serverId: String): String =
+    let configPath = __ffi("bridge_resolve_config_path", serverId) in
+    let format = __ffi("bridge_resolve_config_format", serverId) in
+    let rawContent = __ffi("ssh_exec", VPS, "cat " ++ configPath) in
+
+    // Parse config into key-value pairs based on format
+    let pairs = __ffi("bridge_parse_config", format, rawContent) in
+
+    // Infer types for each value
+    let typed = __ffi("bridge_infer_types", pairs) in
+
+    // Overlay game-specific schema if available
+    let enriched = __ffi("bridge_overlay_schema", serverId, typed) in
+
+    enriched
+
+// ── Known Game Schemas ───────────────────────────────────────────────────────
+// These provide human-readable labels, value ranges, and enum options
+// for fields that the auto-detector can't fully resolve.
+
+// Barotrauma schema overlay:
+//   GameModeIdentifier -> enum: mission, sandbox, multiplayercampaign, pvp
+//   RespawnMode -> enum: MidRound, BetweenRounds
+//   PlayStyle -> enum: Serious, Casual, Roleplay, Rampage, SomethingDifferent
+//   SelectedLevelDifficulty -> int range 0-100
+//   BotCount -> int range 0-16
+//   MaxPlayers -> int range 1-16
+//   TickRate -> int range 10-60
+//   AllowFriendlyFire -> bool
+//   AllowRewiring -> bool
+//   VoiceChatEnabled -> bool
+//   IsPublic -> bool
+
+// DST schema overlay:
+//   game_mode -> enum: survival, endless, wilderness
+//   max_players -> int range 1-64
+//   pvp -> bool
+//   pause_when_empty -> bool

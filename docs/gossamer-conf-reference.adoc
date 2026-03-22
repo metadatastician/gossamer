@@ -1,0 +1,812 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Gossamer Configuration Reference
+Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+:revdate: 2026-03-22
+:toc: left
+:toclevels: 3
+:icons: font
+:source-highlighter: rouge
+
+== Overview
+
+`gossamer.conf.json` is the declarative configuration file for Gossamer webview
+applications. It serves the same role as Tauri's `tauri.conf.json` but extends it
+with Gossamer-specific features: capability tokens, Ephapax linear-type module
+integration, expanded mobile support, and a Deno-first build pipeline.
+
+The file lives at the root of your Gossamer project (typically alongside
+`Justfile` and `deno.json`).
+
+=== Schema Reference
+
+Point your `$schema` key at the canonical schema URL for editor autocompletion:
+
+[source,json]
+----
+{
+  "$schema": "https://gossamer.dev/schemas/config/v1"
+}
+----
+
+The schema is also available locally at `schema/gossamer.conf.schema.json`.
+
+== Top-Level Fields
+
+[cols="1,1,1,3", options="header"]
+|===
+| Field | Type | Required | Description
+
+| `$schema`
+| `string`
+| No
+| URL to the JSON Schema for editor support.
+
+| `productName`
+| `string`
+| **Yes**
+| Human-readable product name. Displayed in window titles, installers, and OS metadata. Must start with an alphanumeric character.
+
+| `version`
+| `string`
+| **Yes**
+| Application version in semver format (e.g., `0.1.0`, `1.0.0-beta.1`).
+
+| `identifier`
+| `string`
+| **Yes**
+| Reverse-domain identifier (e.g., `com.hyperpolymath.panll`). Used for bundle IDs, D-Bus names, and mobile package names.
+
+| `build`
+| `object`
+| No
+| Build and development server configuration.
+
+| `app`
+| `object`
+| No
+| Application runtime configuration (windows, security, IPC, tray).
+
+| `plugins`
+| `object`
+| No
+| Plugin-specific configuration. Keys are plugin names.
+
+| `bundle`
+| `object`
+| No
+| Packaging configuration for all target platforms.
+
+| `ephapax`
+| `object`
+| No
+| Ephapax linear-type module integration.
+|===
+
+== Build Configuration
+
+The `build` section configures the frontend build pipeline. Gossamer is
+**Deno-first** -- npm is not supported.
+
+[source,json]
+----
+{
+  "build": {
+    "frontendDist": "../public",
+    "devUrl": "http://localhost:8000/",
+    "beforeDevCommand": "deno task dev",
+    "beforeBuildCommand": "deno task build",
+    "runner": "deno"
+  }
+}
+----
+
+[cols="1,1,1,3", options="header"]
+|===
+| Field | Type | Default | Description
+
+| `frontendDist`
+| `string`
+| `"../public"`
+| Relative path to compiled frontend assets.
+
+| `devUrl`
+| `string`
+| `"http://localhost:8000/"`
+| URL the webview loads during `gossamer dev`.
+
+| `beforeDevCommand`
+| `string \| null`
+| `null`
+| Shell command run before starting the dev server.
+
+| `beforeBuildCommand`
+| `string \| null`
+| `null`
+| Shell command run before production build.
+
+| `runner`
+| `string`
+| `"deno"`
+| Task runner: `"deno"` (primary) or `"bun"` (fallback). npm is not supported.
+|===
+
+=== Migration from Tauri
+
+If migrating from a Tauri project, your `beforeDevCommand` and
+`beforeBuildCommand` translate directly. Replace any `npm run` or `yarn`
+invocations with `deno task`:
+
+[cols="1,1", options="header"]
+|===
+| Tauri (before) | Gossamer (after)
+
+| `npm run dev`
+| `deno task dev`
+
+| `yarn build`
+| `deno task build`
+
+| `npx vite build`
+| `deno task build` (configure in `deno.json`)
+|===
+
+== App Configuration
+
+=== Windows
+
+Each entry in `app.windows` defines a window created at launch.
+
+[source,json]
+----
+{
+  "app": {
+    "windows": [{
+      "label": "main",
+      "title": "My App",
+      "url": "/",
+      "width": 1400,
+      "height": 900,
+      "minWidth": 1000,
+      "minHeight": 600,
+      "resizable": true,
+      "fullscreen": false,
+      "decorations": true,
+      "transparent": false,
+      "center": true,
+      "alwaysOnTop": false,
+      "visible": true
+    }]
+  }
+}
+----
+
+[cols="1,1,1,3", options="header"]
+|===
+| Field | Type | Default | Description
+
+| `label`
+| `string`
+| `"main"`
+| Unique identifier for IPC targeting.
+
+| `title`
+| `string`
+| `""`
+| Window title bar text.
+
+| `url`
+| `string`
+| `"/"`
+| URL or path to load. Relative paths resolve against `frontendDist`.
+
+| `width`
+| `integer`
+| `800`
+| Initial width in logical pixels (min: 100).
+
+| `height`
+| `integer`
+| `600`
+| Initial height in logical pixels (min: 100).
+
+| `minWidth`
+| `integer \| null`
+| `null`
+| Minimum width constraint.
+
+| `minHeight`
+| `integer \| null`
+| `null`
+| Minimum height constraint.
+
+| `maxWidth`
+| `integer \| null`
+| `null`
+| Maximum width constraint.
+
+| `maxHeight`
+| `integer \| null`
+| `null`
+| Maximum height constraint.
+
+| `resizable`
+| `boolean`
+| `true`
+| Whether the user can resize.
+
+| `fullscreen`
+| `boolean`
+| `false`
+| Start in fullscreen mode.
+
+| `decorations`
+| `boolean`
+| `true`
+| Whether the OS draws window chrome. Set `false` for custom title bars.
+
+| `transparent`
+| `boolean`
+| `false`
+| Transparent background. Requires `decorations: false`.
+
+| `center`
+| `boolean`
+| `true`
+| Center on primary monitor at launch.
+
+| `alwaysOnTop`
+| `boolean`
+| `false`
+| Keep above other windows.
+
+| `visible`
+| `boolean`
+| `true`
+| Visible at launch. Set `false` for background windows.
+
+| `x`
+| `integer \| null`
+| `null`
+| Initial X position. Overrides `center`.
+
+| `y`
+| `integer \| null`
+| `null`
+| Initial Y position. Overrides `center`.
+
+| `skipTaskbar`
+| `boolean`
+| `false`
+| Hide from OS taskbar. Useful for tray-only apps.
+|===
+
+=== Security
+
+[source,json]
+----
+{
+  "app": {
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'",
+      "capabilities": ["filesystem", "network", "clipboard"],
+      "capabilityTokens": {
+        "enabled": true,
+        "issuer": "gossamer-runtime",
+        "ttl": 3600,
+        "rotateOnFocus": true
+      },
+      "sandbox": {
+        "enabled": true,
+        "allowExec": false,
+        "allowNetwork": true,
+        "allowFilesystem": true,
+        "allowedPaths": ["$APPDATA/*", "$HOME/Documents/*"]
+      }
+    }
+  }
+}
+----
+
+==== Content Security Policy
+
+The `csp` field accepts a standard CSP string. Set to `null` to disable CSP
+entirely (acceptable during development, **not recommended for production**).
+
+==== Capabilities
+
+Static capability declarations gate which IPC command families are available.
+Available capabilities:
+
+Desktop:: `filesystem`, `network`, `shell`, `clipboard`, `notification`, `tray`,
+`dialog`, `globalShortcut`, `process`, `os`, `updater`
+
+Mobile:: `barcode`, `biometric`, `camera`, `geolocation`, `haptics`, `nfc`
+
+==== Capability Tokens (Gossamer-Specific)
+
+Capability tokens add **time-bounded, fine-grained** permission grants on top of
+the static capability list. When enabled, IPC commands require a valid token.
+
+[cols="1,1,1,3", options="header"]
+|===
+| Field | Type | Default | Description
+
+| `enabled`
+| `boolean`
+| `false`
+| Activate the token system.
+
+| `issuer`
+| `string`
+| `"gossamer-runtime"`
+| Token issuer identifier.
+
+| `ttl`
+| `integer`
+| `3600`
+| Token lifetime in seconds (1 -- 86400).
+
+| `rotateOnFocus`
+| `boolean`
+| `false`
+| Rotate tokens on window focus to mitigate theft from background contexts.
+|===
+
+==== Sandbox
+
+Process-level sandbox restrictions applied to the webview process.
+
+[cols="1,1,1,3", options="header"]
+|===
+| Field | Type | Default | Description
+
+| `enabled`
+| `boolean`
+| `true`
+| Enable OS-level sandboxing.
+
+| `allowExec`
+| `boolean`
+| `false`
+| Permit spawning child processes.
+
+| `allowNetwork`
+| `boolean`
+| `true`
+| Permit network access.
+
+| `allowFilesystem`
+| `boolean`
+| `true`
+| Permit filesystem access (scoped by `allowedPaths` and capability tokens).
+
+| `allowedPaths`
+| `string[]`
+| `[]`
+| Glob patterns for accessible paths.
+|===
+
+=== IPC
+
+[source,json]
+----
+{
+  "app": {
+    "ipc": {
+      "protocol": "json",
+      "bridgeInjection": true,
+      "maxMessageSize": 16777216,
+      "timeout": 30000
+    }
+  }
+}
+----
+
+[cols="1,1,1,3", options="header"]
+|===
+| Field | Type | Default | Description
+
+| `protocol`
+| `string`
+| `"json"`
+| Serialisation format: `"json"`, `"msgpack"`, or `"cbor"`.
+
+| `bridgeInjection`
+| `boolean`
+| `true`
+| Auto-inject `window.__gossamer` bridge script.
+
+| `maxMessageSize`
+| `integer`
+| `16777216`
+| Max IPC message size in bytes (1KB -- 256MB).
+
+| `timeout`
+| `integer`
+| `30000`
+| Default call timeout in milliseconds. `0` = no timeout.
+|===
+
+=== Tray
+
+[source,json]
+----
+{
+  "app": {
+    "tray": {
+      "enabled": true,
+      "icon": "icons/tray.png",
+      "tooltip": "My App",
+      "menuOnLeftClick": true
+    }
+  }
+}
+----
+
+== Bundle Configuration
+
+=== Common Fields
+
+[cols="1,1,1,3", options="header"]
+|===
+| Field | Type | Default | Description
+
+| `active`
+| `boolean`
+| `true`
+| Enable/disable bundling.
+
+| `targets`
+| `string[]`
+| `["deb"]`
+| Bundle formats: `deb`, `rpm`, `appimage`, `flatpak`, `dmg`, `app`, `nsis`, `msi`, `ios`, `apk`, `aab`.
+
+| `icon`
+| `string[]`
+| `[]`
+| Icon file paths (multiple sizes/formats for cross-platform).
+
+| `resources`
+| `string[]`
+| `[]`
+| Additional files/directories to bundle.
+
+| `copyright`
+| `string`
+| --
+| Copyright notice for installers.
+
+| `license`
+| `string`
+| --
+| SPDX license identifier.
+
+| `shortDescription`
+| `string`
+| `""`
+| One-line description (max 80 chars).
+
+| `longDescription`
+| `string`
+| `""`
+| Multi-line description.
+|===
+
+=== Linux
+
+[source,json]
+----
+{
+  "bundle": {
+    "linux": {
+      "desktopEntry": true,
+      "category": "Utility",
+      "section": "utils",
+      "depends": [],
+      "appimage": { "bundleMediaFramework": false },
+      "rpm": { "requires": [], "release": "1" },
+      "flatpak": {
+        "runtime": "org.freedesktop.Platform",
+        "runtimeVersion": "23.08",
+        "permissions": []
+      }
+    }
+  }
+}
+----
+
+Linux categories (FreeDesktop standard): `AudioVideo`, `Audio`, `Video`,
+`Development`, `Education`, `Game`, `Graphics`, `Network`, `Office`, `Science`,
+`Settings`, `System`, `Utility`.
+
+=== macOS
+
+[source,json]
+----
+{
+  "bundle": {
+    "macos": {
+      "bundleIdentifier": "com.hyperpolymath.myapp",
+      "minimumSystemVersion": "11.0",
+      "frameworks": [],
+      "entitlements": null,
+      "signingIdentity": null,
+      "notarization": { "enabled": false, "teamId": null },
+      "category": "public.app-category.developer-tools"
+    }
+  }
+}
+----
+
+=== Windows
+
+[source,json]
+----
+{
+  "bundle": {
+    "windows": {
+      "webview2": "embed",
+      "certificateThumbprint": null,
+      "wix": { "language": "en-US" },
+      "nsis": {
+        "displayLanguageSelector": false,
+        "installerIcon": null
+      }
+    }
+  }
+}
+----
+
+WebView2 strategies:
+
+- `"embed"` -- Bundle the WebView2 runtime (larger binary, zero dependencies).
+- `"download"` -- Download WebView2 on first run (smaller initial binary).
+- `"system"` -- Require pre-installed WebView2 (smallest, may fail on older systems).
+
+=== Mobile
+
+[source,json]
+----
+{
+  "bundle": {
+    "mobile": {
+      "ios": {
+        "minimumVersion": "14.0",
+        "deviceFamily": ["iphone", "ipad"],
+        "capabilities": [],
+        "frameworks": [],
+        "entitlements": {}
+      },
+      "android": {
+        "minimumSdk": 24,
+        "targetSdk": 34,
+        "permissions": [],
+        "features": []
+      }
+    }
+  }
+}
+----
+
+Android permissions use the full manifest format (e.g.,
+`"android.permission.INTERNET"`). Features use the hardware feature format
+(e.g., `"android.hardware.camera"`).
+
+== Ephapax Integration (Gossamer-Specific)
+
+The `ephapax` section configures integration with the Ephapax region-linear
+fusion type system. This is a Gossamer-specific extension with no Tauri
+equivalent.
+
+[source,json]
+----
+{
+  "ephapax": {
+    "modules": [
+      "src/ephapax/resources.eph",
+      "src/ephapax/ipc_guards.eph"
+    ],
+    "region": "app",
+    "linearVerification": true,
+    "regionBoundary": "strict",
+    "preload": ["src/ephapax/resources.eph"],
+    "ffiBindings": "ffi/zig/src/"
+  }
+}
+----
+
+[cols="1,1,1,3", options="header"]
+|===
+| Field | Type | Default | Description
+
+| `modules`
+| `string[]`
+| `[]`
+| Paths to `.eph` modules to load.
+
+| `region`
+| `string`
+| `"app"`
+| Default region for resource allocation: `"app"` (application lifetime),
+  `"window"` (per window), `"request"` (per IPC call), `"custom"`.
+
+| `linearVerification`
+| `boolean`
+| `true`
+| Enforce linear type checks at runtime. When `true`, resource leaks produce
+  errors; when `false`, they produce warnings.
+
+| `regionBoundary`
+| `string`
+| `"strict"`
+| `"strict"` prevents cross-region references entirely. `"permissive"` allows
+  controlled borrowing across regions.
+
+| `preload`
+| `string[]`
+| `[]`
+| Modules to compile and verify at build time.
+
+| `ffiBindings`
+| `string`
+| `"ffi/zig/src/"`
+| Path to Zig FFI bindings directory for Ephapax modules.
+|===
+
+=== Region Lifecycle
+
+The region setting determines when linear resources are created and destroyed:
+
+`app`:: Resources live for the entire application lifetime. Suitable for
+singletons, global state, and connection pools.
+
+`window`:: Resources are scoped to a window. Destroyed when the window closes.
+Suitable for per-window state and UI components.
+
+`request`:: Resources are scoped to a single IPC request-response cycle.
+Destroyed after the response is sent. Suitable for transient allocations.
+
+`custom`:: Regions are managed manually via the Ephapax API. For advanced use
+cases requiring explicit region creation and destruction.
+
+== Plugins
+
+The `plugins` object holds per-plugin configuration. Each key is a plugin name,
+and each value is an arbitrary JSON object defined by that plugin.
+
+[source,json]
+----
+{
+  "plugins": {
+    "auto-updater": {
+      "endpoint": "https://releases.example.com/{{target}}/{{arch}}/{{current_version}}",
+      "pubkey": "dW50cnVzdGVk"
+    },
+    "deep-link": {
+      "scheme": "myapp"
+    }
+  }
+}
+----
+
+Gossamer's plugin system is documented separately in the Plugin Development
+Guide.
+
+== Complete Example
+
+A full configuration for PanLL migrated from Tauri to Gossamer:
+
+[source,json]
+----
+{
+  "$schema": "https://gossamer.dev/schemas/config/v1",
+  "productName": "PanLL",
+  "version": "0.1.0",
+  "identifier": "com.hyperpolymath.panll",
+  "build": {
+    "frontendDist": "../public",
+    "devUrl": "http://localhost:8000/public/",
+    "beforeDevCommand": "deno task bundle && deno task bundle:watch & deno task css:watch & deno task serve:dev",
+    "beforeBuildCommand": "deno task bundle && deno task css:build",
+    "runner": "deno"
+  },
+  "app": {
+    "windows": [{
+      "label": "main",
+      "title": "PanLL eNSAID",
+      "width": 1400,
+      "height": 900,
+      "minWidth": 1000,
+      "minHeight": 600,
+      "resizable": true,
+      "fullscreen": false,
+      "decorations": true,
+      "transparent": false,
+      "center": true
+    }],
+    "security": {
+      "csp": null,
+      "capabilities": ["filesystem", "network", "shell", "clipboard"],
+      "capabilityTokens": {
+        "enabled": false,
+        "issuer": "gossamer-runtime",
+        "ttl": 3600
+      }
+    },
+    "ipc": {
+      "protocol": "json",
+      "bridgeInjection": true
+    }
+  },
+  "plugins": {},
+  "bundle": {
+    "active": true,
+    "targets": ["deb", "appimage"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png"
+    ],
+    "copyright": "Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath)",
+    "license": "PMPL-1.0-or-later",
+    "linux": {
+      "desktopEntry": true,
+      "category": "Development"
+    }
+  },
+  "ephapax": {
+    "modules": [],
+    "region": "window",
+    "linearVerification": true,
+    "regionBoundary": "strict"
+  }
+}
+----
+
+== Differences from Tauri
+
+[cols="1,1,1", options="header"]
+|===
+| Feature | Tauri | Gossamer
+
+| Build runner
+| npm/yarn/pnpm/bun/deno
+| Deno (primary), Bun (fallback). npm banned.
+
+| Capability model
+| Static plugin permissions
+| Static + time-bounded capability tokens
+
+| IPC protocol
+| JSON only
+| JSON, MessagePack, or CBOR
+
+| Linear types
+| N/A
+| Ephapax region-linear fusion integration
+
+| Sandbox
+| OS-level (limited config)
+| Configurable OS-level sandbox with path allowlists
+
+| Mobile
+| Tauri Mobile (beta)
+| First-class iOS + Android with per-platform config
+
+| Tray
+| Plugin-based
+| Built-in `app.tray` configuration
+
+| Bundle targets
+| deb, appimage, dmg, msi, nsis
+| deb, rpm, appimage, flatpak, dmg, app, nsis, msi, ios, apk, aab
+
+| Runtime
+| Rust (wry/tao)
+| Zig + libgossamer.so (with Ephapax verification)
+
+| Window labels
+| Optional
+| Required for multi-window IPC targeting
+|===

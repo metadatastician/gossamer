@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<!--
+  SPDX-License-Identifier: PMPL-1.0-or-later
+  Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+
+  Game Server Admin — Gossamer webview frontend.
+
+  Communicates with the Ephapax backend via gossamer.* IPC calls.
+  Auto-renders controls based on scanned config schema:
+    - bool   -> toggle switch
+    - int    -> slider (if range known) or number input
+    - float  -> slider
+    - enum   -> dropdown select
+    - string -> text input
+
+  Changes are applied immediately via set_config IPC and the server
+  container is restarted automatically.
+-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Server Admin</title>
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --border: #30363d;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --accent: #58a6ff;
+            --accent-hover: #79c0ff;
+            --success: #3fb950;
+            --warning: #d29922;
+            --danger: #f85149;
+            --font-mono: 'Fira Code', 'Cascadia Code', monospace;
+            --font-sans: system-ui, -apple-system, sans-serif;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: var(--font-sans);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        /* ── Layout ─────────────────────────────────────────────────── */
+
+        .app-container {
+            display: grid;
+            grid-template-columns: 240px 1fr;
+            grid-template-rows: 56px 1fr;
+            min-height: 100vh;
+        }
+
+        /* ── Header ─────────────────────────────────────────────────── */
+
+        .header {
+            grid-column: 1 / -1;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            gap: 16px;
+        }
+
+        .header h1 {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .header .vps-badge {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 2px 10px;
+            color: var(--text-secondary);
+        }
+
+        .header .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+            margin-left: auto;
+        }
+
+        .header .status-dot.offline { background: var(--danger); }
+        .header .status-dot.loading { background: var(--warning); animation: pulse 1s infinite; }
+
+        @keyframes pulse { 50% { opacity: 0.4; } }
+
+        /* ── Sidebar ────────────────────────────────────────────────── */
+
+        .sidebar {
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            padding: 12px 0;
+            overflow-y: auto;
+        }
+
+        .sidebar-section {
+            padding: 8px 16px 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+        }
+
+        .server-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 16px;
+            cursor: pointer;
+            gap: 10px;
+            border-left: 2px solid transparent;
+            transition: all 0.15s;
+        }
+
+        .server-item:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .server-item.active {
+            background: var(--bg-tertiary);
+            border-left-color: var(--accent);
+        }
+
+        .server-item .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .server-item .dot.running { background: var(--success); }
+        .server-item .dot.stopped { background: var(--danger); }
+        .server-item .dot.unknown { background: var(--text-secondary); }
+
+        .server-item .name {
+            font-size: 14px;
+            flex-grow: 1;
+        }
+
+        .server-item .port {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        /* ── Main content ───────────────────────────────────────────── */
+
+        .main {
+            padding: 24px;
+            overflow-y: auto;
+        }
+
+        .main-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .main-header h2 {
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .action-bar {
+            display: flex;
+            gap: 8px;
+            margin-left: auto;
+        }
+
+        .btn {
+            font-family: var(--font-sans);
+            font-size: 13px;
+            padding: 6px 14px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .btn:hover { border-color: var(--accent); color: var(--accent); }
+        .btn.btn-danger:hover { border-color: var(--danger); color: var(--danger); }
+        .btn.btn-success { border-color: var(--success); color: var(--success); }
+        .btn.btn-success:hover { background: var(--success); color: var(--bg-primary); }
+
+        /* ── Config panels ──────────────────────────────────────────── */
+
+        .config-group {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+
+        .config-group-header {
+            padding: 12px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .config-row {
+            display: grid;
+            grid-template-columns: 200px 1fr 100px;
+            align-items: center;
+            padding: 10px 16px;
+            border-bottom: 1px solid var(--border);
+            gap: 12px;
+        }
+
+        .config-row:last-child { border-bottom: none; }
+
+        .config-label {
+            font-size: 13px;
+            color: var(--text-primary);
+        }
+
+        .config-label .key-name {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--text-secondary);
+            display: block;
+            margin-top: 2px;
+        }
+
+        .config-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .config-status {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-align: right;
+        }
+
+        .config-status.saved { color: var(--success); }
+        .config-status.saving { color: var(--warning); }
+        .config-status.error { color: var(--danger); }
+
+        /* ── Controls ───────────────────────────────────────────────── */
+
+        input[type="text"],
+        input[type="number"],
+        select {
+            font-family: var(--font-mono);
+            font-size: 13px;
+            padding: 6px 10px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            width: 100%;
+            max-width: 300px;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        input[type="range"] {
+            width: 200px;
+            accent-color: var(--accent);
+        }
+
+        .range-value {
+            font-family: var(--font-mono);
+            font-size: 13px;
+            min-width: 40px;
+            color: var(--text-secondary);
+        }
+
+        /* Toggle switch */
+        .toggle {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            flex-shrink: 0;
+        }
+
+        .toggle input { opacity: 0; width: 0; height: 0; }
+
+        .toggle .slider {
+            position: absolute;
+            inset: 0;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .toggle .slider::before {
+            content: '';
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            left: 2px;
+            bottom: 2px;
+            background: var(--text-secondary);
+            border-radius: 50%;
+            transition: all 0.2s;
+        }
+
+        .toggle input:checked + .slider {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .toggle input:checked + .slider::before {
+            transform: translateX(20px);
+            background: white;
+        }
+
+        /* ── Log viewer ─────────────────────────────────────────────── */
+
+        .log-viewer {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 12px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            line-height: 1.6;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            color: var(--text-secondary);
+        }
+
+        /* ── Empty state ────────────────────────────────────────────── */
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 400px;
+            color: var(--text-secondary);
+            gap: 8px;
+        }
+
+        .empty-state .icon { font-size: 48px; opacity: 0.3; }
+        .empty-state .msg { font-size: 14px; }
+
+        /* ── Connect info ───────────────────────────────────────────── */
+
+        .connect-info {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 10px 16px;
+            margin-bottom: 16px;
+            font-family: var(--font-mono);
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .connect-info .label {
+            color: var(--text-secondary);
+            font-family: var(--font-sans);
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <div class="header">
+            <h1>Game Server Admin</h1>
+            <span class="vps-badge">209.42.26.106</span>
+            <div class="status-dot loading" id="globalStatus" title="Checking..."></div>
+        </div>
+
+        <!-- Sidebar: server list -->
+        <div class="sidebar">
+            <div class="sidebar-section">Game Servers</div>
+            <div id="serverList"></div>
+            <div class="sidebar-section" style="margin-top: 16px">Actions</div>
+            <div class="server-item" onclick="actionAll('status')">
+                <span class="name">Check All Status</span>
+            </div>
+            <div class="server-item" onclick="actionAll('restart')">
+                <span class="name">Restart All</span>
+            </div>
+        </div>
+
+        <!-- Main content -->
+        <div class="main" id="mainContent">
+            <div class="empty-state">
+                <div class="icon">&#9881;</div>
+                <div class="msg">Select a server from the sidebar</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ── State ────────────────────────────────────────────────────
+        var servers = [];
+        var activeServer = null;
+        var serverStatus = {};
+
+        // ── IPC helpers ──────────────────────────────────────────────
+        // gossamer.* functions are injected by the Gossamer Bridge.
+        // Each returns a Promise<string>.
+
+        async function ipc(cmd, arg) {
+            try {
+                return await gossamer[cmd](arg || null);
+            } catch (e) {
+                console.error('IPC error:', cmd, e);
+                return null;
+            }
+        }
+
+        // ── Initialization ───────────────────────────────────────────
+
+        async function init() {
+            var result = await ipc('list_servers');
+            if (result) {
+                servers = JSON.parse(result);
+                renderSidebar();
+                checkAllStatus();
+            }
+        }
+
+        async function checkAllStatus() {
+            var dot = document.getElementById('globalStatus');
+            dot.className = 'status-dot loading';
+
+            for (var i = 0; i < servers.length; i++) {
+                var s = servers[i];
+                var result = await ipc('server_action', JSON.stringify({
+                    server: s.id, action: 'status'
+                }));
+                serverStatus[s.id] = result && result.indexOf('Up') !== -1 ? 'running' : 'stopped';
+            }
+
+            dot.className = 'status-dot';
+            renderSidebar();
+        }
+
+        // ── Sidebar rendering ────────────────────────────────────────
+
+        function renderSidebar() {
+            var list = document.getElementById('serverList');
+            list.innerHTML = '';
+            for (var i = 0; i < servers.length; i++) {
+                var s = servers[i];
+                var status = serverStatus[s.id] || 'unknown';
+                var active = activeServer && activeServer.id === s.id;
+
+                var div = document.createElement('div');
+                div.className = 'server-item' + (active ? ' active' : '');
+                div.setAttribute('data-id', s.id);
+                div.onclick = (function(srv) { return function() { selectServer(srv); }; })(s);
+                div.innerHTML =
+                    '<span class="dot ' + status + '"></span>' +
+                    '<span class="name">' + s.name + '</span>' +
+                    '<span class="port">:' + s.port + '</span>';
+                list.appendChild(div);
+            }
+        }
+
+        // ── Server selection ─────────────────────────────────────────
+
+        async function selectServer(server) {
+            activeServer = server;
+            renderSidebar();
+
+            var main = document.getElementById('mainContent');
+            main.innerHTML =
+                '<div class="main-header">' +
+                    '<h2>' + server.name + '</h2>' +
+                    '<div class="action-bar">' +
+                        '<button class="btn" onclick="doAction(\'status\')">Status</button>' +
+                        '<button class="btn btn-success" onclick="doAction(\'start\')">Start</button>' +
+                        '<button class="btn" onclick="doAction(\'restart\')">Restart</button>' +
+                        '<button class="btn btn-danger" onclick="doAction(\'stop\')">Stop</button>' +
+                        '<button class="btn" onclick="showLogs()">Logs</button>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="connect-info">' +
+                    '<span class="label">Connect:</span>' +
+                    '<span>209.42.26.106:' + server.port + '</span>' +
+                '</div>' +
+                '<div id="configArea"><div class="empty-state" style="height:200px">' +
+                    '<div class="msg">Loading config...</div></div></div>' +
+                '<div id="logArea"></div>';
+
+            if (server.format !== 'none' && server.config) {
+                await loadConfig(server);
+            } else {
+                document.getElementById('configArea').innerHTML =
+                    '<div class="empty-state" style="height:200px">' +
+                    '<div class="msg">No config file — settings managed in-app</div></div>';
+            }
+        }
+
+        // ── Config loading and rendering ─────────────────────────────
+
+        async function loadConfig(server) {
+            var result = await ipc('scan_config', server.id);
+            if (!result) {
+                document.getElementById('configArea').innerHTML =
+                    '<div class="empty-state" style="height:200px">' +
+                    '<div class="msg">Could not load config</div></div>';
+                return;
+            }
+
+            var fields = JSON.parse(result);
+            renderConfig(fields, server);
+        }
+
+        function renderConfig(fields, server) {
+            // Group fields by category (or "General" if no group)
+            var groups = {};
+            for (var i = 0; i < fields.length; i++) {
+                var f = fields[i];
+                var group = f.group || 'General';
+                if (!groups[group]) groups[group] = [];
+                groups[group].push(f);
+            }
+
+            var html = '';
+            var groupNames = Object.keys(groups);
+            for (var g = 0; g < groupNames.length; g++) {
+                var groupName = groupNames[g];
+                var groupFields = groups[groupName];
+
+                html += '<div class="config-group">' +
+                    '<div class="config-group-header">' + groupName + '</div>';
+
+                for (var j = 0; j < groupFields.length; j++) {
+                    var field = groupFields[j];
+                    html += renderField(field, server);
+                }
+
+                html += '</div>';
+            }
+
+            document.getElementById('configArea').innerHTML = html;
+        }
+
+        function renderField(field, server) {
+            var label = field.label || field.key;
+            var control = '';
+            var fieldId = 'field_' + field.key;
+
+            switch (field.type) {
+                case 'bool':
+                    var checked = field.value === 'True' || field.value === 'true';
+                    control =
+                        '<label class="toggle">' +
+                            '<input type="checkbox" id="' + fieldId + '" ' +
+                                (checked ? 'checked' : '') +
+                                ' onchange="setField(\'' + server.id + '\',\'' + field.key + '\',this.checked?\'True\':\'False\',this)">' +
+                            '<span class="slider"></span>' +
+                        '</label>';
+                    break;
+
+                case 'int':
+                    if (field.min !== undefined && field.max !== undefined) {
+                        control =
+                            '<input type="range" id="' + fieldId + '" ' +
+                                'min="' + field.min + '" max="' + field.max + '" ' +
+                                'value="' + field.value + '" ' +
+                                'oninput="document.getElementById(\'' + fieldId + '_val\').textContent=this.value" ' +
+                                'onchange="setField(\'' + server.id + '\',\'' + field.key + '\',this.value,this)">' +
+                            '<span class="range-value" id="' + fieldId + '_val">' + field.value + '</span>';
+                    } else {
+                        control =
+                            '<input type="number" id="' + fieldId + '" ' +
+                                'value="' + field.value + '" ' +
+                                'onchange="setField(\'' + server.id + '\',\'' + field.key + '\',this.value,this)">';
+                    }
+                    break;
+
+                case 'float':
+                    control =
+                        '<input type="number" id="' + fieldId + '" step="0.1" ' +
+                            'value="' + field.value + '" ' +
+                            'onchange="setField(\'' + server.id + '\',\'' + field.key + '\',this.value,this)">';
+                    break;
+
+                case 'enum':
+                    control = '<select id="' + fieldId + '" ' +
+                        'onchange="setField(\'' + server.id + '\',\'' + field.key + '\',this.value,this)">';
+                    for (var k = 0; k < field.options.length; k++) {
+                        var opt = field.options[k];
+                        var selected = opt === field.value ? ' selected' : '';
+                        control += '<option value="' + opt + '"' + selected + '>' + opt + '</option>';
+                    }
+                    control += '</select>';
+                    break;
+
+                default:
+                    control =
+                        '<input type="text" id="' + fieldId + '" ' +
+                            'value="' + escapeAttr(field.value) + '" ' +
+                            'onchange="setField(\'' + server.id + '\',\'' + field.key + '\',this.value,this)">';
+            }
+
+            return '<div class="config-row">' +
+                '<div class="config-label">' + label +
+                    '<span class="key-name">' + field.key + '</span>' +
+                '</div>' +
+                '<div class="config-control">' + control + '</div>' +
+                '<div class="config-status" id="status_' + field.key + '"></div>' +
+            '</div>';
+        }
+
+        function escapeAttr(str) {
+            return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        // ── Config mutation ──────────────────────────────────────────
+
+        async function setField(serverId, key, value, el) {
+            var statusEl = document.getElementById('status_' + key);
+            if (statusEl) {
+                statusEl.className = 'config-status saving';
+                statusEl.textContent = 'Saving...';
+            }
+
+            var result = await ipc('set_config', JSON.stringify({
+                server: serverId,
+                key: key,
+                value: value
+            }));
+
+            if (statusEl) {
+                if (result && result.indexOf('"ok"') !== -1) {
+                    statusEl.className = 'config-status saved';
+                    statusEl.textContent = 'Saved + restarted';
+                    setTimeout(function() { statusEl.textContent = ''; }, 3000);
+                } else {
+                    statusEl.className = 'config-status error';
+                    statusEl.textContent = 'Error';
+                }
+            }
+        }
+
+        // ── Server actions ───────────────────────────────────────────
+
+        async function doAction(action) {
+            if (!activeServer) return;
+            var result = await ipc('server_action', JSON.stringify({
+                server: activeServer.id,
+                action: action
+            }));
+
+            if (action === 'status') {
+                var logArea = document.getElementById('logArea');
+                logArea.innerHTML = '<div class="log-viewer">' + escapeAttr(result || 'No response') + '</div>';
+                serverStatus[activeServer.id] = result && result.indexOf('Up') !== -1 ? 'running' : 'stopped';
+                renderSidebar();
+            }
+        }
+
+        async function showLogs() {
+            if (!activeServer) return;
+            var result = await ipc('server_action', JSON.stringify({
+                server: activeServer.id,
+                action: 'logs'
+            }));
+            var logArea = document.getElementById('logArea');
+            logArea.innerHTML =
+                '<div class="config-group-header" style="margin-top:16px">Server Logs</div>' +
+                '<div class="log-viewer">' + escapeAttr(result || 'No logs') + '</div>';
+        }
+
+        async function actionAll(action) {
+            for (var i = 0; i < servers.length; i++) {
+                await ipc('server_action', JSON.stringify({
+                    server: servers[i].id,
+                    action: action
+                }));
+            }
+            await checkAllStatus();
+        }
+
+        // ── Boot ─────────────────────────────────────────────────────
+        init();
+    </script>
+</body>
+</html>

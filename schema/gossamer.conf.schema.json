@@ -1,0 +1,1009 @@
+{
+  "_comment": [
+    "SPDX-License-Identifier: PMPL-1.0-or-later",
+    "Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gossamer.dev/schemas/config/v1",
+  "title": "Gossamer Configuration",
+  "description": "Declarative configuration for Gossamer webview applications. Equivalent to Tauri's tauri.conf.json, extended with Ephapax integration, capability tokens, and mobile platform support.",
+  "type": "object",
+  "required": [
+    "productName",
+    "version",
+    "identifier"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "URL reference to this schema for editor autocompletion.",
+      "const": "https://gossamer.dev/schemas/config/v1"
+    },
+    "productName": {
+      "type": "string",
+      "description": "Human-readable product name displayed in window titles, installers, and OS-level metadata.",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9 _\\-\\.]*$",
+      "examples": [
+        "PanLL",
+        "IDApTIK",
+        "Burble"
+      ]
+    },
+    "version": {
+      "type": "string",
+      "description": "Semantic version of the application (semver).",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9.]+)?(\\+[a-zA-Z0-9.]+)?$",
+      "examples": [
+        "0.1.0",
+        "1.0.0-beta.1"
+      ]
+    },
+    "identifier": {
+      "type": "string",
+      "description": "Reverse-domain identifier unique to this application. Used for bundle IDs, D-Bus names, and mobile package identifiers.",
+      "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)+$",
+      "examples": [
+        "com.hyperpolymath.panll",
+        "com.hyperpolymath.idaptik",
+        "com.hyperpolymath.burble"
+      ]
+    },
+    "build": {
+      "$ref": "#/$defs/BuildConfig"
+    },
+    "app": {
+      "$ref": "#/$defs/AppConfig"
+    },
+    "plugins": {
+      "type": "object",
+      "description": "Plugin-specific configuration. Each key is a plugin name, each value is that plugin's configuration object.",
+      "additionalProperties": {
+        "type": "object"
+      },
+      "default": {}
+    },
+    "bundle": {
+      "$ref": "#/$defs/BundleConfig"
+    },
+    "ephapax": {
+      "$ref": "#/$defs/EphapaxConfig"
+    }
+  },
+  "$defs": {
+    "BuildConfig": {
+      "type": "object",
+      "description": "Build and development server configuration. Designed for Deno-first workflows.",
+      "additionalProperties": false,
+      "properties": {
+        "frontendDist": {
+          "type": "string",
+          "description": "Relative path to the directory containing compiled frontend assets. Resolved relative to gossamer.conf.json.",
+          "default": "../public",
+          "examples": [
+            "../public",
+            "../dist",
+            "../build"
+          ]
+        },
+        "devUrl": {
+          "type": "string",
+          "description": "URL of the development server. The webview loads this URL during `gossamer dev`.",
+          "format": "uri",
+          "default": "http://localhost:8000/",
+          "examples": [
+            "http://localhost:8000/",
+            "http://localhost:3000/",
+            "http://localhost:5173/"
+          ]
+        },
+        "beforeDevCommand": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Shell command executed before starting the dev server. Typically starts bundler watchers. Supports Deno task references.",
+          "default": null,
+          "examples": [
+            "deno task dev",
+            "deno task bundle && deno task bundle:watch & deno task css:watch & deno task serve:dev"
+          ]
+        },
+        "beforeBuildCommand": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Shell command executed before production build. Typically runs full bundle + minification.",
+          "default": null,
+          "examples": [
+            "deno task build",
+            "deno task bundle && deno task css:build"
+          ]
+        },
+        "runner": {
+          "type": "string",
+          "description": "Task runner used for beforeDevCommand and beforeBuildCommand. Must be 'deno' (primary) or 'bun' (fallback). npm is not supported.",
+          "enum": [
+            "deno",
+            "bun"
+          ],
+          "default": "deno"
+        }
+      }
+    },
+    "WindowConfig": {
+      "type": "object",
+      "description": "Configuration for an application window.",
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string",
+          "description": "Unique identifier for this window. Used in IPC to target specific windows.",
+          "default": "main",
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Window title displayed in the title bar and taskbar.",
+          "default": ""
+        },
+        "url": {
+          "type": "string",
+          "description": "URL or path to load in this window. Relative paths resolve against frontendDist. Absolute URLs load directly.",
+          "default": "/"
+        },
+        "width": {
+          "type": "integer",
+          "description": "Initial window width in logical pixels.",
+          "minimum": 100,
+          "default": 800
+        },
+        "height": {
+          "type": "integer",
+          "description": "Initial window height in logical pixels.",
+          "minimum": 100,
+          "default": 600
+        },
+        "minWidth": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Minimum width constraint in logical pixels.",
+          "default": null
+        },
+        "minHeight": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Minimum height constraint in logical pixels.",
+          "default": null
+        },
+        "maxWidth": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Maximum width constraint in logical pixels. Null means unconstrained.",
+          "default": null
+        },
+        "maxHeight": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Maximum height constraint in logical pixels. Null means unconstrained.",
+          "default": null
+        },
+        "resizable": {
+          "type": "boolean",
+          "description": "Whether the user can resize the window.",
+          "default": true
+        },
+        "fullscreen": {
+          "type": "boolean",
+          "description": "Whether the window starts in fullscreen mode.",
+          "default": false
+        },
+        "decorations": {
+          "type": "boolean",
+          "description": "Whether the OS draws window decorations (title bar, borders). Set false for custom chrome.",
+          "default": true
+        },
+        "transparent": {
+          "type": "boolean",
+          "description": "Whether the window background is transparent. Requires decorations=false for visible effect.",
+          "default": false
+        },
+        "center": {
+          "type": "boolean",
+          "description": "Whether to center the window on the primary monitor at launch.",
+          "default": true
+        },
+        "alwaysOnTop": {
+          "type": "boolean",
+          "description": "Whether the window stays above other windows.",
+          "default": false
+        },
+        "visible": {
+          "type": "boolean",
+          "description": "Whether the window is visible at launch. Set false for background windows.",
+          "default": true
+        },
+        "x": {
+          "oneOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Initial X position in logical pixels. Overrides center if set.",
+          "default": null
+        },
+        "y": {
+          "oneOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Initial Y position in logical pixels. Overrides center if set.",
+          "default": null
+        },
+        "skipTaskbar": {
+          "type": "boolean",
+          "description": "Whether to hide from the OS taskbar. Useful for tray-only apps.",
+          "default": false
+        }
+      }
+    },
+    "SecurityConfig": {
+      "type": "object",
+      "description": "Security settings controlling what the webview and IPC bridge can access.",
+      "additionalProperties": false,
+      "properties": {
+        "csp": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Content Security Policy injected into the webview. Null disables CSP (development only; not recommended for production).",
+          "default": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+        },
+        "capabilities": {
+          "type": "array",
+          "description": "List of runtime capabilities the application may use. Each capability gates a set of IPC commands.",
+          "items": {
+            "type": "string",
+            "enum": [
+              "filesystem",
+              "network",
+              "shell",
+              "clipboard",
+              "notification",
+              "tray",
+              "dialog",
+              "globalShortcut",
+              "process",
+              "os",
+              "updater",
+              "barcode",
+              "biometric",
+              "camera",
+              "geolocation",
+              "haptics",
+              "nfc"
+            ]
+          },
+          "uniqueItems": true,
+          "default": []
+        },
+        "capabilityTokens": {
+          "$ref": "#/$defs/CapabilityTokenConfig"
+        },
+        "sandbox": {
+          "$ref": "#/$defs/SandboxConfig"
+        }
+      }
+    },
+    "CapabilityTokenConfig": {
+      "type": "object",
+      "description": "Capability token system for fine-grained, time-bounded permission grants. Gossamer-specific extension beyond static capability lists.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether capability tokens are active. When enabled, IPC commands require a valid token in addition to the static capability list.",
+          "default": false
+        },
+        "issuer": {
+          "type": "string",
+          "description": "Identifier for the token issuer. Used in token validation.",
+          "default": "gossamer-runtime"
+        },
+        "ttl": {
+          "type": "integer",
+          "description": "Default time-to-live for issued tokens in seconds.",
+          "minimum": 1,
+          "maximum": 86400,
+          "default": 3600
+        },
+        "rotateOnFocus": {
+          "type": "boolean",
+          "description": "Whether to rotate tokens when the window regains focus. Mitigates token theft from background tabs.",
+          "default": false
+        }
+      }
+    },
+    "SandboxConfig": {
+      "type": "object",
+      "description": "Process-level sandbox configuration restricting what the webview process can do at the OS level.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether the OS-level sandbox is active.",
+          "default": true
+        },
+        "allowExec": {
+          "type": "boolean",
+          "description": "Whether the sandbox permits spawning child processes.",
+          "default": false
+        },
+        "allowNetwork": {
+          "type": "boolean",
+          "description": "Whether the sandbox permits network access.",
+          "default": true
+        },
+        "allowFilesystem": {
+          "type": "boolean",
+          "description": "Whether the sandbox permits filesystem access (further scoped by capability tokens).",
+          "default": true
+        },
+        "allowedPaths": {
+          "type": "array",
+          "description": "Filesystem paths the sandbox may access. Only effective when allowFilesystem is true. Supports glob patterns.",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      }
+    },
+    "IpcConfig": {
+      "type": "object",
+      "description": "Inter-process communication settings between the webview frontend and the Gossamer (Zig/Rust) backend.",
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "type": "string",
+          "description": "Serialisation protocol for IPC messages.",
+          "enum": [
+            "json",
+            "msgpack",
+            "cbor"
+          ],
+          "default": "json"
+        },
+        "bridgeInjection": {
+          "type": "boolean",
+          "description": "Whether Gossamer injects the IPC bridge script (window.__gossamer) into the webview automatically.",
+          "default": true
+        },
+        "maxMessageSize": {
+          "type": "integer",
+          "description": "Maximum IPC message size in bytes. Messages exceeding this are rejected.",
+          "minimum": 1024,
+          "maximum": 268435456,
+          "default": 16777216
+        },
+        "timeout": {
+          "type": "integer",
+          "description": "Default IPC call timeout in milliseconds. 0 means no timeout.",
+          "minimum": 0,
+          "default": 30000
+        }
+      }
+    },
+    "TrayConfig": {
+      "type": "object",
+      "description": "System tray icon configuration.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether the application shows a system tray icon.",
+          "default": false
+        },
+        "icon": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Path to the tray icon file. Relative to gossamer.conf.json.",
+          "default": null
+        },
+        "tooltip": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Tooltip text shown on hover.",
+          "default": null
+        },
+        "menuOnLeftClick": {
+          "type": "boolean",
+          "description": "Whether a left-click on the tray icon opens the menu (true) or toggles the window (false).",
+          "default": true
+        }
+      }
+    },
+    "AppConfig": {
+      "type": "object",
+      "description": "Application-level configuration: windows, security, IPC, and tray.",
+      "additionalProperties": false,
+      "properties": {
+        "windows": {
+          "type": "array",
+          "description": "List of windows to create at launch. At least one window is required.",
+          "items": {
+            "$ref": "#/$defs/WindowConfig"
+          },
+          "minItems": 1,
+          "default": [
+            {
+              "label": "main",
+              "title": "",
+              "width": 800,
+              "height": 600
+            }
+          ]
+        },
+        "security": {
+          "$ref": "#/$defs/SecurityConfig"
+        },
+        "ipc": {
+          "$ref": "#/$defs/IpcConfig"
+        },
+        "tray": {
+          "$ref": "#/$defs/TrayConfig"
+        }
+      }
+    },
+    "LinuxBundleConfig": {
+      "type": "object",
+      "description": "Linux-specific bundling configuration.",
+      "additionalProperties": false,
+      "properties": {
+        "desktopEntry": {
+          "type": "boolean",
+          "description": "Whether to generate a .desktop file.",
+          "default": true
+        },
+        "category": {
+          "type": "string",
+          "description": "FreeDesktop main category for the .desktop file.",
+          "enum": [
+            "AudioVideo",
+            "Audio",
+            "Video",
+            "Development",
+            "Education",
+            "Game",
+            "Graphics",
+            "Network",
+            "Office",
+            "Science",
+            "Settings",
+            "System",
+            "Utility"
+          ],
+          "default": "Utility"
+        },
+        "section": {
+          "type": "string",
+          "description": "Debian package section.",
+          "default": "utils"
+        },
+        "depends": {
+          "type": "array",
+          "description": "Additional Debian package dependencies.",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "appimage": {
+          "type": "object",
+          "description": "AppImage-specific options.",
+          "additionalProperties": false,
+          "properties": {
+            "bundleMediaFramework": {
+              "type": "boolean",
+              "description": "Whether to bundle GStreamer/media framework inside the AppImage.",
+              "default": false
+            }
+          }
+        },
+        "rpm": {
+          "type": "object",
+          "description": "RPM-specific options.",
+          "additionalProperties": false,
+          "properties": {
+            "requires": {
+              "type": "array",
+              "description": "RPM package dependencies.",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "release": {
+              "type": "string",
+              "description": "RPM release string.",
+              "default": "1"
+            }
+          }
+        },
+        "flatpak": {
+          "type": "object",
+          "description": "Flatpak-specific options.",
+          "additionalProperties": false,
+          "properties": {
+            "runtime": {
+              "type": "string",
+              "description": "Flatpak runtime to use.",
+              "default": "org.freedesktop.Platform"
+            },
+            "runtimeVersion": {
+              "type": "string",
+              "description": "Flatpak runtime version.",
+              "default": "23.08"
+            },
+            "permissions": {
+              "type": "array",
+              "description": "Flatpak sandbox permissions (e.g., '--socket=wayland').",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            }
+          }
+        }
+      }
+    },
+    "MacOSBundleConfig": {
+      "type": "object",
+      "description": "macOS-specific bundling configuration.",
+      "additionalProperties": false,
+      "properties": {
+        "bundleIdentifier": {
+          "type": "string",
+          "description": "macOS bundle identifier. Defaults to top-level identifier if not set."
+        },
+        "minimumSystemVersion": {
+          "type": "string",
+          "description": "Minimum macOS version required.",
+          "default": "11.0"
+        },
+        "frameworks": {
+          "type": "array",
+          "description": "macOS frameworks to link.",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "entitlements": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Path to a custom entitlements.plist file.",
+          "default": null
+        },
+        "signingIdentity": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Code signing identity. Null skips signing.",
+          "default": null
+        },
+        "notarization": {
+          "type": "object",
+          "description": "Apple notarization settings.",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "teamId": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          }
+        },
+        "category": {
+          "type": "string",
+          "description": "macOS app category type (LSApplicationCategoryType).",
+          "examples": [
+            "public.app-category.developer-tools",
+            "public.app-category.utilities",
+            "public.app-category.games"
+          ]
+        }
+      }
+    },
+    "WindowsBundleConfig": {
+      "type": "object",
+      "description": "Windows-specific bundling configuration.",
+      "additionalProperties": false,
+      "properties": {
+        "webview2": {
+          "type": "string",
+          "description": "WebView2 distribution strategy. 'embed' bundles the runtime; 'download' fetches on first run; 'system' requires pre-installed.",
+          "enum": [
+            "embed",
+            "download",
+            "system"
+          ],
+          "default": "embed"
+        },
+        "certificateThumbprint": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Code signing certificate thumbprint.",
+          "default": null
+        },
+        "wix": {
+          "type": "object",
+          "description": "WiX Toolset MSI configuration.",
+          "additionalProperties": false,
+          "properties": {
+            "language": {
+              "type": "string",
+              "description": "WiX installer language.",
+              "default": "en-US"
+            }
+          }
+        },
+        "nsis": {
+          "type": "object",
+          "description": "NSIS installer configuration.",
+          "additionalProperties": false,
+          "properties": {
+            "displayLanguageSelector": {
+              "type": "boolean",
+              "description": "Whether the NSIS installer shows a language selection dialog.",
+              "default": false
+            },
+            "installerIcon": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Path to the NSIS installer icon.",
+              "default": null
+            }
+          }
+        }
+      }
+    },
+    "IOSConfig": {
+      "type": "object",
+      "description": "iOS-specific mobile configuration.",
+      "additionalProperties": false,
+      "properties": {
+        "minimumVersion": {
+          "type": "string",
+          "description": "Minimum iOS version required.",
+          "default": "14.0"
+        },
+        "deviceFamily": {
+          "type": "array",
+          "description": "Supported device families.",
+          "items": {
+            "type": "string",
+            "enum": [
+              "iphone",
+              "ipad"
+            ]
+          },
+          "uniqueItems": true,
+          "default": [
+            "iphone",
+            "ipad"
+          ]
+        },
+        "capabilities": {
+          "type": "array",
+          "description": "iOS capabilities (entitlements) required by the app.",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "frameworks": {
+          "type": "array",
+          "description": "Additional iOS frameworks to link.",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "entitlements": {
+          "type": "object",
+          "description": "iOS entitlements key-value pairs.",
+          "additionalProperties": true,
+          "default": {}
+        }
+      }
+    },
+    "AndroidConfig": {
+      "type": "object",
+      "description": "Android-specific mobile configuration.",
+      "additionalProperties": false,
+      "properties": {
+        "minimumSdk": {
+          "type": "integer",
+          "description": "Minimum Android SDK version (API level).",
+          "minimum": 21,
+          "default": 24
+        },
+        "targetSdk": {
+          "type": "integer",
+          "description": "Target Android SDK version.",
+          "minimum": 24,
+          "default": 34
+        },
+        "permissions": {
+          "type": "array",
+          "description": "Android manifest permissions (e.g., 'android.permission.INTERNET').",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "features": {
+          "type": "array",
+          "description": "Android hardware features (e.g., 'android.hardware.camera').",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      }
+    },
+    "MobileConfig": {
+      "type": "object",
+      "description": "Mobile platform configuration for iOS and Android builds.",
+      "additionalProperties": false,
+      "properties": {
+        "ios": {
+          "$ref": "#/$defs/IOSConfig"
+        },
+        "android": {
+          "$ref": "#/$defs/AndroidConfig"
+        }
+      }
+    },
+    "BundleConfig": {
+      "type": "object",
+      "description": "Bundling and packaging configuration for all target platforms.",
+      "additionalProperties": false,
+      "properties": {
+        "active": {
+          "type": "boolean",
+          "description": "Whether bundling is enabled. Set false during development.",
+          "default": true
+        },
+        "targets": {
+          "type": "array",
+          "description": "List of bundle formats to produce.",
+          "items": {
+            "type": "string",
+            "enum": [
+              "deb",
+              "rpm",
+              "appimage",
+              "flatpak",
+              "dmg",
+              "app",
+              "nsis",
+              "msi",
+              "ios",
+              "apk",
+              "aab"
+            ]
+          },
+          "uniqueItems": true,
+          "default": [
+            "deb"
+          ]
+        },
+        "icon": {
+          "type": "array",
+          "description": "Paths to icon files, relative to gossamer.conf.json. Include multiple sizes and formats for cross-platform support.",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "resources": {
+          "type": "array",
+          "description": "Additional files or directories to bundle alongside the app.",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "copyright": {
+          "type": "string",
+          "description": "Copyright notice included in installers and metadata."
+        },
+        "license": {
+          "type": "string",
+          "description": "SPDX license identifier for the bundled application.",
+          "examples": [
+            "PMPL-1.0-or-later",
+            "MPL-2.0",
+            "MIT"
+          ]
+        },
+        "shortDescription": {
+          "type": "string",
+          "description": "One-line description for package managers and stores.",
+          "maxLength": 80,
+          "default": ""
+        },
+        "longDescription": {
+          "type": "string",
+          "description": "Multi-line description for package managers and stores.",
+          "default": ""
+        },
+        "linux": {
+          "$ref": "#/$defs/LinuxBundleConfig"
+        },
+        "macos": {
+          "$ref": "#/$defs/MacOSBundleConfig"
+        },
+        "windows": {
+          "$ref": "#/$defs/WindowsBundleConfig"
+        },
+        "mobile": {
+          "$ref": "#/$defs/MobileConfig"
+        }
+      }
+    },
+    "EphapaxConfig": {
+      "type": "object",
+      "description": "Ephapax linear-type module integration. Gossamer-specific extension enabling formally verified resource management via Ephapax's region-linear fusion type system.",
+      "additionalProperties": false,
+      "properties": {
+        "modules": {
+          "type": "array",
+          "description": "List of Ephapax .eph module paths to load. Paths are relative to gossamer.conf.json.",
+          "items": {
+            "type": "string",
+            "pattern": "\\.eph$"
+          },
+          "default": []
+        },
+        "region": {
+          "type": "string",
+          "description": "Default Ephapax region for resource allocation. Controls which region boundary governs linear resource lifetimes.",
+          "enum": [
+            "app",
+            "window",
+            "request",
+            "custom"
+          ],
+          "default": "app"
+        },
+        "linearVerification": {
+          "type": "boolean",
+          "description": "Whether to enforce linear type verification at runtime. When true, resource leaks cause runtime errors instead of warnings.",
+          "default": true
+        },
+        "regionBoundary": {
+          "type": "string",
+          "description": "How strictly region boundaries are enforced. 'strict' prevents any cross-region references; 'permissive' allows controlled borrowing.",
+          "enum": [
+            "strict",
+            "permissive"
+          ],
+          "default": "strict"
+        },
+        "preload": {
+          "type": "array",
+          "description": "Ephapax modules to compile and verify at build time rather than at first use.",
+          "items": {
+            "type": "string",
+            "pattern": "\\.eph$"
+          },
+          "default": []
+        },
+        "ffiBindings": {
+          "type": "string",
+          "description": "Path to the Zig FFI bindings directory for Ephapax modules.",
+          "default": "ffi/zig/src/"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,76 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+//
+// Gossamer.Tray — System tray lifecycle management.
+//
+// The tray handle is a LINEAR resource:
+// - create returns a linear handle (must be consumed)
+// - addItem borrows the handle (returns it back)
+// - addSeparator borrows the handle (returns it back)
+// - setIcon borrows the handle (returns it back)
+// - setTooltip borrows the handle (returns it back)
+// - destroy CONSUMES the handle (tray is removed)
+//
+// The tray persists in the system notification area (KDE Plasma tray)
+// for the lifetime of the application. It provides:
+// - Right-click context menu with custom items
+// - Left-click to toggle main window
+// - Tooltip with status information
+// - Icon changes to reflect system state
+// - Desktop notifications via notify-send
+
+// Create a system tray icon. Returns a LINEAR handle.
+// The tray appears in the KDE Plasma system tray area.
+// FFI: gossamer_tray_create(tooltip) -> handle
+fn create(tooltip: String): I64 =
+    __ffi("gossamer_tray_create", tooltip)
+
+// Destroy the tray icon. CONSUMES the handle.
+// FFI: gossamer_tray_destroy(handle) -> void
+fn destroy(handle: I64): () =
+    __ffi("gossamer_tray_destroy", handle)
+
+// Add an item to the tray right-click context menu. BORROWS the handle.
+// item_id is passed to the callback when the item is clicked.
+// FFI: gossamer_tray_add_item(handle, label, item_id) -> result
+fn addItem(handle: I64, label: String, itemId: I32): I32 =
+    __ffi("gossamer_tray_add_item", handle, label, itemId)
+
+// Add a separator line to the context menu. BORROWS the handle.
+// FFI: gossamer_tray_add_separator(handle) -> result
+fn addSeparator(handle: I64): I32 =
+    __ffi("gossamer_tray_add_separator", handle)
+
+// Set the callback invoked when a menu item is clicked.
+// The callback receives the item_id of the clicked item.
+// FFI: gossamer_tray_set_callback(handle, callback) -> result
+fn setCallback(handle: I64, callback: I64): I32 =
+    __ffi("gossamer_tray_set_callback", handle, callback)
+
+// Set the tray icon by theme icon name. BORROWS the handle.
+// Standard names: "network-server", "network-offline",
+// "dialog-information", "dialog-warning", "dialog-error"
+// FFI: gossamer_tray_set_icon(handle, icon_name) -> result
+fn setIcon(handle: I64, iconName: String): I32 =
+    __ffi("gossamer_tray_set_icon", handle, iconName)
+
+// Set the tray icon from a file path. BORROWS the handle.
+// FFI: gossamer_tray_set_icon_from_file(handle, path) -> result
+fn setIconFromFile(handle: I64, path: String): I32 =
+    __ffi("gossamer_tray_set_icon_from_file", handle, path)
+
+// Update the tooltip text. BORROWS the handle.
+// FFI: gossamer_tray_set_tooltip(handle, tooltip) -> result
+fn setTooltip(handle: I64, tooltip: String): I32 =
+    __ffi("gossamer_tray_set_tooltip", handle, tooltip)
+
+// Show or hide the tray icon. BORROWS the handle.
+// FFI: gossamer_tray_set_visible(handle, visible) -> result
+fn setVisible(handle: I64, visible: I32): I32 =
+    __ffi("gossamer_tray_set_visible", handle, visible)
+
+// Show a desktop notification (does not require a tray handle).
+// Routes through notify-send → xdg-desktop-portal → KDE notification daemon.
+// FFI: gossamer_notify(title, body) -> result
+fn notify(title: String, body: String): I32 =
+    __ffi("gossamer_notify", title, body)

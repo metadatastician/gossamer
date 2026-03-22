@@ -1,0 +1,254 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+//
+// Game Server Admin — Linear Types
+//
+// Linear types model resources that MUST be consumed exactly once.
+// The Ephapax type checker (Mode::Linear) enforces:
+//   - Every linear binding must be used exactly once
+//   - Unconsumed linear variables at scope/region exit → compile error
+//   - Double-use of a linear variable → compile error
+//   - Linear variables in a region must be consumed before region exit
+//
+// These types represent:
+//   - SSH sessions (must be closed)
+//   - Config transactions (must be committed or rolled back)
+//   - Server lifecycle handles (must be released)
+//   - Capability tokens (must be revoked)
+//
+// Linear types enforce SAFETY guarantees:
+//   ✓ SSH sessions always closed (no leaked connections)
+//   ✓ Config changes always committed or aborted (no half-written state)
+//   ✓ Capability tokens always revoked (no permission leaks)
+//   ✓ Server handles always released (no orphaned state)
+//
+// Linear types PREVENT:
+//   ✗ Dropping without cleanup (compile error: "linear variable not consumed")
+//   ✗ Using after consumption (compile error: "linear variable already used")
+//   ✗ Escaping a region boundary (compile error: "value escapes region")
+
+// ── SSH Session ──────────────────────────────────────────────────────────────
+
+// SSHSession: a linear handle to an SSH connection to the VPS.
+//
+// Lifecycle:
+//   let! session = SSHSession.open@region("root@209.42.26.106")  → LINEAR handle
+//   let! (session, result) = SSHSession.exec(session, "podman ps")  → BORROW + result
+//   SSHSession.close(session)  → CONSUME
+//
+// The linear type ensures:
+//   - Every SSH connection opened is eventually closed
+//   - No SSH connection is used after being closed
+//   - SSH connections don't leak out of their region
+//
+// Borrowing pattern:
+//   exec() takes the session linearly but returns it alongside the result.
+//   This models a "borrow" — the session is temporarily consumed and
+//   immediately returned. The caller must rebind it:
+//     let! (session, output) = SSHSession.exec(session, cmd) in ...
+//
+// This is the same pattern used by Shell.loadHTML in Gossamer core.
+
+// Open an SSH session to the VPS. Returns a LINEAR handle.
+// The handle is allocated in the given region and must be consumed
+// (by close) before the region exits.
+fn sshOpen(host: String): I64 =
+    // Returns a session handle (opaque I64 pointer).
+    // The Ephapax type checker tracks this as linear due to let! binding.
+    __ffi("ssh_session_open", host)
+
+// Execute a command on an open SSH session. BORROWS the session.
+// Returns: (session_handle, result_string)
+// The session handle is returned so the caller can continue using it.
+// The result string is affine (can be read or dropped).
+fn sshExec(sessionHandle: I64, command: String): I64 =
+    // Internally: sends command over the persistent SSH connection.
+    // Returns a pair: (same session handle, result pointer).
+    __ffi("ssh_session_exec", sessionHandle, command)
+
+// Close an SSH session. CONSUMES the handle.
+// After this call, the session handle is destroyed — any attempt to
+// use it is a compile error ("linear variable already consumed").
+fn sshClose(sessionHandle: I64): () =
+    __ffi("ssh_session_close", sessionHandle)
+
+// ── Config Transaction ───────────────────────────────────────────────────────
+
+// ConfigTransaction: a linear handle to a pending config change.
+//
+// Lifecycle:
+//   let! tx = ConfigTransaction.begin@region(serverId)      → LINEAR handle
+//   let! tx = ConfigTransaction.set(tx, "BotCount", "10")   → BORROW + mutate
+//   let! tx = ConfigTransaction.set(tx, "Difficulty", "30") → BORROW + mutate
+//   ConfigTransaction.commit(tx)                             → CONSUME (applies all changes + restarts)
+//
+// Alternative:
+//   ConfigTransaction.rollback(tx)  → CONSUME (discards all changes)
+//
+// The linear type ensures:
+//   - Every transaction is either committed or rolled back (never abandoned)
+//   - Changes are applied atomically (all-or-nothing via single sed + restart)
+//   - No transaction is committed twice (double-spend prevention)
+//
+// Why transactions for config?
+//   Without transactions, each set_config call restarts the container.
+//   With transactions, you batch N changes and restart once.
+//   This is important for game servers where restart = player disconnect.
+
+// Begin a config transaction for a server. Returns a LINEAR handle.
+fn txBegin(serverId: String): I64 =
+    // Allocates a transaction buffer and reads current config.
+    // The buffer accumulates set() calls until commit/rollback.
+    __ffi("config_tx_begin", serverId)
+
+// Add a setting change to the transaction. BORROWS the handle.
+// Returns the handle back (borrow pattern) so more changes can be added.
+fn txSet(txHandle: I64, key: String, value: String): I64 =
+    // Appends (key, value) to the transaction's change buffer.
+    // Does NOT write to the config file yet.
+    __ffi("config_tx_set", txHandle, key, value)
+
+// Commit all changes in the transaction. CONSUMES the handle.
+// Writes all accumulated changes to the config file in one pass,
+// then restarts the server container.
+fn txCommit(txHandle: I64): I64 =
+    // 1. Builds a single sed command with all changes
+    // 2. Executes via SSH
+    // 3. Restarts the container
+    // 4. Returns result pointer (affine)
+    // 5. Transaction handle is consumed — cannot be used again
+    __ffi("config_tx_commit", txHandle)
+
+// Rollback the transaction without applying changes. CONSUMES the handle.
+// Discards all accumulated changes. Server is not restarted.
+fn txRollback(txHandle: I64): () =
+    // Frees the transaction buffer without writing anything.
+    // Transaction handle is consumed.
+    __ffi("config_tx_rollback", txHandle)
+
+// ── Server Lifecycle Handle ──────────────────────────────────────────────────
+
+// ServerHandle: a linear handle to a managed server instance.
+//
+// Lifecycle:
+//   let! server = ServerHandle.acquire@region("barotrauma")  → LINEAR handle
+//   let! (server, status) = ServerHandle.status(server)      → BORROW
+//   let! server = ServerHandle.restart(server)               → BORROW (mutating)
+//   ServerHandle.release(server)                              → CONSUME
+//
+// The linear type ensures:
+//   - Server state is exclusively owned (no concurrent modifications)
+//   - Handle is always released (no orphaned locks)
+//   - Actions happen in sequence (no race conditions from aliased handles)
+//
+// In a multi-user scenario (future), this could be extended with
+// a distributed lock protocol. The linear type guarantees that the
+// Ephapax code respects the lock semantics even locally.
+
+// Acquire exclusive access to a server. Returns a LINEAR handle.
+fn serverAcquire(serverId: String): I64 =
+    __ffi("server_handle_acquire", serverId)
+
+// Check server status. BORROWS the handle.
+fn serverStatus(handle: I64): I64 =
+    __ffi("server_handle_status", handle)
+
+// Start the server. BORROWS the handle (mutating borrow).
+fn serverStart(handle: I64): I64 =
+    __ffi("server_handle_start", handle)
+
+// Stop the server. BORROWS the handle (mutating borrow).
+fn serverStop(handle: I64): I64 =
+    __ffi("server_handle_stop", handle)
+
+// Restart the server. BORROWS the handle (mutating borrow).
+fn serverRestart(handle: I64): I64 =
+    __ffi("server_handle_restart", handle)
+
+// Get server logs. BORROWS the handle.
+fn serverLogs(handle: I64, lines: I32): I64 =
+    __ffi("server_handle_logs", handle, lines)
+
+// Release exclusive access. CONSUMES the handle.
+fn serverRelease(handle: I64): () =
+    __ffi("server_handle_release", handle)
+
+// ── Capability Tokens ────────────────────────────────────────────────────────
+
+// NetworkCap and ShellCap: linear capability tokens.
+//
+// These are wrappers around Gossamer.Capabilities with domain-specific
+// semantics for the game server admin panel.
+//
+// Lifecycle (from main.eph):
+//   let! netCap = Capabilities.grant@app(RESOURCE_NETWORK)  → LINEAR
+//   ...use netCap via Capabilities.check(netCap)...          → BORROW
+//   Capabilities.revoke(netCap)                               → CONSUME
+//
+// The linear type ensures:
+//   - Every granted capability is eventually revoked
+//   - No capability is used after revocation
+//   - Capabilities don't escape their application region
+//
+// Note: These reuse the Gossamer.Capabilities FFI directly.
+// The types here document the INTENT — Ephapax's type checker
+// enforces the linearity; the Zig capability registry is a runtime
+// safety net on top of the compile-time guarantee.
+
+// Grant a network capability for SSH operations.
+// Returns a LINEAR token that must be revoked.
+fn grantNetworkCap(): I64 =
+    // Capabilities.RESOURCE_NETWORK = 1
+    __ffi("gossamer_cap_grant", 1)
+
+// Grant a shell capability for command execution.
+// Returns a LINEAR token that must be revoked.
+fn grantShellCap(): I64 =
+    // Capabilities.RESOURCE_SHELL = 2
+    __ffi("gossamer_cap_grant", 2)
+
+// Check a capability before a gated operation. BORROWS the token.
+// Returns 0 (ok) or 10 (denied).
+fn checkCap(token: I64): I32 =
+    __ffi("gossamer_cap_check", token)
+
+// Revoke a capability token. CONSUMES it.
+fn revokeCap(token: I64): () =
+    __ffi("gossamer_cap_revoke", token)
+
+// ── Combined Usage Example ───────────────────────────────────────────────────
+//
+// fn updateBarotraumaSettings(): I32 =
+//   region admin {
+//     // Grant capabilities (LINEAR — must revoke)
+//     let! netCap = grantNetworkCap() in
+//     let! shellCap = grantShellCap() in
+//
+//     // Check permissions
+//     let _ = checkCap(netCap) in
+//     let _ = checkCap(shellCap) in
+//
+//     // Open SSH session (LINEAR — must close)
+//     let! session = sshOpen("root@209.42.26.106") in
+//
+//     // Begin config transaction (LINEAR — must commit or rollback)
+//     let! tx = txBegin("barotrauma") in
+//
+//     // Batch multiple changes (BORROW pattern — tx returned each time)
+//     let! tx = txSet(tx, "BotCount", "10") in
+//     let! tx = txSet(tx, "SelectedLevelDifficulty", "30") in
+//     let! tx = txSet(tx, "GameModeIdentifier", "multiplayercampaign") in
+//
+//     // Commit all changes at once (CONSUMES tx, restarts server once)
+//     let! result = txCommit(tx) in
+//
+//     // Close SSH session (CONSUMES session)
+//     sshClose(session)
+//
+//     // Revoke capabilities (CONSUMES tokens)
+//     revokeCap(netCap)
+//     revokeCap(shellCap)
+//
+//     // All linear resources consumed — region can exit cleanly
+//     0
+//   }

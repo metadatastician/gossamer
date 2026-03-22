@@ -1,0 +1,98 @@
+{
+  "$schema": "https://panll.dev/schemas/panel/v1.json",
+  "spdx": "PMPL-1.0-or-later",
+  "id": "game-server-admin",
+  "title": "Game Server Admin",
+  "description": "Remote game server settings panel — auto-detects config format (XML/INI/JSON) and renders appropriate controls. Changes are applied live via SSH and containers are restarted automatically.",
+  "version": "0.1.0",
+  "author": "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>",
+  "type": "interactive",
+  "runtime": "gossamer",
+  "entry": "../../main.eph",
+  "assets": {
+    "html": "../../admin.html",
+    "bridge": "../../bridge.eph"
+  },
+  "dimensions": {
+    "default_width": 1100,
+    "default_height": 750,
+    "min_width": 800,
+    "min_height": 500,
+    "resizable": true
+  },
+  "data_sources": [
+    {
+      "id": "server-list",
+      "uri": "gossamer://game-server-admin/servers",
+      "refresh_interval_ms": 0,
+      "description": "Registry of all managed game servers"
+    },
+    {
+      "id": "server-config",
+      "uri": "gossamer://game-server-admin/config/{server_id}",
+      "refresh_interval_ms": 0,
+      "description": "Auto-scanned config schema for a specific server"
+    },
+    {
+      "id": "server-status",
+      "uri": "gossamer://game-server-admin/status",
+      "refresh_interval_ms": 15000,
+      "description": "Container status for all servers (polled)"
+    }
+  ],
+  "widgets": [
+    {
+      "type": "sidebar-list",
+      "data_source": "server-list",
+      "display_field": "name",
+      "status_field": "status",
+      "on_select": "load_config"
+    },
+    {
+      "type": "dynamic-form",
+      "data_source": "server-config",
+      "field_types": {
+        "bool": "toggle",
+        "int": "slider-or-number",
+        "float": "number",
+        "enum": "dropdown",
+        "string": "text-input"
+      },
+      "on_change": "gossamer://game-server-admin/set",
+      "group_by": "group"
+    },
+    {
+      "type": "action-bar",
+      "actions": [
+        { "id": "start", "label": "Start", "style": "success", "confirm": false },
+        { "id": "stop", "label": "Stop", "style": "danger", "confirm": true },
+        { "id": "restart", "label": "Restart", "style": "default", "confirm": false },
+        { "id": "status", "label": "Status", "style": "default", "confirm": false },
+        { "id": "logs", "label": "Logs", "style": "default", "confirm": false }
+      ],
+      "target": "gossamer://game-server-admin/action"
+    },
+    {
+      "type": "log-viewer",
+      "action": "logs",
+      "max_lines": 100,
+      "auto_scroll": true,
+      "font": "monospace"
+    }
+  ],
+  "capabilities_required": [
+    "network",
+    "shell"
+  ],
+  "tags": [
+    "game-server",
+    "admin",
+    "remote",
+    "ssh",
+    "config-scanner",
+    "barotrauma",
+    "dst",
+    "idaptik",
+    "burble"
+  ]
+}

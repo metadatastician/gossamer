@@ -1,0 +1,146 @@
+{
+  "$schema": "https://gossamer.dev/schemas/config/v1",
+  "productName": "MyApp",
+  "version": "0.1.0",
+  "identifier": "com.example.myapp",
+  "build": {
+    "frontendDist": "../public",
+    "devUrl": "http://localhost:8000/",
+    "beforeDevCommand": "deno task dev",
+    "beforeBuildCommand": "deno task build"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "My Gossamer App",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 1000,
+        "minHeight": 600,
+        "maxWidth": null,
+        "maxHeight": null,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true,
+        "transparent": false,
+        "center": true,
+        "alwaysOnTop": false,
+        "visible": true,
+        "url": "/"
+      }
+    ],
+    "security": {
+      "csp": null,
+      "capabilities": [
+        "filesystem",
+        "network",
+        "shell",
+        "clipboard",
+        "notification",
+        "tray"
+      ],
+      "capabilityTokens": {
+        "enabled": false,
+        "issuer": "gossamer-runtime",
+        "ttl": 3600
+      },
+      "sandbox": {
+        "enabled": true,
+        "allowExec": false,
+        "allowNetwork": true,
+        "allowFilesystem": true
+      }
+    },
+    "ipc": {
+      "protocol": "json",
+      "bridgeInjection": true,
+      "maxMessageSize": 16777216,
+      "timeout": 30000
+    },
+    "tray": {
+      "enabled": false,
+      "icon": null,
+      "tooltip": null,
+      "menuOnLeftClick": true
+    }
+  },
+  "plugins": {},
+  "bundle": {
+    "active": true,
+    "targets": [
+      "deb",
+      "appimage",
+      "dmg",
+      "nsis"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": [],
+    "copyright": "Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath)",
+    "license": "PMPL-1.0-or-later",
+    "shortDescription": "",
+    "longDescription": "",
+    "linux": {
+      "desktopEntry": true,
+      "category": "Utility",
+      "section": "utils",
+      "depends": [],
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    },
+    "macos": {
+      "bundleIdentifier": "com.example.myapp",
+      "minimumSystemVersion": "11.0",
+      "frameworks": [],
+      "entitlements": null,
+      "signingIdentity": null,
+      "notarization": {
+        "enabled": false,
+        "teamId": null
+      }
+    },
+    "windows": {
+      "webview2": "embed",
+      "certificateThumbprint": null,
+      "wix": {
+        "language": "en-US"
+      },
+      "nsis": {
+        "displayLanguageSelector": false,
+        "installerIcon": null
+      }
+    },
+    "mobile": {
+      "ios": {
+        "minimumVersion": "14.0",
+        "deviceFamily": [
+          "iphone",
+          "ipad"
+        ],
+        "capabilities": [],
+        "frameworks": [],
+        "entitlements": {}
+      },
+      "android": {
+        "minimumSdk": 24,
+        "targetSdk": 34,
+        "permissions": [],
+        "features": []
+      }
+    }
+  },
+  "ephapax": {
+    "modules": [],
+    "region": "app",
+    "linearVerification": true,
+    "regionBoundary": "strict",
+    "preload": []
+  }
+}

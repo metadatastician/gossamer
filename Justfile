@@ -41,8 +41,16 @@ check-affine:
 check-example name:
     {{ephapax}} check examples/{{name}}/main.eph --mode linear -v
 
-# Build everything (FFI + check)
-build: build-ffi check
+# Build the Gossamer CLI (links libgossamer)
+build-cli: build-ffi
+    cd cli && zig build
+
+# Build the Gossamer CLI in release mode
+build-cli-release: build-ffi-release
+    cd cli && zig build -Doptimize=ReleaseSafe
+
+# Build everything (FFI + CLI + check)
+build: build-ffi build-cli check
 
 # ═══════════════════════════════════════════════════════════════
 # Run
@@ -107,9 +115,19 @@ clean:
 # Development
 # ═══════════════════════════════════════════════════════════════
 
+# Install the gossamer CLI to ~/.local/bin
+install: build-cli
+    mkdir -p ~/.local/bin
+    cp cli/zig-out/bin/gossamer ~/.local/bin/gossamer
+    @echo "  ✓ Installed gossamer to ~/.local/bin/gossamer"
+
 # Show exported FFI symbols
 symbols:
     nm -D src/interface/ffi/zig-out/lib/libgossamer.so | grep "T gossamer_"
+
+# Count exported symbols
+symbol-count:
+    @nm -D src/interface/ffi/zig-out/lib/libgossamer.so | grep -c "T gossamer_"
 
 # Check system dependencies
 deps:

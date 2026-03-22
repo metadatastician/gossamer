@@ -20,6 +20,30 @@ comptime {
     _ = @import("ssg.zig");
 }
 
+// Game Server Admin Bridge FFI functions (bridge_*, ssh_exec, json_field).
+// Imported here to ensure all exports are included in the shared library.
+comptime {
+    _ = @import("bridge_game_server.zig");
+}
+
+// System tray + notification FFI functions (gossamer_tray_*, gossamer_notify).
+// Replaces the Phase 2 stubs below with real GTK StatusIcon implementation.
+comptime {
+    _ = @import("tray.zig");
+}
+
+// File dialog FFI functions (gossamer_dialog_open, gossamer_dialog_save, etc.).
+// GTK FileChooserDialog implementation for open/save/directory/multi-select.
+comptime {
+    _ = @import("dialog.zig");
+}
+
+// Filesystem FFI functions (gossamer_fs_*).
+// Capability-gated file I/O operations for the IPC bridge and Ephapax.
+comptime {
+    _ = @import("filesystem.zig");
+}
+
 // Version information
 const VERSION = "0.1.0";
 const BUILD_INFO = "Gossamer " ++ VERSION ++ " built with Zig " ++ @import("builtin").zig_version_string;
@@ -43,12 +67,14 @@ const platform = switch (builtin.os.tag) {
 threadlocal var last_error: ?[]const u8 = null;
 
 /// Set the last error message.
-fn setError(msg: []const u8) void {
+/// Public so that sub-modules (dialog.zig, tray.zig, etc.) can report errors
+/// through the same thread-local channel.
+pub fn setError(msg: []const u8) void {
     last_error = msg;
 }
 
 /// Clear the last error.
-fn clearError() void {
+pub fn clearError() void {
     last_error = null;
 }
 
@@ -478,7 +504,7 @@ var revoked_count: usize = 0;
 /// Returns a unique token ID, or 0 on failure.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__capGrant
-export fn gossamer_cap_grant(resource_kind: u32) u64 {
+pub export fn gossamer_cap_grant(resource_kind: u32) u64 {
     // Validate resource kind (0..5 matches Types.idr ResourceKind constructors)
     if (resource_kind > 5) {
         setError("Invalid resource kind (must be 0-5)");
@@ -522,7 +548,7 @@ export fn gossamer_cap_grant(resource_kind: u32) u64 {
 /// Verifies the token is active and not revoked.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__capCheck
-export fn gossamer_cap_check(token: u64) Result {
+pub export fn gossamer_cap_check(token: u64) Result {
     if (token == 0) {
         setError("Invalid capability token (null)");
         return .capability_denied;
@@ -553,7 +579,7 @@ export fn gossamer_cap_check(token: u64) Result {
 ///
 /// This allows callers to verify a token grants the expected permission
 /// without exposing the full registry.
-export fn gossamer_cap_resource_kind(token: u64) u32 {
+pub export fn gossamer_cap_resource_kind(token: u64) u32 {
     if (token == 0) return 0xFFFFFFFF;
 
     for (cap_registry[0..]) |entry| {
@@ -595,39 +621,12 @@ export fn gossamer_cap_revoke(token: u64) void {
 }
 
 //==============================================================================
-// System Integration (Stubs — Phase 2)
+// System Integration
 //==============================================================================
 
-/// Create a system tray icon.
-export fn gossamer_tray_create(tooltip: [*:0]const u8) u64 {
-    _ = tooltip;
-    setError("System tray not yet implemented");
-    return 0;
-}
-
-/// Show a desktop notification.
-export fn gossamer_notify(title: [*:0]const u8, body: [*:0]const u8) Result {
-    _ = title;
-    _ = body;
-    setError("Notifications not yet implemented");
-    return .@"error";
-}
-
-/// Show a file open dialog.
-export fn gossamer_dialog_open(title: [*:0]const u8, filters: [*:0]const u8) u64 {
-    _ = title;
-    _ = filters;
-    setError("File dialogs not yet implemented");
-    return 0;
-}
-
-/// Show a file save dialog.
-export fn gossamer_dialog_save(title: [*:0]const u8, filters: [*:0]const u8) u64 {
-    _ = title;
-    _ = filters;
-    setError("File dialogs not yet implemented");
-    return 0;
-}
+// Tray and notifications: implemented in tray.zig (gossamer_tray_*, gossamer_notify).
+// File dialogs: implemented in dialog.zig (gossamer_dialog_open, gossamer_dialog_save,
+//   gossamer_dialog_open_directory, gossamer_dialog_open_multiple, gossamer_dialog_free_path).
 
 //==============================================================================
 // Error Handling

@@ -1,0 +1,23 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+//
+// Gossamer.ShellExec — Shell command execution guarded by capability tokens.
+//
+// All shell operations require a valid RESOURCE_SHELL capability token.
+// The token is borrowed (not consumed) by execute operations.
+//
+// This module is named ShellExec to avoid collision with Shell (webview lifecycle).
+
+// Execute a shell command and return stdout as a string pointer.
+// Requires a valid shell capability token.
+// Returns 0 on error (check Shell.lastError for details).
+// FFI: gossamer_shell_execute(program, args_json, cap_token) -> result_json_ptr
+fn execute(program: String, argsJson: String, capToken: I64): I64 =
+  __ffi("gossamer_shell_execute", program, argsJson, capToken)
+
+// Open a URL or file with the system's default handler.
+// Requires a valid shell capability token.
+// Uses xdg-open (Linux), open (macOS), or start (Windows).
+// FFI: gossamer_shell_open(url, cap_token) -> result
+fn openUrl(url: String, capToken: I64): I32 =
+  __ffi("gossamer_shell_open", url, capToken)

@@ -1,0 +1,60 @@
+{
+  "$schema": "panll-harness/v1",
+  "service_id": "game-server-admin",
+  "default_endpoint": "gossamer://game-server-admin/bridge",
+  "health_check": {
+    "path": "/health",
+    "interval_ms": 30000,
+    "timeout_ms": 5000,
+    "unhealthy_threshold": 3
+  },
+  "data_sources": {
+    "gossamer://game-server-admin/servers": {
+      "path": "/ipc/list_servers",
+      "method": "GET",
+      "returns": "ServerList"
+    },
+    "gossamer://game-server-admin/config/{server_id}": {
+      "path": "/ipc/scan_config",
+      "method": "POST",
+      "body": { "server_id": "{server_id}" },
+      "returns": "ConfigSchema"
+    },
+    "gossamer://game-server-admin/set": {
+      "path": "/ipc/set_config",
+      "method": "POST",
+      "body": { "server": "{server}", "key": "{key}", "value": "{value}" },
+      "returns": "SetResult"
+    },
+    "gossamer://game-server-admin/action": {
+      "path": "/ipc/server_action",
+      "method": "POST",
+      "body": { "server": "{server}", "action": "{action}" },
+      "returns": "ActionResult"
+    },
+    "gossamer://game-server-admin/status": {
+      "path": "/ipc/server_action",
+      "method": "POST",
+      "body": { "server": "{server}", "action": "status" },
+      "returns": "StatusResult"
+    }
+  },
+  "panels": [
+    "panels/game-server/panel.json"
+  ],
+  "capabilities": [
+    "network",
+    "shell"
+  ],
+  "clade": "infrastructure/game-servers",
+  "integrations": {
+    "idaptik": {
+      "role": "game-server",
+      "protocol": "websocket"
+    },
+    "burble": {
+      "role": "voice-server",
+      "protocol": "webrtc"
+    }
+  }
+}
