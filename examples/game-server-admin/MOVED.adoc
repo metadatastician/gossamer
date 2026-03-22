@@ -1,0 +1,15 @@
+= Game Server Admin — Moved to Standalone Repo
+
+This example has been evolved into a full standalone project.
+
+**New location:** https://github.com/hyperpolymath/game-server-admin
+
+The standalone repo includes:
+
+* Idris2 ABI + Zig FFI + Ephapax core (full three-layer architecture)
+* 7 Gossamer GUI panels (server browser, config editor, actions, logs, health, history, search)
+* 17 game profiles (Valheim, Minecraft, Factorio, ARK, etc.)
+* VeriSimDB dedicated instance for config persistence and drift detection
+* Panel clade definitions registered in PanLL's Clade system
+
+The files in this directory are preserved as the original example for reference.
