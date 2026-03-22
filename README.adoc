@@ -4,114 +4,93 @@
 
 image:https://img.shields.io/badge/License-PMPL--1.0-blue.svg[License: PMPL-1.0,link="https://github.com/hyperpolymath/palimpsest-license"]
 image:https://img.shields.io/github/v/release/hyperpolymath/gossamer[Release,link="https://github.com/hyperpolymath/gossamer/releases"]
-image:https://img.shields.io/badge/Language-Ephapax-indigo.svg[Ephapax]
-image:https://img.shields.io/badge/ABI-Idris2-purple.svg[Idris2 ABI]
 image:https://img.shields.io/badge/FFI-Zig-orange.svg[Zig FFI]
 
-*A linearly-typed webview shell with provable resource safety.*
+*Build desktop apps that can't leak resources. By design, not by discipline.*
 
-Gossamer is a desktop application framework that wraps web frontends
-in native webview windows -- like Tauri or Electron -- but with three
-guarantees no other framework provides:
-
-1. *Linearly-owned webview handles* -- use-after-free and double-free are _compile errors_
-2. *Typed IPC* -- frontend-backend message shape agreement at compile time
-3. *Linear capability tokens* -- permissions enforced by the type system, not runtime config
-
-Built in https://github.com/hyperpolymath/ephapax[Ephapax] (a dyadic language with affine + linear types), using the Idris2 ABI / Zig FFI standard.
+Gossamer wraps your web frontend in a native window — like Tauri or Electron — but the compiler proves your app handles every resource correctly. Leaked handles, dangling references, and permission bypasses become compile errors instead of production incidents.
 
 toc::[]
 
-== How it compares
+== Why Gossamer
+
+Every desktop framework asks you to manage resources carefully. Gossamer makes it impossible to get wrong:
+
+* *Webview handles can't leak.* The type system requires every handle to be properly closed. Forget to close one? The code won't compile.
+* *IPC messages can't mismatch.* Frontend and backend agree on message shapes at compile time, not at runtime when your user hits the bug.
+* *Permissions can't be bypassed.* Access control is enforced by the compiler, not by a JSON config file that might have a typo.
+* *No garbage collector. Ever.* Region-based memory with linear types means deterministic, zero-overhead cleanup. No pauses, no surprises.
+
+== At a Glance
 
 [cols="1,1,1,1,1"]
 |===
 | | Electron | Tauri | Wails | *Gossamer*
 
-| Resource lifecycle | GC | Arc (refcount) | GC | *Proved (linear)*
-| IPC type safety | None | Codegen | Reflection | *Compile-time*
-| Permissions | Opt-in | Runtime JSON | None | *Linear tokens*
-| GC required? | Yes | No* | Yes | *Never*
-| Binary size | 150-300MB | 3-8MB | 5-10MB | *1-3MB*
+| Handle leaks possible? | Yes | Yes | Yes | *No (compile error)*
+| IPC type-safe? | No | Partial | No | *Yes (compile-time)*
+| Permission enforcement | Opt-in | Runtime config | None | *Compiler-enforced*
+| Garbage collector | V8 + Node GC | None* | Go GC | *None, ever*
+| Smallest binary | ~150MB | ~3MB | ~5MB | *~1MB*
 |===
 
-_* Tauri uses `Arc<Mutex<...>>`, which is reference counting._
+_* Tauri uses reference counting internally (`Arc<Mutex<...>>`)._
 
-== Hello World
+== What it Looks Like
 
 [source]
 ----
 fn main(): I64 =
-  let! handle = __ffi("gossamer_create", "Hello", 800, 600, 1, 1, 0) in
-  let! _ = __ffi("gossamer_load_html", handle, "<h1>Hello!</h1>") in
-  __ffi("gossamer_run", handle)
+  let! window = __ffi("gossamer_create", "My App", 800, 600, 1, 1, 0) in
+  let! _      = __ffi("gossamer_load_html", window, "<h1>Hello!</h1>") in
+  __ffi("gossamer_run", window)
 ----
 
-* Remove `gossamer_run` -> *compile error* (linear variable not consumed)
-* Use `handle` after `gossamer_run` -> *compile error* (already consumed)
+The `let!` means this handle is _linear_ — it must be used exactly once. Remove the last line and the compiler rejects your program. Try to use `window` after `gossamer_run` and the compiler rejects your program. No runtime checks needed.
 
-== The Stack
+== How it Works
 
-[source]
-----
-Ephapax (.eph) -- application code with linear types
-    | __ffi()
-Zig (.zig) -- platform webview bindings (GTK / WebKit / WebView2)
-    | C ABI
-Idris2 (.idr) -- formal ABI proofs (compile-time only, erased)
-----
+Your web frontend runs inside the OS webview (WebKitGTK on Linux, WKWebView on macOS, WebView2 on Windows). The backend is written in https://github.com/hyperpolymath/ephapax[Ephapax], a language with two binding modes:
 
-At runtime: just Zig + GTK. No GC runtime, no VM. ~1-3MB.
+* `let x = ...` — use at most once, implicit cleanup is fine
+* `let! x = ...` — use exactly once, compiler enforces it
+
+Resources that matter (windows, connections, file handles) use `let!`. Everything else uses `let`. You declare your intent, the compiler enforces it.
+
+Memory is managed through regions — scoped arenas that free everything at once when they exit. Linear types guarantee nothing escapes the region. Result: no GC, no reference counting, no tracing, no overhead.
+
+The native layer is pure Zig calling the OS webview directly. At runtime there's no VM, no interpreter, no garbage collector. Just your app and the OS.
 
 == Quick Start
 
 [source,bash]
 ----
-# Prerequisites (Fedora)
+# Dependencies (Fedora)
 sudo dnf install gtk3-devel webkit2gtk4.1-devel zig
 
-# Build the Zig FFI
+# Build the native library
 cd src/interface/ffi && zig build
 
-# Build the Ephapax compiler
+# Build the compiler
 git clone https://github.com/hyperpolymath/ephapax
 cd ephapax && cargo build -p ephapax-cli
 
-# Run hello example
-cd gossamer
-bash examples/hello/run.sh
+# Run the hello example
+cd gossamer && bash examples/hello/run.sh
 ----
 
-== Architecture
+== Current Status
 
-* *Idris2 ABI* (`src/interface/abi/*.idr`) -- formal specification with dependent type proofs
-* *Zig FFI* (`src/interface/ffi/src/*.zig`) -- platform webview implementation
-* *Ephapax core* (`src/core/*.eph`) -- Shell, Bridge, Capabilities modules
-* *Examples* (`examples/`) -- hello world, IPC demo, capabilities demo
+* *v0.1 (released)*: Linux desktop (WebKitGTK). Working, tested, shipping.
+* *v0.2 (in progress)*: macOS and Windows support.
+* *v0.3 (planned)*: Mobile (iOS and Android).
 
-== Region-Linear Fusion
+== Research
 
-The core innovation: regions provide _scope_ (when memory is freed), linear types provide _obligation_ (whether the programmer must act). Together they prove all memory is freed with no GC:
+Gossamer is backed by formal research. The type system and its guarantees are machine-checked in Idris2 and documented in an academic paper:
 
-* *No Escape*: values in region `r` cannot appear in types that outlive `r`
-* *All Linears Consumed*: linear variables must be consumed before region exit
-* *Orthogonality*: region rules and qualifier rules are independent -- one implementation, both modes
-
-== Roadmap
-
-* *v0.1 (current)*: Linux (WebKitGTK)
-* *v0.2*: macOS (WKWebView) + Windows (WebView2)
-* *v0.3*: Mobile (iOS / Android)
-* *v1.0*: Plugin system, auto-updater
-
-== Paper
-
-_Gossamer: A Linearly-Typed Webview Shell with Provable Resource Safety_
-
-link:docs/whitepapers/gossamer-arxiv-paper.tex[LaTeX source] (arXiv submission pending)
+_Gossamer: A Linearly-Typed Webview Shell with Provable Resource Safety_ — link:docs/whitepapers/gossamer-arxiv-paper.tex[paper source]
 
 == License
 
-PMPL-1.0-or-later (Palimpsest License)
-
-Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath)
+PMPL-1.0-or-later — Copyright (c) 2026 Jonathan D.A. Jewell
