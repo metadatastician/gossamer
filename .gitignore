@@ -103,3 +103,5 @@ sync_report*.txt
 
 # Hypatia scan cache (local-only)
 .hypatia/
+src/interface/ffi/.zig-cache/
+src/interface/ffi/zig-out/
