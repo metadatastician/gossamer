@@ -15,6 +15,7 @@
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 const std = @import("std");
+const file_watcher = @import("file_watcher.zig");
 
 //==============================================================================
 // I/O helpers (Zig 0.15 — File.writeAll + fmt.bufPrint)
@@ -293,7 +294,7 @@ fn runShellCommandBackground(allocator: std.mem.Allocator, command: []const u8) 
 // Commands
 //==============================================================================
 
-fn cmdDev(allocator: std.mem.Allocator, config: Config) !void {
+fn cmdDev(allocator: std.mem.Allocator, config: Config, config_data: []const u8) !void {
     out("\n  \x1b[36mGossamer\x1b[0m v{s}\n", .{std.mem.span(gossamer_version())});
     out("  \x1b[2m{s}\x1b[0m\n\n", .{config.product_name});
 
@@ -359,6 +360,27 @@ fn cmdDev(allocator: std.mem.Allocator, config: Config) !void {
     defer allocator.free(url_z);
     out("  \x1b[32m✓\x1b[0m Loading: {s}\n\n", .{config.dev_url});
     _ = gossamer_navigate(handle, url_z);
+
+    // Start the hot-reload file watcher.
+    // Parses the optional `build.watch` section from gossamer.conf.json,
+    // falling back to watching `frontendDist` with default extensions.
+    const watch_config = file_watcher.parseWatchConfig(config_data, config.frontend_dist);
+    var watcher: ?file_watcher.WatcherHandle = null;
+    if (watch_config.path_count > 0) {
+        watcher = file_watcher.start(handle, watch_config) catch blk: {
+            out("  \x1b[33m!\x1b[0m Hot reload watcher failed to start\n", .{});
+            break :blk null;
+        };
+        if (watcher != null) {
+            out("  \x1b[32m✓\x1b[0m Hot reload watcher active", .{});
+            out(" ({d} path(s), debounce {d}ms)\n", .{ watch_config.path_count, watch_config.debounce_ms });
+        }
+    }
+    defer {
+        if (watcher) |w| {
+            file_watcher.stop(w);
+        }
+    }
 
     gossamer_run(handle);
     out("\n  \x1b[2mWindow closed.\x1b[0m\n", .{});
@@ -550,7 +572,12 @@ fn cmdInit() !void {
             \\    "frontendDist": "../public",
             \\    "devUrl": "http://localhost:8000/",
             \\    "beforeDevCommand": "deno task dev",
-            \\    "beforeBuildCommand": "deno task build"
+            \\    "beforeBuildCommand": "deno task build",
+            \\    "watch": {
+            \\      "paths": ["public/", "src/"],
+            \\      "extensions": [".html", ".js", ".css", ".res.js"],
+            \\      "debounceMs": 300
+            \\    }
             \\  },
             \\  "app": {
             \\    "windows": [{
@@ -630,7 +657,7 @@ pub fn main() !void {
     const config = parseConfig(config_data);
 
     if (std.mem.eql(u8, command, "dev")) {
-        try cmdDev(allocator, config);
+        try cmdDev(allocator, config, config_data);
     } else if (std.mem.eql(u8, command, "build")) {
         try cmdBuild(allocator, config);
     } else if (std.mem.eql(u8, command, "bundle")) {

@@ -7,7 +7,12 @@
     "frontendDist": "../public",
     "devUrl": "http://localhost:8000/",
     "beforeDevCommand": "deno task dev",
-    "beforeBuildCommand": "deno task build"
+    "beforeBuildCommand": "deno task build",
+    "watch": {
+      "paths": ["public/", "src/"],
+      "extensions": [".html", ".js", ".css", ".res.js"],
+      "debounceMs": 300
+    }
   },
   "app": {
     "windows": [
