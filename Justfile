@@ -136,3 +136,7 @@ deps:
     @pkg-config --exists webkit2gtk-4.1 && echo "  ✓ webkit2gtk-4.1" || echo "  ✗ webkit2gtk-4.1 (install webkit2gtk4.1-devel)"
     @which zig >/dev/null && echo "  ✓ zig ($(zig version))" || echo "  ✗ zig (install via asdf)"
     @test -x {{ephapax}} && echo "  ✓ ephapax" || echo "  ✗ ephapax (build: cd ~/Documents/hyperpolymath-repos/ephapax && cargo build -p ephapax-cli)"
+
+# Run panic-attacker pre-commit scan
+assail:
+    @command -v panic-attack >/dev/null 2>&1 && panic-attack assail . || echo "panic-attack not found — install from https://github.com/hyperpolymath/panic-attacker"

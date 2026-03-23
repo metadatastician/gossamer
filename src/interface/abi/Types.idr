@@ -301,6 +301,8 @@ data ResourceKind : Type where
   Notification : ResourceKind
   ||| System tray icon access
   Tray         : ResourceKind
+  ||| Groove discovery — probe and communicate with grooved services
+  Groove       : GrooveScope -> ResourceKind
 
 ||| Filesystem capability scope.
 public export
@@ -327,6 +329,15 @@ data ShellScope : Type where
   AllowCommands : (commands : List String) -> ShellScope
   ||| Execute any command (dangerous — use only in dev mode)
   AllShell      : ShellScope
+
+||| Groove discovery capability scope.
+||| Controls which groove targets this application can probe and connect to.
+public export
+data GrooveScope : Type where
+  ||| Access specific groove targets only (by service ID)
+  AllowTargets : (targets : List String) -> GrooveScope
+  ||| Access all groove targets (default for dev mode)
+  AllGroove    : GrooveScope
 
 ||| Linear capability token granting access to a specific resource.
 |||

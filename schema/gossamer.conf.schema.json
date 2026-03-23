@@ -332,7 +332,8 @@
               "camera",
               "geolocation",
               "haptics",
-              "nfc"
+              "nfc",
+              "groove"
             ]
           },
           "uniqueItems": true,

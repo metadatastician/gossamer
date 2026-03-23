@@ -16,6 +16,7 @@ let RESOURCE_SHELL: I32 = 2
 let RESOURCE_CLIPBOARD: I32 = 3
 let RESOURCE_NOTIFICATION: I32 = 4
 let RESOURCE_TRAY: I32 = 5
+let RESOURCE_GROOVE: I32 = 6
 
 // Grant a capability token for the given resource kind.
 // Use the RESOURCE_* constants above for the kind parameter.

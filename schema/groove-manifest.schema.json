@@ -1,0 +1,109 @@
+{
+  "_comment": [
+    "SPDX-License-Identifier: PMPL-1.0-or-later",
+    "Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gossamer.dev/schemas/groove/v1",
+  "title": "Groove Manifest",
+  "description": "Capability manifest for Gossamer groove discovery. Services expose this at GET /.well-known/groove to advertise their capabilities. Groove connectors are formally verified via Idris2 dependent types (Groove.idr) — you cannot connect unless capabilities match, and linear types prevent dangling connections.",
+  "type": "object",
+  "required": ["groove_version", "service_id", "capabilities"],
+  "additionalProperties": false,
+  "properties": {
+    "groove_version": {
+      "type": "string",
+      "description": "Groove protocol version.",
+      "const": "1"
+    },
+    "service_id": {
+      "type": "string",
+      "description": "Unique service identifier matching Groove.idr well-known manifests.",
+      "pattern": "^[a-z][a-z0-9_-]*$",
+      "examples": ["burble", "vext", "verisimdb", "hypatia", "panll"]
+    },
+    "service_version": {
+      "type": "string",
+      "description": "Semantic version of the service.",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+"
+    },
+    "capabilities": {
+      "type": "object",
+      "description": "Map of capability names to their configuration. Names MUST match Groove.idr CapabilityType wire names (capabilityName function).",
+      "additionalProperties": {
+        "$ref": "#/$defs/Capability"
+      }
+    },
+    "consumes": {
+      "type": "array",
+      "description": "Capabilities this service would like from other grooved services. Services work without them but enhance when available. Names must match Groove.idr CapabilityType wire names.",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "endpoints": {
+      "type": "object",
+      "description": "Named endpoints this service exposes.",
+      "additionalProperties": { "type": "string" },
+      "default": {}
+    },
+    "health": {
+      "type": "string",
+      "description": "Health check endpoint path.",
+      "default": "/health"
+    },
+    "applicability": {
+      "type": "array",
+      "description": "Scale levels this groove supports. Matches Groove.idr Applicability.",
+      "items": {
+        "type": "string",
+        "enum": ["individual", "team", "massive-open"]
+      },
+      "default": ["individual", "team"]
+    }
+  },
+  "$defs": {
+    "Capability": {
+      "type": "object",
+      "description": "A single capability offered by this service.",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Capability type. Must match Groove.idr CapabilityType wire names.",
+          "enum": [
+            "voice", "text", "presence", "spatial-audio",
+            "recording", "tts", "stt",
+            "integrity", "feed-verification", "hash-chain", "attestation",
+            "octad-storage", "drift-detection", "temporal-versioning",
+            "scanning", "static-analysis",
+            "panel-ui", "bot-orchestration", "workflow",
+            "dns-verify", "config-orchestration", "theorem-proving",
+            "custom"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description."
+        },
+        "protocol": {
+          "type": "string",
+          "description": "Wire protocol.",
+          "enum": ["webrtc", "websocket", "http", "grpc", "nntps", "custom"]
+        },
+        "endpoint": {
+          "type": "string",
+          "description": "Endpoint path or URI."
+        },
+        "requires_auth": {
+          "type": "boolean",
+          "default": false
+        },
+        "panel_compatible": {
+          "type": "boolean",
+          "description": "Whether this capability can power a PanLL panel.",
+          "default": false
+        }
+      }
+    }
+  }
+}

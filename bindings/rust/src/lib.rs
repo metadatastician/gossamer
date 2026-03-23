@@ -62,9 +62,7 @@ extern "C" {
     fn gossamer_channel_bind(
         channel: u64,
         name: *const c_char,
-        callback: Option<
-            extern "C" fn(*const c_char, *mut c_void) -> *const c_char,
-        >,
+        callback: Option<extern "C" fn(*const c_char, *mut c_void) -> *const c_char>,
         user_data: *mut c_void,
     ) -> c_int;
     fn gossamer_channel_close(channel: u64);
@@ -127,7 +125,10 @@ fn check_result(code: c_int) -> Result<(), Error> {
         Ok(())
     } else {
         let message = last_error().unwrap_or_else(|| format!("unknown error (code {code})"));
-        Err(Error::OperationFailed { code: code as i32, message })
+        Err(Error::OperationFailed {
+            code: code as i32,
+            message,
+        })
     }
 }
 
@@ -139,7 +140,11 @@ fn last_error() -> Option<String> {
         None
     } else {
         // SAFETY: FFI guarantees null-terminated string
-        Some(unsafe { CStr::from_ptr(ptr) }.to_string_lossy().into_owned())
+        Some(
+            unsafe { CStr::from_ptr(ptr) }
+                .to_string_lossy()
+                .into_owned(),
+        )
     }
 }
 
@@ -159,19 +164,14 @@ struct CommandContext {
 /// Receives the JSON payload string and the user_data pointer (a *CommandContext).
 /// Returns a heap-allocated JSON response string that Zig will read and then
 /// the caller is responsible for (Zig copies it before returning).
-extern "C" fn command_trampoline(
-    payload: *const c_char,
-    user_data: *mut c_void,
-) -> *const c_char {
+extern "C" fn command_trampoline(payload: *const c_char, user_data: *mut c_void) -> *const c_char {
     // SAFETY: user_data is a Box<CommandContext> that we leaked in App::command().
     // We borrow it here (not consume) — the pointer remains valid.
     let ctx = unsafe { &*(user_data as *const CommandContext) };
 
     // Parse the payload
     // SAFETY: payload is a valid null-terminated string from Zig
-    let payload_str = unsafe { CStr::from_ptr(payload) }
-        .to_str()
-        .unwrap_or("{}");
+    let payload_str = unsafe { CStr::from_ptr(payload) }.to_str().unwrap_or("{}");
 
     let payload_value: serde_json::Value =
         serde_json::from_str(payload_str).unwrap_or(serde_json::Value::Object(Default::default()));
@@ -310,8 +310,8 @@ impl App {
 
     /// Create a new Gossamer application with full window configuration.
     pub fn with_config(config: WindowConfig) -> Result<Self, Error> {
-        let title = CString::new(config.title.clone())
-            .map_err(|e| Error::InvalidString(e.to_string()))?;
+        let title =
+            CString::new(config.title.clone()).map_err(|e| Error::InvalidString(e.to_string()))?;
 
         // SAFETY: FFI call to create a webview window
         let handle = unsafe {
@@ -436,7 +436,9 @@ impl App {
             return "unknown".to_string();
         }
         // SAFETY: guaranteed null-terminated by Zig
-        unsafe { CStr::from_ptr(ptr) }.to_string_lossy().into_owned()
+        unsafe { CStr::from_ptr(ptr) }
+            .to_string_lossy()
+            .into_owned()
     }
 
     /// Run the webview event loop. Blocks until the window is closed.

@@ -1,0 +1,111 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+//
+// Gossamer.Groove — Lightweight capability discovery for composable integration.
+//
+// A "groove" is a bidirectional capability interface between two systems.
+// Each system works standalone but enhances the other when co-present.
+// Grooves are panel-optional: they work headless, but CAN power PanLL panels.
+//
+// The Idris2 ABI (Groove.idr) provides formal proofs of:
+// - Safe connect:    IsSubset required offered => GrooveHandle
+// - Safe disconnect: linear GrooveHandle => must be consumed exactly once
+// - Safe compose:    GrooveCompat a b => GroovePair a b
+//
+// Discovery flow:
+//   1. Gossamer probes well-known ports for groove manifests
+//   2. Services respond with JSON declaring offered/consumed capabilities
+//   3. Gossamer verifies compatibility via Idris2 subset proofs
+//   4. Matching grooves are activated and made available via IPC
+//   5. Frontend JS queries gossamer.groove_*() for active grooves
+//
+// Well-known groove targets (port → service → primary capability):
+//   6473 → Burble     → voice, text, presence, spatial-audio, TTS, STT
+//   6480 → Vext       → integrity, feed-verification, hash-chain, attestation
+//   7500 → gitbot     → bot-orchestration
+//   7600 → panic      → static-analysis
+//   7700 → conflow    → config-orchestration
+//   7800 → rpa        → workflow
+//   8000 → PanLL      → panel-ui
+//   8080 → VeriSimDB  → octad-storage, drift-detection, temporal-versioning
+//   9000 → ECHIDNA    → theorem-proving
+//   9090 → Hypatia    → scanning, static-analysis
+
+// Groove status constants (matching Groove.idr GrooveProbeResult).
+let GROOVE_NOT_FOUND: I32 = 0
+let GROOVE_INCOMPATIBLE: I32 = 1
+let GROOVE_CONNECTED: I32 = 2
+let GROOVE_ACTIVE: I32 = 3
+
+// Well-known groove target IDs (matching Groove.idr and groove.zig).
+let GROOVE_BURBLE: I32 = 0
+let GROOVE_VEXT: I32 = 1
+let GROOVE_VERISIMDB: I32 = 2
+let GROOVE_HYPATIA: I32 = 3
+let GROOVE_PANLL: I32 = 4
+let GROOVE_ECHIDNA: I32 = 5
+let GROOVE_RPA: I32 = 6
+let GROOVE_CONFLOW: I32 = 7
+let GROOVE_PANIC: I32 = 8
+let GROOVE_GITBOT: I32 = 9
+
+// Total number of well-known groove targets.
+let GROOVE_TARGET_COUNT: I32 = 10
+
+// Probe all well-known groove targets.
+// Returns the number of grooves successfully connected.
+// FFI: gossamer_groove_discover() -> count
+fn discover(): I32 =
+  __ffi("gossamer_groove_discover")
+
+// Get the status of a specific groove target.
+// Returns: 0=not_found, 1=incompatible, 2=connected, 3=active
+// FFI: gossamer_groove_status(target_id) -> status
+fn status(targetId: I32): I32 =
+  __ffi("gossamer_groove_status", targetId)
+
+// Get the capability manifest JSON for a connected groove.
+// Returns empty string if groove is not connected.
+// FFI: gossamer_groove_manifest(target_id) -> json_string
+fn manifest(targetId: I32): String =
+  __ffi("gossamer_groove_manifest", targetId)
+
+// Check if a specific capability is available from any connected groove.
+// Capability names match Groove.idr capabilityName (e.g. "voice", "integrity").
+// Returns the target ID that provides it, or -1 if unavailable.
+// FFI: gossamer_groove_find_capability(cap_name) -> target_id or -1
+fn findCapability(capName: String): I32 =
+  __ffi("gossamer_groove_find_capability", capName)
+
+// Check if two groove targets are compatible (can compose).
+// Returns 1 if compatible, 0 if not.
+// FFI: gossamer_groove_check_compat(target_a, target_b) -> bool
+fn checkCompat(targetA: I32, targetB: I32): I32 =
+  __ffi("gossamer_groove_check_compat", targetA, targetB)
+
+// Send a JSON message to a grooved service.
+// FFI: gossamer_groove_send(target_id, message) -> result (0=ok)
+fn send(targetId: I32, message: String): I32 =
+  __ffi("gossamer_groove_send", targetId, message)
+
+// Receive a pending JSON message from a grooved service.
+// Returns empty string if no messages waiting.
+// FFI: gossamer_groove_recv(target_id) -> json_string
+fn recv(targetId: I32): String =
+  __ffi("gossamer_groove_recv", targetId)
+
+// Get a summary of all groove connections as JSON.
+// Returns: [{"id":0,"service":"burble","status":2,"caps":["voice","text"]}, ...]
+// FFI: gossamer_groove_summary() -> json_string
+fn summary(): String =
+  __ffi("gossamer_groove_summary")
+
+// Disconnect a specific groove target.
+// FFI: gossamer_groove_disconnect(target_id) -> void
+fn disconnect(targetId: I32): () =
+  __ffi("gossamer_groove_disconnect", targetId)
+
+// Disconnect all grooves. Call during application shutdown.
+// FFI: gossamer_groove_disconnect_all() -> void
+fn disconnectAll(): () =
+  __ffi("gossamer_groove_disconnect_all")
