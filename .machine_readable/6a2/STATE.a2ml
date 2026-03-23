@@ -1,38 +1,34 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
-# STATE.a2ml — Project state checkpoint (META-TEMPLATE)
-#
-# This is the STATE file for rsr-template-repo itself.
-# When consumed by a new project, replace {{PLACEHOLDER}} tokens
-# and customize sections below for the target project.
+# STATE.a2ml — Project state checkpoint for Gossamer
 
 [metadata]
-project = "rsr-template-repo"
+project = "gossamer"
 version = "0.2.0"
-last-updated = "2026-02-28"
+last-updated = "2026-03-23"
 status = "active"  # active | paused | archived
 
 [project-context]
-name = "rsr-template-repo"
-purpose = "Canonical RSR-compliant repository template providing scaffolding for all hyperpolymath projects — including CI/CD, AI manifests, ABI/FFI standards, container ecosystem, and governance infrastructure."
-completion-percentage = 95
+name = "gossamer"
+purpose = "Linearly-typed webview shell with formal ABI proofs — Ephapax backend, Idris2 ABI, Zig FFI. Desktop apps that can't leak resources by design."
+completion-percentage = 45
 
 [position]
-phase = "maintenance"      # design | implementation | testing | maintenance | archived
-maturity = "production"    # experimental | alpha | beta | production | lts
+phase = "implementation"  # design | implementation | testing | maintenance | archived
+maturity = "alpha"        # experimental | alpha | beta | production | lts
 
 [route-to-mvp]
 milestones = [
-  { name = "Phase 0: Core scaffolding (justfile, CI/CD, .machine_readable)", completion = 100 },
-  { name = "Phase 1: ABI/FFI standard (Idris2/Zig templates)", completion = 100 },
-  { name = "Phase 1b: AI Gatekeeper Protocol (0-AI-MANIFEST.a2ml)", completion = 100 },
-  { name = "Phase 1c: TOPOLOGY.md standard and guide", completion = 100 },
-  { name = "Phase 1d: Maintenance gate (axes, checklist, approach)", completion = 100 },
-  { name = "Phase 1e: Trustfile / contractiles", completion = 100 },
-  { name = "Phase 2: Container ecosystem templates (stapeln)", completion = 100 },
-  { name = "Phase 3: Multi-forge sync hardening", completion = 0 },
-  { name = "Phase 4: Nix/Guix reproducible shells", completion = 50 },
+  { name = "Phase 0: Core Zig FFI (create, load, run, navigate, eval, channel)", completion = 100 },
+  { name = "Phase 1: Capability registry + dialog allocator", completion = 100 },
+  { name = "Phase 1b: Corrective fixes (clearError, overflow messages, FIFO eviction, c_allocator)", completion = 100 },
+  { name = "Phase 2: Async IPC (gossamer_channel_bind_async, 256-slot inflight, worker threads)", completion = 100 },
+  { name = "Phase 2b: CSP enforcement (gossamer_set_csp, CLI auto-apply, Rust/ReScript bindings)", completion = 100 },
+  { name = "Phase 2c: Streaming IPC (gossamer_emit, g_idle_add, JS/Rust/ReScript bindings)", completion = 100 },
+  { name = "Phase 3: Integration tests + hot reload", completion = 20 },
+  { name = "Phase 4: macOS and Windows support", completion = 0 },
+  { name = "Phase 5: Mobile (iOS and Android)", completion = 0 },
 ]
 
 [blockers-and-issues]
@@ -40,25 +36,25 @@ milestones = [
 
 [critical-next-actions]
 actions = [
-  "Container templates complete — test with `just container-init`",
-  "Validate container templates across wolfi-base and static Chainguard images",
-  "Harden multi-forge sync for GitLab/Bitbucket mirroring edge cases",
-  "Expand Nix/Guix development shell templates",
+  "Complete integration tests for async IPC, CSP, and streaming events",
+  "Implement hot reload for development workflow",
+  "Begin macOS WebKit and Windows WebView2 platform backends",
+  "Expand unit test coverage for edge cases in 256-slot inflight tracker",
 ]
 
 [maintenance-status]
-last-run-utc = "never"
+last-run-utc = "2026-03-23"
 last-report = "docs/reports/maintenance/latest.json"
-last-result = "unknown"  # unknown | pass | warn | fail
+last-result = "pass"  # unknown | pass | warn | fail
 open-warnings = 0
 open-failures = 0
 
 [ecosystem]
-part-of = ["RSR Framework", "stapeln ecosystem"]
-depends-on = ["stapeln", "selur-compose", "cerro-torre", "svalinn", "vordr", "k9-svc"]
+part-of = ["hyperpolymath framework ecosystem", "PanLL integration"]
+depends-on = ["ephapax", "idris2", "zig", "webkitgtk"]
 
-# ---------------------------------------------------------------------------
-# NOTE FOR CONSUMERS: When using this template to create a new repo, reset
-# the fields above to your project's values and replace all {{PLACEHOLDER}}
-# tokens. The milestones above describe the TEMPLATE's evolution, not yours.
-# ---------------------------------------------------------------------------
+[session-history]
+# 2026-03-23: Corrective fixes (clearError on all exports, overflow msg, FIFO verified, c_allocator verified).
+#             Async IPC implemented (gossamer_channel_bind_async, 256-slot inflight, worker threads, Rust binding).
+#             CSP enforcement added (gossamer_set_csp, CLI auto-apply, Rust/ReScript bindings).
+#             Streaming IPC added (gossamer_emit, g_idle_add, JS/Rust/ReScript bindings). 13 new tests.

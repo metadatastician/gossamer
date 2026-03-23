@@ -5,12 +5,12 @@
 # Architecture decisions, design rationale, governance.
 
 [metadata]
-version = "0.1.0"
-last-updated = "2026-03-22"
+version = "0.2.0"
+last-updated = "2026-03-23"
 
 [project-info]
 type = "library"  # library | binary | monorepo | service | website
-languages = []             # e.g. ["rust", "zig", "idris2"]
+languages = ["zig", "idris2", "ephapax", "rescript", "rust"]
 license = "PMPL-1.0-or-later"
 author = "Jonathan D.A. Jewell (hyperpolymath)"
 
@@ -51,3 +51,8 @@ effects-evidence = "benchmark execution/results and maintainer status dialogue/r
 
 [design-rationale]
 # Key design decisions and their reasoning
+# - Thread-local error strings with clearError() at function entry: prevents stale error leakage across calls
+# - 256-slot inflight tracker for async IPC: bounded resource usage, mutex-protected
+# - g_idle_add for thread-safe GTK posting: standard GLib pattern for worker→main-thread communication
+# - CSP enforcement at runtime via gossamer_set_csp: allows configuration-driven security policy
+# - Streaming events via gossamer_emit: enables backend→frontend push without polling

@@ -75,7 +75,19 @@ These files MUST exist in `.machine_readable/` directory ONLY:
 
 - **Name:** Gossamer
 - **Type:** Framework / Library
-- **Language:** Ephapax (backend), Idris2 (ABI), Zig (FFI)
+- **Language:** Ephapax (backend), Idris2 (ABI), Zig (FFI), Rust + ReScript (bindings)
 - **License:** PMPL-1.0-or-later
 - **Author:** Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
-- **Status:** v0.1 development (Phase 1 — Linux)
+- **Status:** v0.2 development (Phase 2 — async IPC, CSP, streaming events)
+- **Last Updated:** 2026-03-23
+- **Exported Functions:** 19+ (create, load_html, load_url, run, navigate, eval, channel_send, channel_bind, channel_bind_async, set_csp, emit, get_error, and capability/dialog/revocation functions)
+
+## FEATURE SUMMARY (v0.2)
+
+- Synchronous IPC via channels (gossamer_channel_send / gossamer_channel_bind)
+- Async IPC via worker threads (gossamer_channel_bind_async) with 256-slot inflight tracker
+- CSP enforcement (gossamer_set_csp) with CLI auto-apply from gossamer.conf.json
+- Streaming events backend→frontend (gossamer_emit) with JS/Rust/ReScript subscribe/unsubscribe
+- Thread-local error safety (clearError on all 16+ exported function entries)
+- Capability registry (256 slots, FIFO eviction)
+- Dialog allocator (c_allocator consistent)

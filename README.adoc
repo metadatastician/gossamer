@@ -81,11 +81,20 @@ cd ephapax && cargo build -p ephapax-cli
 cd gossamer && bash examples/hello/run.sh
 ----
 
+== Features
+
+* *Async IPC* — `gossamer_channel_bind_async()` spawns callbacks on a worker thread with 256-slot inflight tracker. Responses post back to the GTK main thread via `g_idle_add`. Rust and ReScript bindings included.
+* *CSP enforcement* — `gossamer_set_csp()` applies Content Security Policy at runtime. CLI auto-loads CSP from `gossamer.conf.json`.
+* *Streaming events* (backend→frontend push) — `gossamer_emit()` pushes named events to the frontend thread-safely. JS, Rust, and ReScript bindings for subscribing/unsubscribing.
+* *Thread-local error safety* — all 16+ exported functions clear stale errors on entry.
+* *Capability registry* — 256-slot registry with FIFO eviction and clear overflow diagnostics.
+
 == Current Status
 
 * *v0.1 (released)*: Linux desktop (WebKitGTK). Working, tested, shipping.
-* *v0.2 (in progress)*: macOS and Windows support.
-* *v0.3 (planned)*: Mobile (iOS and Android).
+* *v0.2 (in progress)*: Async IPC, CSP enforcement, streaming events, corrective fixes. Integration tests and hot reload in progress.
+* *v0.3 (planned)*: macOS and Windows support.
+* *v0.4 (planned)*: Mobile (iOS and Android).
 
 == Research
 
