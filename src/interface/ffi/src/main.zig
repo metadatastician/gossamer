@@ -150,17 +150,35 @@ pub const BindingEntry = struct {
 /// Prevents unbounded thread spawning from rapid-fire JS invocations.
 const MAX_INFLIGHT_ASYNC = 256;
 
-/// Inflight async IPC slot tracker.
-/// Exported as `async_ipc` so that webview_gtk.zig can acquire/release slots.
+/// Thread-safe inflight slot registry for async IPC calls.
+/// Bounded at MAX_INFLIGHT_ASYNC (256) to prevent unbounded memory growth
+/// and provide back-pressure when the system is overloaded.
+///
+/// Public so that the platform module (webview_gtk.zig) can acquire/release
+/// slots from the worker thread dispatch path.
+///
+/// Thread safety: all slot operations are guarded by a Mutex because
+/// acquireSlot() is called on the GTK main thread and releaseSlot()
+/// is called from the g_idle_add callback (also main thread, but after
+/// the worker thread has completed). The mutex also protects against
+/// potential future multi-webview scenarios.
 pub const async_ipc = struct {
-    /// Bitmap of occupied slots (1 = occupied, 0 = free).
+    /// Slot occupancy bitfield — true means the slot is in use.
     var slots: [MAX_INFLIGHT_ASYNC]bool = [_]bool{false} ** MAX_INFLIGHT_ASYNC;
-    /// Number of currently occupied slots.
-    var count: usize = 0;
 
-    /// Acquire a free slot index, or return null if all slots are occupied.
+    /// Mutex protecting the slots array and count.
+    /// Worker threads and the GTK main thread may access concurrently.
+    var mutex: std.Thread.Mutex = .{};
+
+    /// Number of currently occupied slots (cached for fast queries).
+    var count: u32 = 0;
+
+    /// Acquire a free slot. Returns the slot index, or null if all slots
+    /// are occupied (back-pressure — caller should reject the IPC call).
     pub fn acquireSlot() ?usize {
-        if (count >= MAX_INFLIGHT_ASYNC) return null;
+        mutex.lock();
+        defer mutex.unlock();
+
         for (&slots, 0..) |*slot, i| {
             if (!slot.*) {
                 slot.* = true;
@@ -168,15 +186,36 @@ pub const async_ipc = struct {
                 return i;
             }
         }
-        return null; // Should not reach here given the count check
+        return null; // All slots occupied
     }
 
-    /// Release a previously acquired slot.
+    /// Release a previously acquired slot. Called by the g_idle_add
+    /// callback after the response has been delivered to JavaScript.
     pub fn releaseSlot(index: usize) void {
+        mutex.lock();
+        defer mutex.unlock();
+
         if (index < MAX_INFLIGHT_ASYNC and slots[index]) {
             slots[index] = false;
             if (count > 0) count -= 1;
         }
+    }
+
+    /// Query the current number of inflight async calls.
+    pub fn inflightCount() u32 {
+        mutex.lock();
+        defer mutex.unlock();
+        return count;
+    }
+
+    /// Reset all slots to free. Used in tests and cleanup.
+    pub fn reset() void {
+        mutex.lock();
+        defer mutex.unlock();
+        for (&slots) |*slot| {
+            slot.* = false;
+        }
+        count = 0;
     }
 };
 
@@ -528,6 +567,63 @@ export fn gossamer_channel_bind(
     return .ok;
 }
 
+/// Bind a named command handler for ASYNC dispatch on the IPC channel.
+///
+/// Identical to gossamer_channel_bind except the callback will run on a
+/// worker thread instead of the GTK main thread. When the callback returns,
+/// the response is posted back to the main thread via g_idle_add.
+///
+/// Use this for I/O-heavy commands (HTTP requests, file reads, database
+/// queries) that would otherwise block the GTK event loop and freeze the UI.
+///
+/// Maximum inflight async calls: 256 (MAX_INFLIGHT_ASYNC).
+///
+/// Matches: Gossamer.ABI.Foreign.prim__channelBindAsync
+export fn gossamer_channel_bind_async(
+    channel_ptr: u64,
+    name: [*:0]const u8,
+    callback: ?*const fn ([*:0]const u8, ?*anyopaque) callconv(.c) [*:0]const u8,
+    user_data: ?*anyopaque,
+) Result {
+    clearError();
+    const channel = channelFromU64(channel_ptr) orelse {
+        setError("Null channel handle");
+        return .null_pointer;
+    };
+
+    if (!channel.open) {
+        setError("Channel is closed");
+        return .@"error";
+    }
+
+    const cb = callback orelse {
+        setError("Null callback");
+        return .invalid_param;
+    };
+
+    // Duplicate the name string — caller may free it after this returns
+    const name_slice = std.mem.span(name);
+    const duped_name = channel.allocator.dupeZ(u8, name_slice) catch {
+        setError("Failed to allocate name string");
+        return .out_of_memory;
+    };
+
+    // Register the callback with run_async=true so the IPC dispatcher
+    // spawns a worker thread instead of running inline on the GTK thread
+    channel.parent.bindings.put(duped_name, .{
+        .callback = cb,
+        .user_data = user_data,
+        .run_async = true,
+    }) catch {
+        channel.allocator.free(duped_name);
+        setError("Failed to register async binding");
+        return .out_of_memory;
+    };
+
+    clearError();
+    return .ok;
+}
+
 /// Close the IPC channel. Consumes the channel handle.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__channelClose
@@ -536,6 +632,12 @@ export fn gossamer_channel_close(channel_ptr: u64) void {
     const raw_ptr = @as(?*ChannelHandle, @ptrFromInt(@as(usize, @intCast(channel_ptr)))) orelse return;
     raw_ptr.open = false;
     raw_ptr.allocator.destroy(raw_ptr);
+}
+
+/// Query the number of currently inflight async IPC calls.
+/// Returns 0..256. Useful for diagnostics and back-pressure monitoring.
+export fn gossamer_async_inflight_count() u32 {
+    return async_ipc.inflightCount();
 }
 
 //==============================================================================
