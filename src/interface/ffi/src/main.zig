@@ -53,6 +53,12 @@ comptime {
     _ = @import("groove.zig");
 }
 
+// CSP enforcement module — gossamer_set_csp, gossamer_emit for streaming IPC.
+// Imported here to ensure all exports are included in the shared library.
+comptime {
+    _ = @import("csp.zig");
+}
+
 // Version information
 const VERSION = "0.1.0";
 const BUILD_INFO = "Gossamer " ++ VERSION ++ " built with Zig " ++ @import("builtin").zig_version_string;
@@ -496,9 +502,33 @@ export fn gossamer_channel_open(handle_ptr: u64) u64 {
         \\    }
         \\  });
         \\};
+        \\window.__gossamer_listeners = {};
+        \\window.__gossamer_on = function(eventName, callback) {
+        \\  if (!window.__gossamer_listeners[eventName]) {
+        \\    window.__gossamer_listeners[eventName] = [];
+        \\  }
+        \\  window.__gossamer_listeners[eventName].push(callback);
+        \\  return function() {
+        \\    var arr = window.__gossamer_listeners[eventName];
+        \\    if (arr) {
+        \\      var idx = arr.indexOf(callback);
+        \\      if (idx !== -1) arr.splice(idx, 1);
+        \\    }
+        \\  };
+        \\};
+        \\window.__gossamer_emit = function(eventName, payload) {
+        \\  var listeners = window.__gossamer_listeners[eventName];
+        \\  if (listeners) {
+        \\    for (var i = 0; i < listeners.length; i++) {
+        \\      try { listeners[i](payload); } catch(e) { console.error("Gossamer event error:", e); }
+        \\    }
+        \\  }
+        \\};
         \\window.gossamer = new Proxy({}, {
         \\  get: function(target, name) {
         \\    if (typeof name !== "string") return undefined;
+        \\    if (name === "on") return window.__gossamer_on;
+        \\    if (name === "emit") return window.__gossamer_emit;
         \\    return function(payload) {
         \\      return window.__gossamer_invoke(name, payload);
         \\    };
@@ -846,7 +876,8 @@ export fn gossamer_build_info() [*:0]const u8 {
 //==============================================================================
 
 /// Convert a u64 from Idris2 FFI to a typed GossamerHandle pointer.
-fn ptrFromU64(val: u64) ?*GossamerHandle {
+/// Public so sub-modules (csp.zig, etc.) can resolve handles.
+pub fn ptrFromU64(val: u64) ?*GossamerHandle {
     if (val == 0) return null;
     return @ptrFromInt(@as(usize, @intCast(val)));
 }

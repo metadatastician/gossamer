@@ -57,6 +57,8 @@ extern fn gossamer_version() [*:0]const u8;
 extern fn gossamer_build_info() [*:0]const u8;
 extern fn gossamer_last_error() ?[*:0]const u8;
 extern fn gossamer_set_title(handle: u64, title: [*:0]const u8) c_int;
+extern fn gossamer_set_csp(handle: u64, csp: [*:0]const u8) c_int;
+extern fn gossamer_emit(handle: u64, event_name: [*:0]const u8, payload_json: [*:0]const u8) c_int;
 
 //==============================================================================
 // Shell-exec IPC handler for OPSM runtime commands
@@ -189,6 +191,9 @@ const Config = struct {
     resizable: bool = true,
     fullscreen: bool = false,
     decorations: bool = true,
+    /// Content-Security-Policy directive from gossamer.conf.json security.csp.
+    /// When non-null, injected as a <meta> CSP tag after the IPC bridge is set up.
+    csp: ?[]const u8 = null,
 };
 
 //==============================================================================
@@ -210,6 +215,9 @@ fn parseConfig(json_str: []const u8) Config {
     config.resizable = extractBoolField(json_str, "resizable") orelse config.resizable;
     config.fullscreen = extractBoolField(json_str, "fullscreen") orelse config.fullscreen;
     config.decorations = extractBoolField(json_str, "decorations") orelse config.decorations;
+    // Parse security.csp — the field is "csp":"..." inside the "security" block.
+    // extractStringField finds the first match, which works since "csp" only appears in security.
+    config.csp = extractStringField(json_str, "csp");
     return config;
 }
 
@@ -334,6 +342,19 @@ fn cmdDev(allocator: std.mem.Allocator, config: Config) !void {
         out("  \x1b[32m✓\x1b[0m OPSM runtime handler bound (async)\n", .{});
     }
 
+    // Apply Content-Security-Policy from gossamer.conf.json if configured.
+    // Must be called after channel_open (which injects the JS bridge).
+    if (config.csp) |csp| {
+        const csp_z = try allocator.dupeZ(u8, csp);
+        defer allocator.free(csp_z);
+        const csp_result = gossamer_set_csp(handle, csp_z);
+        if (csp_result == 0) {
+            out("  \x1b[32m✓\x1b[0m CSP applied: {s}\n", .{csp});
+        } else {
+            out("  \x1b[33m!\x1b[0m CSP injection failed\n", .{});
+        }
+    }
+
     const url_z = try allocator.dupeZ(u8, config.dev_url);
     defer allocator.free(url_z);
     out("  \x1b[32m✓\x1b[0m Loading: {s}\n\n", .{config.dev_url});
@@ -387,6 +408,14 @@ fn cmdRun(allocator: std.mem.Allocator, config: Config) !void {
     const handle = @intFromPtr(handle_ptr.?);
 
     _ = gossamer_channel_open(handle);
+
+    // Apply Content-Security-Policy if configured
+    if (config.csp) |csp| {
+        const csp_z = try allocator.dupeZ(u8, csp);
+        defer allocator.free(csp_z);
+        _ = gossamer_set_csp(handle, csp_z);
+    }
+
     const html_z = try allocator.dupeZ(u8, html);
     defer allocator.free(html_z);
     _ = gossamer_load_html(handle, html_z);

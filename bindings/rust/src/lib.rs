@@ -88,6 +88,13 @@ extern "C" {
         callback: *const c_void,
     ) -> c_int;
     fn gossamer_notify(title: *const c_char, body: *const c_char) -> c_int;
+
+    fn gossamer_set_csp(handle: u64, csp: *const c_char) -> c_int;
+    fn gossamer_emit(
+        handle: u64,
+        event_name: *const c_char,
+        payload_json: *const c_char,
+    ) -> c_int;
 }
 
 // =============================================================================
@@ -479,6 +486,46 @@ impl App {
     pub fn resize(&self, width: u32, height: u32) -> Result<(), Error> {
         // SAFETY: handle is valid
         check_result(unsafe { gossamer_resize(self.handle, width, height) })
+    }
+
+    /// Apply a Content-Security-Policy to the webview.
+    ///
+    /// Injects a `<meta http-equiv="Content-Security-Policy" content="...">` tag.
+    /// Can be called at any time; replaces any previously set CSP.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// app.set_csp("default-src 'self'; script-src 'self' 'unsafe-inline'")?;
+    /// ```
+    pub fn set_csp(&self, csp: &str) -> Result<(), Error> {
+        let csp_c = CString::new(csp).map_err(|e| Error::InvalidString(e.to_string()))?;
+        // SAFETY: handle is valid, csp_c is null-terminated
+        check_result(unsafe { gossamer_set_csp(self.handle, csp_c.as_ptr()) })
+    }
+
+    /// Push an event from the backend to the frontend webview.
+    ///
+    /// The event is delivered asynchronously via the GTK main thread.
+    /// Frontend code registers listeners with `window.__gossamer_on(name, cb)`
+    /// or `window.gossamer.on(name, cb)`.
+    ///
+    /// Thread safety: safe to call from any thread. Uses g_idle_add internally.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// app.emit("file_changed", r#"{"path":"/tmp/foo.txt"}"#)?;
+    /// ```
+    pub fn emit(&self, event_name: &str, payload_json: &str) -> Result<(), Error> {
+        let event_c =
+            CString::new(event_name).map_err(|e| Error::InvalidString(e.to_string()))?;
+        let payload_c =
+            CString::new(payload_json).map_err(|e| Error::InvalidString(e.to_string()))?;
+        // SAFETY: handle is valid, both strings are null-terminated
+        check_result(unsafe {
+            gossamer_emit(self.handle, event_c.as_ptr(), payload_c.as_ptr())
+        })
     }
 
     /// Send a desktop notification.

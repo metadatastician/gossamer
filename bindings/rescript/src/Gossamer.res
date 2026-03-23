@@ -191,6 +191,41 @@ module Window = {
 }
 
 // ---------------------------------------------------------------------------
+// Event module — streaming IPC (backend → frontend push)
+// ---------------------------------------------------------------------------
+
+module Event = {
+  /// Register a listener for backend-pushed events.
+  /// Returns an unsubscribe function that removes the listener when called.
+  ///
+  /// Usage:
+  ///   let unsub = Gossamer.Event.on("file_changed", data => {
+  ///     Js.log2("Changed:", data)
+  ///   })
+  ///   // Later: unsub() to stop listening
+  %%raw(`
+  function gossamerOnImpl(eventName, callback) {
+    if (typeof window !== 'undefined' && typeof window.__gossamer_on === 'function') {
+      return window.__gossamer_on(eventName, callback);
+    }
+    return function() {};
+  }
+  `)
+  @val external on: (string, 'a => unit) => (unit => unit) = "gossamerOnImpl"
+}
+
+// ---------------------------------------------------------------------------
+// Security module — CSP enforcement
+// ---------------------------------------------------------------------------
+
+module Security = {
+  /// Apply a Content-Security-Policy to the webview via IPC.
+  /// The CSP string should be a valid Content-Security-Policy directive.
+  let setCsp = (csp: string): promise<unit> =>
+    invoke("__gossamer_set_csp", {"csp": csp})
+}
+
+// ---------------------------------------------------------------------------
 // Tray module — system tray management
 // ---------------------------------------------------------------------------
 
