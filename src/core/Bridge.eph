@@ -14,9 +14,11 @@ fn open(webviewHandle: I64): I64 =
   __ffi("gossamer_channel_open", webviewHandle)
 
 // Bind a named command handler to the IPC channel. Borrows the channel.
-// FFI: gossamer_channel_bind(channel, name, callback) -> result
-fn bind(channelHandle: I64, name: String, callback: I64): I32 =
-  __ffi("gossamer_channel_bind", channelHandle, name, callback)
+// FFI: gossamer_channel_bind(channel, name, callback, user_data) -> result
+// user_data is passed through to callback on each invocation — enables
+// language bindings (Rust, etc.) to pass closure context through the C ABI.
+fn bind(channelHandle: I64, name: String, callback: I64, userData: I64): I32 =
+  __ffi("gossamer_channel_bind", channelHandle, name, callback, userData)
 
 // Close the IPC channel. CONSUMES the channel handle.
 // FFI: gossamer_channel_close(channel) -> void

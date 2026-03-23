@@ -187,9 +187,12 @@ channelOpen wv = do
 
 ||| Bind a named command handler to the IPC channel.
 ||| BORROWING operation on the channel.
+||| The AnyPtr parameters are: callback function pointer, user data pointer.
+||| user_data is passed through to the callback on each invocation,
+||| enabling language bindings (Rust, etc.) to pass closure context.
 export
 %foreign "C:gossamer_channel_bind, libgossamer"
-prim__channelBind : Bits64 -> String -> AnyPtr -> PrimIO Bits32
+prim__channelBind : Bits64 -> String -> AnyPtr -> AnyPtr -> PrimIO Bits32
 
 ||| Close the IPC channel.
 ||| CONSUMING operation — the channel handle is destroyed.

@@ -44,6 +44,15 @@ comptime {
     _ = @import("filesystem.zig");
 }
 
+// Groove discovery FFI functions (gossamer_groove_*).
+// Lightweight service discovery for composable integration.
+// Probes well-known ports for Burble (voice), Vext (integrity),
+// VeriSimDB (storage), Hypatia (scanning), PanLL (panels), and more.
+// Type safety enforced at the Idris2 ABI level (Groove.idr).
+comptime {
+    _ = @import("groove.zig");
+}
+
 // Version information
 const VERSION = "0.1.0";
 const BUILD_INFO = "Gossamer " ++ VERSION ++ " built with Zig " ++ @import("builtin").zig_version_string;
@@ -109,13 +118,22 @@ pub const GossamerHandle = struct {
     running: bool,
     /// Allocator used for this handle (for cleanup)
     allocator: std.mem.Allocator,
-    /// IPC callback bindings (name -> callback fn pointer)
-    bindings: std.StringHashMap(BindingCallback),
+    /// IPC callback bindings (name -> callback + user data)
+    bindings: std.StringHashMap(BindingEntry),
 };
 
 /// IPC callback function type (C ABI).
-/// Receives a JSON-encoded request string, returns a JSON-encoded response string.
-pub const BindingCallback = *const fn ([*:0]const u8) callconv(.c) [*:0]const u8;
+/// Receives a JSON-encoded request string and optional user data pointer,
+/// returns a JSON-encoded response string.
+/// The user_data parameter enables language bindings (Rust, etc.) to pass
+/// closure context through the C ABI without global state.
+pub const BindingCallback = *const fn ([*:0]const u8, ?*anyopaque) callconv(.c) [*:0]const u8;
+
+/// Entry in the IPC bindings map — pairs a callback with its user data.
+pub const BindingEntry = struct {
+    callback: BindingCallback,
+    user_data: ?*anyopaque,
+};
 
 /// Opaque channel handle.
 /// In v0.1, channels are lightweight wrappers around the webview's JS bridge.
@@ -171,7 +189,7 @@ export fn gossamer_create(
         .initialized = true,
         .running = false,
         .allocator = allocator,
-        .bindings = std.StringHashMap(BindingCallback).init(allocator),
+        .bindings = std.StringHashMap(BindingEntry).init(allocator),
     };
 
     clearError();
@@ -416,7 +434,8 @@ export fn gossamer_channel_open(handle_ptr: u64) u64 {
 export fn gossamer_channel_bind(
     channel_ptr: u64,
     name: [*:0]const u8,
-    callback: ?*const fn ([*:0]const u8) callconv(.c) [*:0]const u8,
+    callback: ?*const fn ([*:0]const u8, ?*anyopaque) callconv(.c) [*:0]const u8,
+    user_data: ?*anyopaque,
 ) Result {
     const channel = channelFromU64(channel_ptr) orelse {
         setError("Null channel handle");
@@ -440,8 +459,11 @@ export fn gossamer_channel_bind(
         return .out_of_memory;
     };
 
-    // Register the callback in the parent handle's bindings map
-    channel.parent.bindings.put(duped_name, cb) catch {
+    // Register the callback + user data in the parent handle's bindings map
+    channel.parent.bindings.put(duped_name, .{
+        .callback = cb,
+        .user_data = user_data,
+    }) catch {
         channel.allocator.free(duped_name);
         setError("Failed to register binding");
         return .out_of_memory;

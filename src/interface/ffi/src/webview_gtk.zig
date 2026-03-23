@@ -169,7 +169,7 @@ fn onWindowDestroy(_: ?*c.GtkWidget, _: ?*anyopaque) callconv(.c) void {
 /// Opaque reference to GossamerHandle from main.zig.
 /// We store this as userdata in the signal handler.
 const GossamerHandle = @import("main.zig").GossamerHandle;
-const BindingCallback = @import("main.zig").BindingCallback;
+const BindingEntry = @import("main.zig").BindingEntry;
 
 /// Register the WebKitGTK script message handler for IPC dispatch.
 ///
@@ -241,7 +241,7 @@ fn onIPCMessage(
     const payload = extractJsonField(msg_slice, "payload") orelse "";
 
     // Look up the binding by name
-    const callback: BindingCallback = handle.bindings.get(name) orelse {
+    const entry: BindingEntry = handle.bindings.get(name) orelse {
         sendIPCError(handle, id, "No handler bound for command");
         return;
     };
@@ -254,8 +254,8 @@ fn onIPCMessage(
     };
     defer allocator.free(payload_z);
 
-    // Invoke the callback
-    const response_ptr = callback(payload_z);
+    // Invoke the callback with user data
+    const response_ptr = entry.callback(payload_z, entry.user_data);
     const response = std.mem.span(response_ptr);
 
     // Send the response back to JavaScript

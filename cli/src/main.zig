@@ -48,12 +48,127 @@ extern fn gossamer_create(
 extern fn gossamer_navigate(handle: u64, url: [*:0]const u8) c_int;
 extern fn gossamer_load_html(handle: u64, html: [*:0]const u8) c_int;
 extern fn gossamer_channel_open(handle: u64) u64;
+extern fn gossamer_channel_bind(channel: u64, name: [*:0]const u8, cb: ?*const fn ([*:0]const u8, ?*anyopaque) callconv(.c) [*:0]const u8, user_data: ?*anyopaque) c_int;
+extern fn gossamer_eval(handle: u64, js: [*:0]const u8) c_int;
 extern fn gossamer_run(handle: u64) void;
 extern fn gossamer_destroy(handle: u64) void;
 extern fn gossamer_version() [*:0]const u8;
 extern fn gossamer_build_info() [*:0]const u8;
 extern fn gossamer_last_error() ?[*:0]const u8;
 extern fn gossamer_set_title(handle: u64, title: [*:0]const u8) c_int;
+
+//==============================================================================
+// Shell-exec IPC handler for OPSM runtime commands
+//==============================================================================
+
+/// Execute a shell command and return stdout as a JSON-escaped string.
+/// The payload is a JSON object: {"cmd":"list"} or {"cmd":"install","tool":"deno","version":"2.6.10"}
+fn shellExecHandler(payload: [*:0]const u8, _: ?*anyopaque) callconv(.c) [*:0]const u8 {
+    const allocator = std.heap.c_allocator;
+    const payload_slice = std.mem.span(payload);
+
+    // Minimal JSON parsing: extract "cmd" field
+    const cmd_str = extractSimpleJsonField(payload_slice, "cmd") orelse {
+        return @ptrCast(@constCast("{\"error\":\"missing cmd field\"}"));
+    };
+    const tool_str = extractSimpleJsonField(payload_slice, "tool");
+    const version_str = extractSimpleJsonField(payload_slice, "version");
+
+    // Build the opsm-runtime command
+    var cmd_buf: [2048]u8 = undefined;
+    var cmd_len: usize = 0;
+    const prefix = "opsm-runtime ";
+
+    @memcpy(cmd_buf[cmd_len..][0..prefix.len], prefix);
+    cmd_len += prefix.len;
+    @memcpy(cmd_buf[cmd_len..][0..cmd_str.len], cmd_str);
+    cmd_len += cmd_str.len;
+
+    if (tool_str) |t| {
+        cmd_buf[cmd_len] = ' ';
+        cmd_len += 1;
+        @memcpy(cmd_buf[cmd_len..][0..t.len], t);
+        cmd_len += t.len;
+    }
+    if (version_str) |v| {
+        cmd_buf[cmd_len] = ' ';
+        cmd_len += 1;
+        @memcpy(cmd_buf[cmd_len..][0..v.len], v);
+        cmd_len += v.len;
+    }
+    cmd_buf[cmd_len] = 0;
+
+    // Execute via /bin/sh
+    const result = std.process.Child.run(.{
+        .allocator = allocator,
+        .argv = &[_][]const u8{ "/bin/sh", "-c", cmd_buf[0..cmd_len] },
+    }) catch {
+        return @ptrCast(@constCast("{\"error\":\"exec failed\"}"));
+    };
+    defer allocator.free(result.stderr);
+
+    // Wrap stdout in JSON (escape newlines)
+    const stdout = result.stdout;
+    defer allocator.free(stdout);
+
+    // Build JSON response: {"output":"...","exit_code":0}
+    var resp_buf = allocator.alloc(u8, stdout.len * 2 + 64) catch {
+        return @ptrCast(@constCast("{\"error\":\"out of memory\"}"));
+    };
+    var pos: usize = 0;
+    const hdr = "{\"output\":\"";
+    @memcpy(resp_buf[pos..][0..hdr.len], hdr);
+    pos += hdr.len;
+
+    for (stdout) |ch| {
+        switch (ch) {
+            '\n' => { resp_buf[pos] = '\\'; resp_buf[pos + 1] = 'n'; pos += 2; },
+            '\r' => { resp_buf[pos] = '\\'; resp_buf[pos + 1] = 'r'; pos += 2; },
+            '"' => { resp_buf[pos] = '\\'; resp_buf[pos + 1] = '"'; pos += 2; },
+            '\\' => { resp_buf[pos] = '\\'; resp_buf[pos + 1] = '\\'; pos += 2; },
+            else => { resp_buf[pos] = ch; pos += 1; },
+        }
+    }
+
+    const exit_str = switch (result.term.Exited) {
+        0 => "\",\"exit_code\":0}",
+        else => "\",\"exit_code\":1}",
+    };
+    @memcpy(resp_buf[pos..][0..exit_str.len], exit_str);
+    pos += exit_str.len;
+    resp_buf[pos] = 0;
+
+    return @ptrCast(resp_buf.ptr);
+}
+
+/// Extract a simple string value from JSON like {"key":"value"}.
+/// Stack-only, no allocations. Returns null if not found.
+fn extractSimpleJsonField(json: []const u8, key: []const u8) ?[]const u8 {
+    // Search for "key":"
+    var i: usize = 0;
+    while (i + key.len + 4 < json.len) : (i += 1) {
+        if (json[i] == '"' and i + key.len + 1 < json.len) {
+            if (std.mem.eql(u8, json[i + 1 ..][0..key.len], key) and
+                json[i + 1 + key.len] == '"')
+            {
+                // Found "key" — now look for :"
+                var j = i + 1 + key.len + 1;
+                while (j < json.len and json[j] == ' ') : (j += 1) {}
+                if (j < json.len and json[j] == ':') {
+                    j += 1;
+                    while (j < json.len and json[j] == ' ') : (j += 1) {}
+                    if (j < json.len and json[j] == '"') {
+                        j += 1;
+                        const start = j;
+                        while (j < json.len and json[j] != '"') : (j += 1) {}
+                        return json[start..j];
+                    }
+                }
+            }
+        }
+    }
+    return null;
+}
 
 //==============================================================================
 // Config types (matching gossamer.conf.json schema)
@@ -207,7 +322,14 @@ fn cmdDev(allocator: std.mem.Allocator, config: Config) !void {
 
     const handle = @intFromPtr(handle_ptr.?);
     const channel = gossamer_channel_open(handle);
-    if (channel != 0) out("  \x1b[32m✓\x1b[0m IPC bridge injected\n", .{});
+    if (channel != 0) {
+        out("  \x1b[32m✓\x1b[0m IPC bridge injected\n", .{});
+
+        // Register shell-exec handler for OPSM runtime commands.
+        // JS calls: gossamer.ipc.invoke('opsm_runtime', {cmd:'list'})
+        _ = gossamer_channel_bind(channel, "opsm_runtime", &shellExecHandler, null);
+        out("  \x1b[32m✓\x1b[0m OPSM runtime handler bound\n", .{});
+    }
 
     const url_z = try allocator.dupeZ(u8, config.dev_url);
     defer allocator.free(url_z);

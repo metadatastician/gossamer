@@ -108,7 +108,7 @@ test "channel_open with null handle returns 0" {
 }
 
 test "channel_bind with null channel returns null_pointer" {
-    const result = gossamer.gossamer_channel_bind(0, "test", null);
+    const result = gossamer.gossamer_channel_bind(0, "test", null, null);
     try testing.expectEqual(Result.null_pointer, result);
 }
 
