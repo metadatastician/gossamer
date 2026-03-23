@@ -941,3 +941,98 @@ test "capability grant rejects invalid resource kind" {
     const token = gossamer_cap_grant(99); // Invalid kind
     try std.testing.expectEqual(@as(u64, 0), token);
 }
+
+test "async_ipc acquire and release slots" {
+    // Reset state from any previous tests
+    async_ipc.reset();
+    try std.testing.expectEqual(@as(u32, 0), async_ipc.inflightCount());
+
+    // Acquire a slot
+    const slot0 = async_ipc.acquireSlot();
+    try std.testing.expect(slot0 != null);
+    try std.testing.expectEqual(@as(u32, 1), async_ipc.inflightCount());
+
+    // Acquire another
+    const slot1 = async_ipc.acquireSlot();
+    try std.testing.expect(slot1 != null);
+    try std.testing.expect(slot0.? != slot1.?);
+    try std.testing.expectEqual(@as(u32, 2), async_ipc.inflightCount());
+
+    // Release first slot
+    async_ipc.releaseSlot(slot0.?);
+    try std.testing.expectEqual(@as(u32, 1), async_ipc.inflightCount());
+
+    // Release second slot
+    async_ipc.releaseSlot(slot1.?);
+    try std.testing.expectEqual(@as(u32, 0), async_ipc.inflightCount());
+
+    // Clean up
+    async_ipc.reset();
+}
+
+test "async_ipc rejects when all slots occupied" {
+    async_ipc.reset();
+
+    // Fill all 256 slots
+    var acquired: [256]usize = undefined;
+    for (&acquired, 0..) |*slot, i| {
+        const s = async_ipc.acquireSlot();
+        try std.testing.expect(s != null);
+        slot.* = s.?;
+        _ = i;
+    }
+    try std.testing.expectEqual(@as(u32, 256), async_ipc.inflightCount());
+
+    // Next acquire should fail (back-pressure)
+    const overflow = async_ipc.acquireSlot();
+    try std.testing.expect(overflow == null);
+
+    // Release one and re-acquire should work
+    async_ipc.releaseSlot(acquired[100]);
+    try std.testing.expectEqual(@as(u32, 255), async_ipc.inflightCount());
+
+    const reacquired = async_ipc.acquireSlot();
+    try std.testing.expect(reacquired != null);
+    try std.testing.expectEqual(@as(u32, 256), async_ipc.inflightCount());
+
+    // Clean up
+    async_ipc.reset();
+}
+
+test "async_ipc double release is safe" {
+    async_ipc.reset();
+
+    const slot = async_ipc.acquireSlot().?;
+    async_ipc.releaseSlot(slot);
+    try std.testing.expectEqual(@as(u32, 0), async_ipc.inflightCount());
+
+    // Double release should not underflow
+    async_ipc.releaseSlot(slot);
+    try std.testing.expectEqual(@as(u32, 0), async_ipc.inflightCount());
+
+    async_ipc.reset();
+}
+
+test "async_ipc release out of bounds is safe" {
+    async_ipc.reset();
+
+    // Releasing an invalid index should not crash
+    async_ipc.releaseSlot(999);
+    async_ipc.releaseSlot(256);
+    try std.testing.expectEqual(@as(u32, 0), async_ipc.inflightCount());
+
+    async_ipc.reset();
+}
+
+test "BindingEntry defaults to synchronous" {
+    const entry = BindingEntry{
+        .callback = undefined,
+        .user_data = null,
+    };
+    try std.testing.expect(!entry.run_async);
+}
+
+test "async inflight count export returns zero initially" {
+    async_ipc.reset();
+    try std.testing.expectEqual(@as(u32, 0), gossamer_async_inflight_count());
+}

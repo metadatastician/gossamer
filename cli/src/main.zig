@@ -49,6 +49,7 @@ extern fn gossamer_navigate(handle: u64, url: [*:0]const u8) c_int;
 extern fn gossamer_load_html(handle: u64, html: [*:0]const u8) c_int;
 extern fn gossamer_channel_open(handle: u64) u64;
 extern fn gossamer_channel_bind(channel: u64, name: [*:0]const u8, cb: ?*const fn ([*:0]const u8, ?*anyopaque) callconv(.c) [*:0]const u8, user_data: ?*anyopaque) c_int;
+extern fn gossamer_channel_bind_async(channel: u64, name: [*:0]const u8, cb: ?*const fn ([*:0]const u8, ?*anyopaque) callconv(.c) [*:0]const u8, user_data: ?*anyopaque) c_int;
 extern fn gossamer_eval(handle: u64, js: [*:0]const u8) c_int;
 extern fn gossamer_run(handle: u64) void;
 extern fn gossamer_destroy(handle: u64) void;
@@ -325,10 +326,12 @@ fn cmdDev(allocator: std.mem.Allocator, config: Config) !void {
     if (channel != 0) {
         out("  \x1b[32m✓\x1b[0m IPC bridge injected\n", .{});
 
-        // Register shell-exec handler for OPSM runtime commands.
+        // Register shell-exec handler for OPSM runtime commands (async).
+        // Uses async dispatch because shell commands do I/O and would
+        // block the GTK event loop if run synchronously.
         // JS calls: gossamer.ipc.invoke('opsm_runtime', {cmd:'list'})
-        _ = gossamer_channel_bind(channel, "opsm_runtime", &shellExecHandler, null);
-        out("  \x1b[32m✓\x1b[0m OPSM runtime handler bound\n", .{});
+        _ = gossamer_channel_bind_async(channel, "opsm_runtime", &shellExecHandler, null);
+        out("  \x1b[32m✓\x1b[0m OPSM runtime handler bound (async)\n", .{});
     }
 
     const url_z = try allocator.dupeZ(u8, config.dev_url);

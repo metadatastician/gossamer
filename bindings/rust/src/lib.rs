@@ -65,7 +65,14 @@ extern "C" {
         callback: Option<extern "C" fn(*const c_char, *mut c_void) -> *const c_char>,
         user_data: *mut c_void,
     ) -> c_int;
+    fn gossamer_channel_bind_async(
+        channel: u64,
+        name: *const c_char,
+        callback: Option<extern "C" fn(*const c_char, *mut c_void) -> *const c_char>,
+        user_data: *mut c_void,
+    ) -> c_int;
     fn gossamer_channel_close(channel: u64);
+    fn gossamer_async_inflight_count() -> u32;
 
     fn gossamer_cap_grant(resource_kind: u32) -> u64;
     fn gossamer_cap_check(token: u64) -> c_int;
@@ -384,6 +391,60 @@ impl App {
                 ctx_ptr as *mut c_void,
             );
         }
+    }
+
+    /// Register a command handler that runs ASYNCHRONOUSLY on a worker thread.
+    ///
+    /// Identical to `command()` except the handler is dispatched off the GTK
+    /// main thread. Use this for I/O-heavy operations (HTTP, filesystem, DB)
+    /// that would otherwise block the UI event loop and freeze the window.
+    ///
+    /// The handler signature is identical to `command()` — the async dispatch
+    /// is handled internally by Gossamer's IPC layer.
+    ///
+    /// Maximum 256 inflight async calls at any time; additional calls will
+    /// be rejected with an error sent back to JavaScript.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// app.command_async("fetch_data", |payload| {
+    ///     let url = payload["url"].as_str().ok_or("missing url")?;
+    ///     let body = ureq::get(url).call().map_err(|e| e.to_string())?
+    ///         .into_string().map_err(|e| e.to_string())?;
+    ///     Ok(serde_json::json!({ "body": body }))
+    /// });
+    /// ```
+    pub fn command_async<F>(&mut self, name: &str, handler: F)
+    where
+        F: Fn(serde_json::Value) -> Result<serde_json::Value, String> + Send + 'static,
+    {
+        let ctx = Box::new(CommandContext {
+            handler: Box::new(handler),
+        });
+
+        // Leak the context to get a stable pointer for the C ABI
+        let ctx_ptr = Box::into_raw(ctx);
+        self._contexts.push(ctx_ptr);
+
+        let name_c = CString::new(name).expect("command name must not contain null bytes");
+
+        // SAFETY: channel is valid, name_c is null-terminated, ctx_ptr is stable
+        unsafe {
+            gossamer_channel_bind_async(
+                self.channel,
+                name_c.as_ptr(),
+                Some(command_trampoline),
+                ctx_ptr as *mut c_void,
+            );
+        }
+    }
+
+    /// Query the number of currently inflight async IPC calls (0..256).
+    /// Useful for diagnostics, back-pressure monitoring, and graceful shutdown.
+    pub fn async_inflight_count() -> u32 {
+        // SAFETY: read-only FFI call, always safe
+        unsafe { gossamer_async_inflight_count() }
     }
 
     /// Load HTML content into the webview.

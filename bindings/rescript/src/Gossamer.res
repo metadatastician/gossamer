@@ -51,6 +51,10 @@ let version = (): promise<string> => invoke("__gossamer_version", ())
 /// Get the Gossamer build info string.
 let buildInfo = (): promise<string> => invoke("__gossamer_build_info", ())
 
+/// Get the number of currently inflight async IPC calls (0..256).
+/// Useful for diagnostics, back-pressure monitoring, and graceful shutdown.
+let asyncInflightCount = (): promise<int> => invoke("__gossamer_async_inflight_count", ())
+
 // ---------------------------------------------------------------------------
 // Dialog module — file open/save dialogs
 // ---------------------------------------------------------------------------
