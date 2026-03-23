@@ -3,6 +3,17 @@
 // Provides the platform-specific webview operations for Linux using
 // GTK 3 and WebKitGTK. This is the Phase 1 implementation.
 //
+// Async IPC Architecture (2026-03-23):
+//   When a JS __gossamer_invoke() arrives, the IPC handler runs on the GTK
+//   main thread. For commands registered with gossamer_channel_bind_async(),
+//   the callback is dispatched to a worker thread (std.Thread.spawn).
+//   When the worker completes, g_idle_add() posts the response back to the
+//   GTK main thread for JS evaluation. This prevents I/O-heavy callbacks
+//   (HTTP, file reads, database queries) from blocking the UI event loop.
+//
+//   Synchronous commands (registered via gossamer_channel_bind) still run
+//   inline on the main thread for zero-overhead fast paths.
+//
 // Dependencies (system packages):
 //   Fedora: gtk3-devel webkit2gtk4.1-devel
 //   Debian: libgtk-3-dev libwebkit2gtk-4.1-dev
@@ -163,21 +174,24 @@ fn onWindowDestroy(_: ?*c.GtkWidget, _: ?*anyopaque) callconv(.c) void {
 }
 
 //==============================================================================
-// IPC Message Handler
+// IPC Message Handler — Async-Capable Dispatch
 //==============================================================================
 
 /// Opaque reference to GossamerHandle from main.zig.
 /// We store this as userdata in the signal handler.
 const GossamerHandle = @import("main.zig").GossamerHandle;
 const BindingEntry = @import("main.zig").BindingEntry;
+const async_ipc = @import("main.zig").async_ipc;
 
 /// Register the WebKitGTK script message handler for IPC dispatch.
 ///
 /// Sets up a `gossamer_ipc` message handler on the WebKitUserContentManager.
 /// When JavaScript calls `window.webkit.messageHandlers.gossamer_ipc.postMessage(msg)`,
 /// the handler parses the JSON `{id, name, payload}`, looks up the command name
-/// in the parent handle's bindings map, invokes the callback, and sends the
-/// result back to JavaScript via `window.__gossamer_callbacks[id].resolve(result)`.
+/// in the parent handle's bindings map, and either:
+///   - (sync)  invokes the callback inline and sends the response immediately
+///   - (async) spawns a worker thread, invokes the callback off the GTK thread,
+///             then posts the response back via g_idle_add for JS evaluation
 pub fn registerIPCHandler(state: *WebviewState, handle: *GossamerHandle) PlatformError!void {
     // Get the user content manager from the webview
     const webview_wk: *c.WebKitWebView = @ptrCast(state.webview);
@@ -203,13 +217,38 @@ pub fn registerIPCHandler(state: *WebviewState, handle: *GossamerHandle) Platfor
     );
 }
 
+/// Context passed to a worker thread for async IPC dispatch.
+/// Heap-allocated, owned by the worker thread. Freed after the
+/// g_idle_add callback delivers the response to the GTK main thread.
+const AsyncIPCContext = struct {
+    /// Owning allocator (for self-cleanup)
+    allocator: std.mem.Allocator,
+    /// Back-reference to the webview handle (for JS eval on main thread)
+    handle: *GossamerHandle,
+    /// Call ID from JavaScript (heap-duped, owned)
+    id: []u8,
+    /// Null-terminated payload string (heap-duped, owned)
+    payload_z: [:0]u8,
+    /// The callback to invoke
+    callback: @import("main.zig").BindingCallback,
+    /// User data to pass to the callback
+    user_data: ?*anyopaque,
+    /// Inflight slot index for cleanup after completion
+    inflight_slot: usize,
+    /// Response from the callback (set by worker, read by idle callback)
+    response: ?[]const u8 = null,
+    /// Error message if something went wrong (set by worker)
+    err_msg: ?[]const u8 = null,
+};
+
 /// IPC message signal handler.
 ///
 /// Called by WebKitGTK when JavaScript posts a message via
 /// `window.webkit.messageHandlers.gossamer_ipc.postMessage(msg)`.
 ///
 /// The message is a JSON string: `{"id":"abc","name":"load_level","payload":"{...}"}`
-/// We parse it, dispatch to the bound callback, and send the response back.
+/// We parse it, dispatch to the bound callback (sync or async), and send
+/// the response back.
 fn onIPCMessage(
     _: ?*anyopaque, // WebKitUserContentManager (unused)
     result: ?*c.WebKitJavascriptResult,
@@ -246,8 +285,68 @@ fn onIPCMessage(
         return;
     };
 
-    // Allocate a null-terminated payload string for the C ABI callback
     const allocator = std.heap.c_allocator;
+
+    // ─── Async dispatch path ───
+    // If the binding is marked async, spawn a worker thread so the
+    // GTK event loop is not blocked by I/O-heavy callbacks.
+    if (entry.run_async) {
+        // Try to acquire an inflight slot (bounded at MAX_INFLIGHT_ASYNC)
+        const slot = async_ipc.acquireSlot() orelse {
+            sendIPCError(handle, id, "Too many inflight async IPC calls (max 256)");
+            return;
+        };
+
+        // Heap-allocate context for the worker thread
+        const ctx = allocator.create(AsyncIPCContext) catch {
+            async_ipc.releaseSlot(slot);
+            sendIPCError(handle, id, "Out of memory allocating async context");
+            return;
+        };
+
+        // Duplicate id and payload — the original slices reference GLib memory
+        // that will be freed when this signal handler returns.
+        const id_duped = allocator.dupe(u8, id) catch {
+            allocator.destroy(ctx);
+            async_ipc.releaseSlot(slot);
+            sendIPCError(handle, id, "Out of memory");
+            return;
+        };
+        const payload_duped = allocator.dupeZ(u8, payload) catch {
+            allocator.free(id_duped);
+            allocator.destroy(ctx);
+            async_ipc.releaseSlot(slot);
+            sendIPCError(handle, id, "Out of memory");
+            return;
+        };
+
+        ctx.* = .{
+            .allocator = allocator,
+            .handle = handle,
+            .id = id_duped,
+            .payload_z = payload_duped,
+            .callback = entry.callback,
+            .user_data = entry.user_data,
+            .inflight_slot = slot,
+        };
+
+        // Spawn worker thread — the callback runs off the GTK main thread
+        _ = std.Thread.spawn(.{}, asyncWorkerFn, .{ctx}) catch {
+            allocator.free(payload_duped);
+            allocator.free(id_duped);
+            allocator.destroy(ctx);
+            async_ipc.releaseSlot(slot);
+            sendIPCError(handle, id, "Failed to spawn worker thread");
+            return;
+        };
+
+        // The worker thread owns ctx from here. Response will arrive via
+        // g_idle_add when the callback completes.
+        return;
+    }
+
+    // ─── Synchronous dispatch path (original behaviour) ───
+    // Fast commands run inline on the GTK main thread.
     const payload_z = allocator.dupeZ(u8, payload) catch {
         sendIPCError(handle, id, "Out of memory");
         return;
@@ -260,6 +359,51 @@ fn onIPCMessage(
 
     // Send the response back to JavaScript
     sendIPCResponse(handle, id, response);
+}
+
+/// Worker function that runs on a spawned thread for async IPC dispatch.
+/// Invokes the registered callback, then schedules response delivery
+/// on the GTK main thread via g_idle_add.
+fn asyncWorkerFn(ctx: *AsyncIPCContext) void {
+    // Invoke the callback — this can block (I/O, HTTP, DB queries, etc.)
+    // without affecting the GTK event loop.
+    const response_ptr = ctx.callback(ctx.payload_z, ctx.user_data);
+    ctx.response = std.mem.span(response_ptr);
+
+    // Schedule response delivery on the GTK main thread.
+    // g_idle_add is thread-safe and will call asyncIdleCallback
+    // during the next idle iteration of the GLib main loop.
+    _ = c.g_idle_add(@ptrCast(&asyncIdleCallback), @ptrCast(ctx));
+}
+
+/// GLib idle callback — runs on the GTK main thread.
+/// Delivers the async IPC response to JavaScript and cleans up.
+///
+/// Returns G_SOURCE_REMOVE (0) so GLib removes the idle source after
+/// a single invocation.
+fn asyncIdleCallback(user_data: ?*anyopaque) callconv(.c) c_int {
+    const ctx: *AsyncIPCContext = @ptrCast(@alignCast(user_data orelse return 0));
+    const allocator = ctx.allocator;
+
+    // Deliver the response or error to JavaScript
+    if (ctx.err_msg) |err_msg| {
+        sendIPCError(ctx.handle, ctx.id, err_msg);
+    } else if (ctx.response) |response| {
+        sendIPCResponse(ctx.handle, ctx.id, response);
+    } else {
+        sendIPCError(ctx.handle, ctx.id, "Async callback returned null");
+    }
+
+    // Release the inflight slot
+    async_ipc.releaseSlot(ctx.inflight_slot);
+
+    // Clean up heap-allocated context
+    allocator.free(ctx.payload_z);
+    allocator.free(ctx.id);
+    allocator.destroy(ctx);
+
+    // G_SOURCE_REMOVE — do not call again
+    return 0;
 }
 
 /// Send a success response back to the JavaScript IPC bridge.

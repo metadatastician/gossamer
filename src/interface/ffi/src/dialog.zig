@@ -204,6 +204,7 @@ fn runFileChooserDialog(
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__dialogOpen
 export fn gossamer_dialog_open(title: [*:0]const u8, filters: [*:0]const u8) u64 {
+    clearError();
     return runFileChooserDialog(
         title,
         filters,
@@ -224,6 +225,7 @@ export fn gossamer_dialog_open(title: [*:0]const u8, filters: [*:0]const u8) u64
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__dialogSave
 export fn gossamer_dialog_save(title: [*:0]const u8, filters: [*:0]const u8) u64 {
+    clearError();
     return runFileChooserDialog(
         title,
         filters,
@@ -243,6 +245,7 @@ export fn gossamer_dialog_save(title: [*:0]const u8, filters: [*:0]const u8) u64
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__dialogOpenDirectory
 export fn gossamer_dialog_open_directory(title: [*:0]const u8) u64 {
+    clearError();
     return runFileChooserDialog(
         title,
         "", // No file filters for directory selection
@@ -264,6 +267,7 @@ export fn gossamer_dialog_open_directory(title: [*:0]const u8) u64 {
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__dialogOpenMultiple
 export fn gossamer_dialog_open_multiple(title: [*:0]const u8, filters: [*:0]const u8) u64 {
+    clearError();
     if (!ensureGtkInit()) {
         setError("GTK not initialised — cannot show file dialog");
         return 0;

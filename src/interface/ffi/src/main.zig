@@ -130,9 +130,54 @@ pub const GossamerHandle = struct {
 pub const BindingCallback = *const fn ([*:0]const u8, ?*anyopaque) callconv(.c) [*:0]const u8;
 
 /// Entry in the IPC bindings map — pairs a callback with its user data.
+/// The `run_async` flag controls dispatch behaviour:
+///   false (default) — callback runs synchronously on the GTK main thread
+///   true            — callback is spawned on a worker thread; response is
+///                     delivered back to JS via g_idle_add when it completes
 pub const BindingEntry = struct {
     callback: BindingCallback,
     user_data: ?*anyopaque,
+    /// When true, the callback is dispatched to a worker thread so that
+    /// I/O-heavy operations do not block the GTK event loop.
+    run_async: bool = false,
+};
+
+//==============================================================================
+// Async IPC Inflight Tracking
+//==============================================================================
+
+/// Maximum number of concurrent async IPC calls.
+/// Prevents unbounded thread spawning from rapid-fire JS invocations.
+const MAX_INFLIGHT_ASYNC = 256;
+
+/// Inflight async IPC slot tracker.
+/// Exported as `async_ipc` so that webview_gtk.zig can acquire/release slots.
+pub const async_ipc = struct {
+    /// Bitmap of occupied slots (1 = occupied, 0 = free).
+    var slots: [MAX_INFLIGHT_ASYNC]bool = [_]bool{false} ** MAX_INFLIGHT_ASYNC;
+    /// Number of currently occupied slots.
+    var count: usize = 0;
+
+    /// Acquire a free slot index, or return null if all slots are occupied.
+    pub fn acquireSlot() ?usize {
+        if (count >= MAX_INFLIGHT_ASYNC) return null;
+        for (&slots, 0..) |*slot, i| {
+            if (!slot.*) {
+                slot.* = true;
+                count += 1;
+                return i;
+            }
+        }
+        return null; // Should not reach here given the count check
+    }
+
+    /// Release a previously acquired slot.
+    pub fn releaseSlot(index: usize) void {
+        if (index < MAX_INFLIGHT_ASYNC and slots[index]) {
+            slots[index] = false;
+            if (count > 0) count -= 1;
+        }
+    }
 };
 
 /// Opaque channel handle.
@@ -164,6 +209,7 @@ export fn gossamer_create(
     decorations: u8,
     fullscreen: u8,
 ) ?*GossamerHandle {
+    clearError();
     const allocator = std.heap.c_allocator;
 
     const handle = allocator.create(GossamerHandle) catch {
@@ -200,6 +246,7 @@ export fn gossamer_create(
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__loadHTML
 export fn gossamer_load_html(handle_ptr: u64, html: [*:0]const u8) Result {
+    clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
         return .null_pointer;
@@ -223,6 +270,7 @@ export fn gossamer_load_html(handle_ptr: u64, html: [*:0]const u8) Result {
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__navigate
 export fn gossamer_navigate(handle_ptr: u64, url: [*:0]const u8) Result {
+    clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
         return .null_pointer;
@@ -246,6 +294,7 @@ export fn gossamer_navigate(handle_ptr: u64, url: [*:0]const u8) Result {
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__eval
 export fn gossamer_eval(handle_ptr: u64, js: [*:0]const u8) Result {
+    clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
         return .null_pointer;
@@ -269,6 +318,7 @@ export fn gossamer_eval(handle_ptr: u64, js: [*:0]const u8) Result {
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__setTitle
 export fn gossamer_set_title(handle_ptr: u64, title: [*:0]const u8) Result {
+    clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
         return .null_pointer;
@@ -292,6 +342,7 @@ export fn gossamer_set_title(handle_ptr: u64, title: [*:0]const u8) Result {
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__resize
 export fn gossamer_resize(handle_ptr: u64, width: u32, height: u32) Result {
+    clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
         return .null_pointer;
@@ -316,6 +367,7 @@ export fn gossamer_resize(handle_ptr: u64, width: u32, height: u32) Result {
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__run
 export fn gossamer_run(handle_ptr: u64) void {
+    clearError();
     const handle = ptrFromU64(handle_ptr) orelse return;
 
     if (!handle.initialized) return;
@@ -332,6 +384,7 @@ export fn gossamer_run(handle_ptr: u64) void {
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__destroy
 export fn gossamer_destroy(handle_ptr: u64) void {
+    clearError();
     const handle = ptrFromU64(handle_ptr) orelse return;
     cleanup(handle);
 }
@@ -345,6 +398,7 @@ export fn gossamer_destroy(handle_ptr: u64) void {
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__channelOpen
 export fn gossamer_channel_open(handle_ptr: u64) u64 {
+    clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
         return 0;
@@ -437,6 +491,7 @@ export fn gossamer_channel_bind(
     callback: ?*const fn ([*:0]const u8, ?*anyopaque) callconv(.c) [*:0]const u8,
     user_data: ?*anyopaque,
 ) Result {
+    clearError();
     const channel = channelFromU64(channel_ptr) orelse {
         setError("Null channel handle");
         return .null_pointer;
@@ -477,6 +532,7 @@ export fn gossamer_channel_bind(
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__channelClose
 export fn gossamer_channel_close(channel_ptr: u64) void {
+    clearError();
     const raw_ptr = @as(?*ChannelHandle, @ptrFromInt(@as(usize, @intCast(channel_ptr)))) orelse return;
     raw_ptr.open = false;
     raw_ptr.allocator.destroy(raw_ptr);
@@ -527,6 +583,7 @@ var revoked_count: usize = 0;
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__capGrant
 pub export fn gossamer_cap_grant(resource_kind: u32) u64 {
+    clearError();
     // Validate resource kind (0..5 matches Types.idr ResourceKind constructors)
     if (resource_kind > 5) {
         setError("Invalid resource kind (must be 0-5)");
@@ -535,7 +592,7 @@ pub export fn gossamer_cap_grant(resource_kind: u32) u64 {
 
     // Check capacity
     if (cap_count >= MAX_CAPABILITIES) {
-        setError("Capability registry full");
+        setError("Capability registry full (256 slots)");
         return 0;
     }
 
@@ -571,6 +628,7 @@ pub export fn gossamer_cap_grant(resource_kind: u32) u64 {
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__capCheck
 pub export fn gossamer_cap_check(token: u64) Result {
+    clearError();
     if (token == 0) {
         setError("Invalid capability token (null)");
         return .capability_denied;
@@ -602,6 +660,7 @@ pub export fn gossamer_cap_check(token: u64) Result {
 /// This allows callers to verify a token grants the expected permission
 /// without exposing the full registry.
 pub export fn gossamer_cap_resource_kind(token: u64) u32 {
+    clearError();
     if (token == 0) return 0xFFFFFFFF;
 
     for (cap_registry[0..]) |entry| {
@@ -616,6 +675,7 @@ pub export fn gossamer_cap_resource_kind(token: u64) u32 {
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__capRevoke
 export fn gossamer_cap_revoke(token: u64) void {
+    clearError();
     if (token == 0) return;
 
     // Remove from active registry
