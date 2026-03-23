@@ -5,7 +5,8 @@
 //
 // Usage:
 //   zig build                         # Build for current platform
-//   zig build test                    # Run unit tests
+//   zig build test                    # Run unit tests (headless)
+//   zig build test-display            # Run display integration tests (needs X11/Xvfb)
 //   zig build -Doptimize=ReleaseSafe  # Optimised build with safety checks
 //
 // Cross-compilation examples:
@@ -117,6 +118,43 @@ pub fn build(b: *std.Build) void {
     const run_unit_tests = b.addRunArtifact(unit_tests);
     const test_step = b.step("test", "Run Gossamer unit tests");
     test_step.dependOn(&run_unit_tests.step);
+
+    // --- Display integration tests (require X11/Wayland/Xvfb) ---
+    // These tests exercise real GTK/WebKitGTK webview creation, HTML loading,
+    // navigation, IPC channel setup, and capability lifecycle.
+    //
+    // Run via: zig build test-display (with a display server)
+    //     or: xvfb-run -a zig build test-display (headless CI)
+    //     or: ./scripts/test-with-display.sh (auto-detect)
+    // Create a module for the main gossamer source so display tests can import it
+    const gossamer_module = b.createModule(.{
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+
+    linkPlatformLibs(gossamer_module, os);
+
+    const display_test_module = b.createModule(.{
+        .root_source_file = b.path("test/display_test.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .imports = &.{
+            .{ .name = "gossamer", .module = gossamer_module },
+        },
+    });
+
+    linkPlatformLibs(display_test_module, os);
+
+    const display_tests = b.addTest(.{
+        .root_module = display_test_module,
+    });
+
+    const run_display_tests = b.addRunArtifact(display_tests);
+    const display_test_step = b.step("test-display", "Run Gossamer display integration tests (requires X11/Wayland/Xvfb)");
+    display_test_step.dependOn(&run_display_tests.step);
 }
 
 const builtin = @import("builtin");
