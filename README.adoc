@@ -8,6 +8,7 @@ image:https://img.shields.io/github/v/release/hyperpolymath/gossamer[Release,lin
 image:https://img.shields.io/badge/FFI-Zig-orange.svg[Zig FFI]
 image:https://api.securityscorecards.dev/projects/github.com/hyperpolymath/gossamer/badge[OpenSSF Scorecard,link="https://securityscorecards.dev/viewer/?uri=github.com/hyperpolymath/gossamer"]
 image:https://img.shields.io/badge/ABI-Idris2-purple.svg[Idris2 ABI]
+image:https://api.thegreenwebfoundation.org/greencheckimage/jewell.nexus[Green Hosting,link="https://www.thegreenwebfoundation.org/green-web-check/?url=jewell.nexus"]
 
 *Build desktop apps that can't leak resources. By design, not by discipline.*
 
