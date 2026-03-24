@@ -2,6 +2,7 @@
 :toc: macro
 :toclevels: 2
 
+image:https://img.shields.io/badge/OpenSSF-Best_Practices-green?logo=opensourcesecurity[OpenSSF Best Practices,link="https://www.bestpractices.dev/en/projects/new?repo_url=https://github.com/hyperpolymath/gossamer"]
 image:https://img.shields.io/badge/License-PMPL--1.0-blue.svg[License: PMPL-1.0,link="https://github.com/hyperpolymath/palimpsest-license"]
 image:https://img.shields.io/github/v/release/hyperpolymath/gossamer[Release,link="https://github.com/hyperpolymath/gossamer/releases"]
 image:https://img.shields.io/badge/FFI-Zig-orange.svg[Zig FFI]

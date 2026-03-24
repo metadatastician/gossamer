@@ -140,3 +140,160 @@ deps:
 # Run panic-attacker pre-commit scan
 assail:
     @command -v panic-attack >/dev/null 2>&1 && panic-attack assail . || echo "panic-attack not found — install from https://github.com/hyperpolymath/panic-attacker"
+
+# ── Onboarding ────────────────────────────────────────────────────────────
+
+# Check all required tools are installed
+doctor:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ok=0; fail=0
+    check() {
+        if "$@" >/dev/null 2>&1; then
+            echo "  [ok] $1"
+            ((ok++))
+        else
+            echo "  [MISSING] $1 — $2"
+            ((fail++))
+        fi
+    }
+    echo "=== Gossamer Doctor ==="
+    echo "--- Core (required) ---"
+    check zig version "asdf install zig 0.14.0"
+    check pkg-config --version "sudo dnf install pkg-config"
+    check just --version "cargo install just"
+    if pkg-config --exists gtk+-3.0 2>/dev/null; then
+        echo "  [ok] gtk3 (pkg-config)"
+        ((ok++))
+    else
+        echo "  [MISSING] gtk3-devel — sudo dnf install gtk3-devel"
+        ((fail++))
+    fi
+    if pkg-config --exists webkit2gtk-4.1 2>/dev/null; then
+        echo "  [ok] webkit2gtk-4.1 (pkg-config)"
+        ((ok++))
+    else
+        echo "  [MISSING] webkit2gtk4.1-devel — sudo dnf install webkit2gtk4.1-devel"
+        ((fail++))
+    fi
+    echo ""
+    echo "--- Ephapax (for .eph type checking) ---"
+    if [ -x "$(eval echo {{ephapax}})" ]; then
+        echo "  [ok] ephapax compiler"
+        ((ok++))
+    else
+        echo "  [MISSING] ephapax — cd ~/Documents/hyperpolymath-repos/ephapax && cargo build -p ephapax-cli"
+        ((fail++))
+    fi
+    echo ""
+    echo "--- Optional ---"
+    if command -v idris2 >/dev/null 2>&1; then
+        echo "  [ok] idris2 (ABI definitions)"
+        ((ok++))
+    else
+        echo "  [info] idris2 not found (optional — for ABI layer)"
+    fi
+    echo ""
+    echo "Result: $ok passed, $fail failed"
+    if [ "$fail" -gt 0 ]; then
+        echo "Fix the MISSING items above, then re-run: just doctor"
+        exit 1
+    else
+        echo "All prerequisites satisfied."
+    fi
+
+# Auto-install missing tools where possible
+heal:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "=== Gossamer Heal ==="
+    if ! command -v zig &>/dev/null; then
+        echo "Installing Zig via asdf..."
+        asdf install zig 0.14.0 || echo "Try: asdf plugin add zig && asdf install zig 0.14.0"
+    fi
+    if ! command -v just &>/dev/null; then
+        echo "Installing just..."
+        cargo install just
+    fi
+    if ! pkg-config --exists gtk+-3.0 2>/dev/null; then
+        echo "GTK3 missing — run: sudo dnf install gtk3-devel"
+    fi
+    if ! pkg-config --exists webkit2gtk-4.1 2>/dev/null; then
+        echo "WebKit2GTK missing — run: sudo dnf install webkit2gtk4.1-devel"
+    fi
+    if ! [ -x "$(eval echo {{ephapax}})" ]; then
+        echo "Ephapax missing — build it:"
+        echo "  cd ~/Documents/hyperpolymath-repos/ephapax && cargo build -p ephapax-cli"
+    fi
+    echo ""
+    echo "Re-run 'just doctor' to verify."
+
+# Guided tour of the codebase
+tour:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "=== Gossamer Tour ==="
+    echo ""
+    echo "1. WHAT IS GOSSAMER?"
+    echo "   A linearly-typed webview shell. Think Electron/Tauri but with"
+    echo "   linear types guaranteeing no resource leaks."
+    echo ""
+    echo "2. ARCHITECTURE"
+    echo "   src/interface/abi/*.idr   Idris2 ABI (formal spec)"
+    echo "   src/interface/ffi/        Zig FFI (C-ABI implementation)"
+    echo "   src/core/*.eph            Ephapax application modules"
+    echo "   cli/                      Gossamer CLI binary"
+    echo "   examples/                 Example applications"
+    echo ""
+    echo "3. BUILD & RUN"
+    echo "   just build-ffi   Build libgossamer.so/.a"
+    echo "   just build-cli   Build gossamer CLI"
+    echo "   just hello       Run the hello example"
+    echo ""
+    echo "4. LINEAR TYPES"
+    echo "   WebviewHandle, Channel, Cap are linear."
+    echo "   Borrow = returns handle. Consume = destroys it."
+    echo "   MkCap is NOT exported (framework-only)."
+    echo ""
+    echo "5. TESTING"
+    echo "   just test-ffi           Zig unit tests"
+    echo "   just test-conformance   Linear type conformance"
+    echo "   just test-integration   Integration tests"
+    echo ""
+    echo "6. FFI SYMBOLS"
+    echo "   just symbols      List exported gossamer_* functions"
+    echo "   just symbol-count Count them (19+ expected)"
+    echo ""
+    echo "7. KEY FILES"
+    echo "   0-AI-MANIFEST.a2ml     Project manifest"
+    echo "   conformance/           Linear type test suite"
+    echo "   src/interface/ffi/     The real implementation"
+    echo ""
+    echo "Run 'just' to see all available recipes."
+
+# What to do when things go wrong
+help-me:
+    #!/usr/bin/env bash
+    echo "=== Gossamer Help ==="
+    echo ""
+    echo "BUILD FAILS:"
+    echo "  'gtk+-3.0 not found'       -> sudo dnf install gtk3-devel"
+    echo "  'webkit2gtk-4.1 not found' -> sudo dnf install webkit2gtk4.1-devel"
+    echo "  Zig errors                 -> Check version: zig version (need 0.14+)"
+    echo "  Ephapax not found          -> Build it: cd ~/Documents/hyperpolymath-repos/ephapax && cargo build -p ephapax-cli"
+    echo ""
+    echo "RUNTIME ISSUES:"
+    echo "  'no display'         -> Gossamer needs X11/Wayland (headless won't work)"
+    echo "  Segfault on start    -> Check libgossamer.so is built: just build-ffi"
+    echo "  WebView blank        -> Check CSP settings in gossamer.conf.json"
+    echo ""
+    echo "TYPE CHECKING:"
+    echo "  'linear resource leaked'  -> Ensure every handle creation has a consumer"
+    echo "  'affine mode' needed      -> Use: just check-affine (more permissive)"
+    echo "  Conformance test fails    -> Check conformance/valid/ and conformance/invalid/"
+    echo ""
+    echo "STILL STUCK?"
+    echo "  1. just doctor    (check prerequisites)"
+    echo "  2. just heal      (auto-install)"
+    echo "  3. just clean && just build  (fresh build)"
+    echo "  4. Read 0-AI-MANIFEST.a2ml for full context"

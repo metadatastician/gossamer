@@ -1,0 +1,170 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+//
+// QUICKSTART-USER.adoc — Get Gossamer running from zero
+= Gossamer Quickstart
+:toc: macro
+:icons: font
+
+toc::[]
+
+== What is Gossamer?
+
+Gossamer is a linearly-typed webview shell framework. It provides a
+lightweight alternative to Electron/Tauri where linear types (via
+Ephapax) guarantee that resources like webview handles, IPC channels,
+and capability tokens cannot be leaked or double-freed.
+
+The architecture is:
+
+- *Idris2 ABI*: Formal specification of the C interface with
+  dependent type proofs
+- *Zig FFI*: The actual C-ABI implementation (libgossamer.so/a)
+- *Ephapax*: Application code using linear/affine types
+- *Bindings*: Rust and ReScript wrappers for the FFI
+
+== Prerequisites
+
+[cols="1,1,2"]
+|===
+| Tool | Version | Install
+
+| Zig
+| 0.14+
+| `asdf install zig 0.14.0`
+
+| GTK 3 (dev headers)
+| 3.24+
+| `sudo dnf install gtk3-devel`
+
+| WebKit2GTK 4.1 (dev headers)
+| 2.42+
+| `sudo dnf install webkit2gtk4.1-devel`
+
+| Ephapax compiler _(for .eph type checking)_
+| --
+| `cd ~/Documents/hyperpolymath-repos/ephapax && cargo build -p ephapax-cli`
+
+| Idris2 _(optional, ABI definitions)_
+| 0.7+
+| `asdf install idris2 0.7.0`
+
+| pkg-config
+| --
+| `sudo dnf install pkg-config`
+
+| just
+| 1.0+
+| `cargo install just`
+|===
+
+TIP: Run `just doctor` to verify all prerequisites, or `just deps`
+for the quick check.
+
+== Clone and Build
+
+[source,bash]
+----
+cd ~/Documents/hyperpolymath-repos
+git clone https://github.com/hyperpolymath/gossamer
+cd gossamer
+----
+
+=== Build the FFI Library
+
+[source,bash]
+----
+just build-ffi
+----
+
+Produces `src/interface/ffi/zig-out/lib/libgossamer.so` (shared) and
+`libgossamer.a` (static).
+
+=== Build the CLI
+
+[source,bash]
+----
+just build-cli
+----
+
+Links against `libgossamer.so` to produce the `gossamer` binary.
+
+=== Build Everything
+
+[source,bash]
+----
+just build
+----
+
+Runs `build-ffi`, `build-cli`, and `check` (Ephapax type checking).
+
+== First Run
+
+=== Run an Example (requires display)
+
+[source,bash]
+----
+just hello
+----
+
+Opens a webview window rendered via GTK/WebKit2GTK.
+
+=== Install the CLI
+
+[source,bash]
+----
+just install
+----
+
+Copies the `gossamer` binary to `~/.local/bin/gossamer`.
+
+== Run Tests
+
+[source,bash]
+----
+just test-ffi            # Zig unit tests
+just test-integration    # Zig integration tests
+just test-conformance    # Ephapax linear type conformance suite
+just test                # All of the above
+----
+
+== Key Recipes
+
+[source,bash]
+----
+just                   # List all recipes
+just build             # Build everything (FFI + CLI + type-check)
+just build-ffi         # Build libgossamer.so/.a
+just build-cli         # Build gossamer CLI
+just check             # Ephapax linear type checking
+just hello             # Run hello example
+just test              # Run all tests
+just deps              # Check system dependencies
+just symbols           # List exported FFI symbols
+just doctor            # Full prerequisite check
+just tour              # Guided walkthrough
+just help-me           # What to do when stuck
+----
+
+== Key Concepts
+
+=== Linear Resources
+
+`WebviewHandle`, `Channel`, and `Cap` are linear types. Every
+creation must be paired with exactly one consumption. Borrowing
+returns the handle; consuming destroys it.
+
+=== Capability Tokens
+
+Capabilities are created by the framework only (MkCap is not
+exported). The registry holds 256 slots with FIFO eviction.
+
+=== Platform Dispatch
+
+Zig FFI uses compile-time `@import("builtin").os.tag` for platform
+selection. No runtime detection.
+
+=== CSP Enforcement
+
+Content Security Policy can be set via `gossamer_set_csp()` or
+auto-applied from `gossamer.conf.json` at CLI startup.

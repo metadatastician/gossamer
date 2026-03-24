@@ -1,0 +1,58 @@
+; SPDX-License-Identifier: PMPL-1.0-or-later
+; INTENT.contractile — Purpose and scope for gossamer
+; Helps LLM/SLM agents understand what this repo IS and IS NOT.
+
+(intent-contractile
+  (version "1.0.0")
+  (repo "gossamer")
+
+  ; === Purpose (what this repo IS) ===
+  (purpose
+    "Gossamer is a linearly-typed webview shell framework that wraps web frontends in
+     native windows — like Tauri or Electron — but with compiler-enforced resource
+     safety. Built in Ephapax with Idris2 ABI and Zig FFI, it guarantees at compile time
+     that webview handles cannot leak, IPC messages cannot mismatch, and permissions
+     cannot be bypassed. It uses region-based memory with linear types for deterministic,
+     zero-overhead cleanup with no garbage collector. It replaces Tauri across the
+     hyperpolymath ecosystem."
+  )
+
+  ; === Anti-Purpose (what this repo is NOT — prevents scope creep) ===
+  (anti-purpose
+    "Gossamer is NOT a web framework — it wraps existing web frontends in native windows.
+     It is NOT an application itself — PanLL, IDApTIK, and others build on it. It is NOT
+     Electron (no Chromium bundled), NOT Tauri (no Rust runtime), and NOT Wails (no Go).
+     It does NOT provide a UI component library — that is the consuming application's
+     responsibility. It does NOT handle application state — only window lifecycle,
+     IPC bridging, and permission enforcement."
+  )
+
+  ; === Key Architectural Decisions That Must Not Be Reversed ===
+  (architectural-invariants
+    "Ephapax core (src/core/*.eph) — linear types for resource safety"
+    "Idris2 ABI (src/interface/abi/*.idr) — formal proofs of interface correctness"
+    "Zig FFI (src/interface/ffi/src/*.zig) — zero-cost C ABI implementation"
+    "WebKitGTK as rendering backend — not Chromium, not Servo"
+    "No garbage collector — region-based memory with linear types"
+    "Compiler-enforced permissions — not JSON config files"
+    "libgossamer.so as the shared library interface for consumers"
+    "Generated C headers in src/interface/generated/ — auto-generated only"
+  )
+
+  ; === Sensitive Areas (if in doubt, ask) ===
+  (ask-before-touching
+    "src/core/*.eph — Ephapax linear type core; resource safety proofs"
+    "src/interface/abi/*.idr — Idris2 formal proofs; changes require re-verification"
+    "src/interface/ffi/src/*.zig — C ABI boundary; changes affect all consumers"
+    "src/interface/generated/*.h — auto-generated only; do not edit manually"
+    "src/platform/*.eph — platform-specific code; test on all targets"
+    ".machine_readable/ — checkpoint files, format is specified"
+  )
+
+  ; === Ecosystem Position ===
+  (ecosystem
+    (belongs-to "standalone")
+    (depends-on ("ephapax" "idris2" "zig" "webkitgtk"))
+    (depended-on-by ("panll" "idaptik" "gsa" "burble"))
+  )
+)

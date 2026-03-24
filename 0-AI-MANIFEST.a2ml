@@ -1,93 +1,105 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+; SPDX-License-Identifier: PMPL-1.0-or-later
+; SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath)
+;
+; 0-AI-MANIFEST.a2ml — Universal AI entry point for Gossamer
+; Media-Type: application/a2ml
 
-# STOP - CRITICAL READING REQUIRED
+; THIS FILE MUST BE READ FIRST BY ALL AI AGENTS
 
-**THIS FILE MUST BE READ FIRST BY ALL AI AGENTS**
+(manifest
+  (identity
+    (name "Gossamer")
+    (full-name "Gossamer — Linearly-Typed Webview Shell Framework")
+    (version "0.2.0-dev")
+    (repo "https://github.com/hyperpolymath/gossamer")
+    (license "PMPL-1.0-or-later")
+    (author "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>"))
 
-## WHAT IS THIS?
+  (purpose
+    "Linearly-typed webview shell framework. Ephapax core with Idris2 ABI
+     and Zig FFI. Replaces Tauri across the hyperpolymath ecosystem.
+     Linear types enforce resource safety (no GC, no refcounting).
+     19+ exported FFI functions for IPC, CSP, events, capabilities.")
 
-This is the AI manifest for **Gossamer** — a linearly-typed webview shell
-framework built in Ephapax with Idris2 ABI and Zig FFI.
+  ;; ===================================================================
+  ;; CONTEXT TIERS
+  ;; ===================================================================
 
-## CANONICAL LOCATIONS (UNIVERSAL RULE)
+  (context-tiers
+    ; Tier 0 (always load): This file + .claude/CLAUDE.md — orientation only
+    ; Tier 1 (load if working on code): README.adoc, EXPLAINME.adoc, Justfile
+    ; Tier 2 (load on demand): .machine_readable/*.a2ml, docs/, CHANGELOG.md
+    ; Tier 3 (never load unless asked): tests/, generated/, examples/
+    ;
+    ; DO NOT READ unless specifically asked:
+    ;   tests/          — test files (run them, don't read them)
+    ;   generated/      — auto-generated code and C headers
+    ;   examples/       — example applications
+    ;   target/         — build artifacts
+    ;   *.lock          — lock files
+    )
 
-### Machine-Readable Metadata: `.machine_readable/` ONLY
+  ;; ===================================================================
+  ;; CANONICAL LOCATIONS
+  ;; ===================================================================
 
-These files MUST exist in `.machine_readable/` directory ONLY:
-1. **STATE.a2ml** - Project state, progress, blockers
-2. **META.a2ml** - Architecture decisions, governance
-3. **ECOSYSTEM.a2ml** - Position in ecosystem, relationships
+  (canonical-locations
+    (ai-manifest     "0-AI-MANIFEST.a2ml"           "THIS FILE")
+    (ai-instructions ".claude/CLAUDE.md"             "Claude-specific patterns")
+    (state           ".machine_readable/STATE.a2ml")
+    (meta            ".machine_readable/META.a2ml")
+    (ecosystem       ".machine_readable/ECOSYSTEM.a2ml")
+    (config          "gossamer.conf.json"            "Gossamer runtime configuration"))
 
-**CRITICAL:** If ANY of these files exist in the root directory, this is an ERROR.
+  ;; ===================================================================
+  ;; ARCHITECTURE
+  ;; ===================================================================
 
-### ABI/FFI Interface Files
+  (architecture
+    (layers
+      (abi     "src/interface/abi/*.idr"      "Idris2 formal specification")
+      (ffi     "src/interface/ffi/src/*.zig"  "Zig C ABI implementation")
+      (headers "src/interface/generated/*.h"  "Auto-generated C headers")
+      (core    "src/core/*.eph"               "Ephapax core (Shell, Bridge, Capabilities)")
+      (platform "src/platform/*.eph"          "Platform-specific Ephapax code")
+      (bindings "bindings/"                   "Rust + ReScript bindings"))
+    (features
+      "Sync IPC (channels), Async IPC (worker threads, 256 inflight),
+       CSP enforcement, Streaming events, Capability registry (256 slots),
+       Dialog allocator, Thread-local error safety"))
 
-| Layer | Location | Purpose |
-|-------|----------|---------|
-| ABI | `src/interface/abi/*.idr` | Idris2 formal specification |
-| FFI | `src/interface/ffi/src/*.zig` | Zig C ABI implementation |
-| Generated | `src/interface/generated/*.h` | Auto-generated C headers |
+  ;; ===================================================================
+  ;; CRITICAL INVARIANTS
+  ;; ===================================================================
 
-### Ephapax Application Code
+  (critical-invariants
+    (rule "WebviewHandle, Channel, Cap are LINEAR — borrow vs consume matters")
+    (rule "ABI-FFI alignment: Result codes in Types.idr MUST match Result enum in main.zig")
+    (rule "Platform dispatch: compile-time OS switch in Zig — no runtime detection")
+    (rule "No GC: regions + linear types only — no Arc/Rc/refcounting")
+    (rule "MkCap NOT exported — capabilities only created by framework")
+    (rule "MainThreadProof witness required for WebviewHandle creation")
+    (rule "Dangerous patterns BANNED: believe_me, assert_total, sorry, Admitted, unsafeCoerce, Obj.magic")
+    (rule "SCM files ONLY in .machine_readable/ — never in root"))
 
-| Location | Purpose |
-|----------|---------|
-| `src/core/*.eph` | Core Gossamer modules (Shell, Bridge, Capabilities) |
-| `src/platform/*.eph` | Platform-specific Ephapax code |
-| `examples/` | Example applications |
+  ;; ===================================================================
+  ;; SESSION LIFECYCLE
+  ;; ===================================================================
 
-## CRITICAL INVARIANTS
+  (lifecycle
+    (on-enter
+      (step "Read THIS file first")
+      (step "Read .machine_readable/STATE.a2ml for current status")
+      (step "Check ABI-FFI result code alignment if touching interfaces"))
 
-1. **Linear resources**: WebviewHandle, Channel, and Cap are linear.
-   Operations must clearly distinguish BORROWING (returns handle)
-   from CONSUMING (destroys handle).
+    (on-exit
+      (step "Update .machine_readable/STATE.a2ml with progress")
+      (step "Verify no orphaned linear resources in new code")))
 
-2. **ABI-FFI alignment**: Result codes in Types.idr MUST match
-   Result enum in main.zig EXACTLY (same integer values).
-
-3. **Platform dispatch**: Zig FFI uses compile-time switch on OS tag.
-   No runtime platform detection.
-
-4. **No GC**: Gossamer uses regions + linear types. No garbage collector,
-   no reference counting, no Arc/Rc equivalents.
-
-5. **Capability tokens**: MkCap constructor is NOT exported.
-   Capabilities can only be created by the framework.
-
-6. **Main-thread proof**: WebviewHandle creation requires a
-   MainThreadProof witness. This cannot be forged.
-
-7. **Dangerous patterns BANNED**: No believe_me, assert_total, sorry,
-   Admitted, unsafeCoerce, Obj.magic.
-
-## LIFECYCLE HOOKS
-
-### On Session Enter
-1. Read this manifest
-2. Read `.machine_readable/STATE.a2ml`
-3. Check ABI-FFI result code alignment
-
-### On Session Exit
-1. Update `.machine_readable/STATE.a2ml` with progress
-2. Verify no orphaned linear resources in new code
-
-## REPOSITORY METADATA
-
-- **Name:** Gossamer
-- **Type:** Framework / Library
-- **Language:** Ephapax (backend), Idris2 (ABI), Zig (FFI), Rust + ReScript (bindings)
-- **License:** PMPL-1.0-or-later
-- **Author:** Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
-- **Status:** v0.2 development (Phase 2 — async IPC, CSP, streaming events)
-- **Last Updated:** 2026-03-23
-- **Exported Functions:** 19+ (create, load_html, load_url, run, navigate, eval, channel_send, channel_bind, channel_bind_async, set_csp, emit, get_error, and capability/dialog/revocation functions)
-
-## FEATURE SUMMARY (v0.2)
-
-- Synchronous IPC via channels (gossamer_channel_send / gossamer_channel_bind)
-- Async IPC via worker threads (gossamer_channel_bind_async) with 256-slot inflight tracker
-- CSP enforcement (gossamer_set_csp) with CLI auto-apply from gossamer.conf.json
-- Streaming events backend→frontend (gossamer_emit) with JS/Rust/ReScript subscribe/unsubscribe
-- Thread-local error safety (clearError on all 16+ exported function entries)
-- Capability registry (256 slots, FIFO eviction)
-- Dialog allocator (c_allocator consistent)
+  (format-meta
+    (version "2.1.0")
+    (media-type "application/a2ml")
+    (created "2026-03-22")
+    (last-updated "2026-03-24")
+    (maintained-by "Jonathan D.A. Jewell / hyperpolymath")
+    (protocol "https://github.com/hyperpolymath/0-ai-gatekeeper-protocol")))
