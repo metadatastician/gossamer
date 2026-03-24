@@ -249,7 +249,7 @@ public export
 panllManifest : GrooveManifest
   [PanelUI]
   [Voice, Text, Presence, Integrity, OctadStorage, Scanning]
-panllManifest = MkManifest "panll" "0.1.0" 8000 "/health"
+panllManifest = MkManifest "panll" "0.1.0" 4040 "/health"
 
 ||| ECHIDNA: neurosymbolic theorem prover.
 public export

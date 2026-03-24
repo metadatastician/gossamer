@@ -40,7 +40,7 @@ const targets = [TARGET_COUNT]struct { port: u16, name: []const u8 }{
     .{ .port = 6480, .name = "vext" },
     .{ .port = 8080, .name = "verisimdb" },
     .{ .port = 9090, .name = "hypatia" },
-    .{ .port = 8000, .name = "panll" },
+    .{ .port = 4040, .name = "panll" },
     .{ .port = 9000, .name = "echidna" },
     .{ .port = 7800, .name = "rpa-elysium" },
     .{ .port = 7700, .name = "conflow" },

@@ -92,9 +92,9 @@
           "type": "string",
           "description": "URL of the development server. The webview loads this URL during `gossamer dev`.",
           "format": "uri",
-          "default": "http://localhost:8000/",
+          "default": "http://localhost:4040/",
           "examples": [
-            "http://localhost:8000/",
+            "http://localhost:4040/",
             "http://localhost:3000/",
             "http://localhost:5173/"
           ]

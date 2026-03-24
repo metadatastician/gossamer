@@ -42,7 +42,7 @@ fn bridge_list_servers(): String =
      "\"config\":\"/opt/dst-server/DoNotStarveTogether/Cluster_1/cluster.ini\",\"format\":\"ini\"}," ++
     "{\"id\":\"ass\",\"name\":\"Airborne Submarine Squadron\",\"container\":\"ass-server\",\"port\":8081," ++
      "\"config\":\"\",\"format\":\"none\"}," ++
-    "{\"id\":\"idaptik\",\"name\":\"IDApTIK Sync\",\"container\":\"idaptik-sync\",\"port\":4000," ++
+    "{\"id\":\"idaptik\",\"name\":\"IDApTIK Sync\",\"container\":\"idaptik-sync\",\"port\":4030," ++
      "\"config\":\"\",\"format\":\"env\"}," ++
     "{\"id\":\"burble\",\"name\":\"Burble\",\"container\":\"burble\",\"port\":4001," ++
      "\"config\":\"\",\"format\":\"env\"}," ++

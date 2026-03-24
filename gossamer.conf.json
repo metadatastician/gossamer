@@ -5,7 +5,7 @@
   "identifier": "com.example.myapp",
   "build": {
     "frontendDist": "../public",
-    "devUrl": "http://localhost:8000/",
+    "devUrl": "http://localhost:4040/",
     "beforeDevCommand": "deno task dev",
     "beforeBuildCommand": "deno task build",
     "watch": {

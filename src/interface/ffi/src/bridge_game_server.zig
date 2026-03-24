@@ -36,7 +36,7 @@ const servers = [_]Server{
     .{ .id = "barotrauma", .name = "Barotrauma", .container = "barotrauma", .port = 27015, .config = "/opt/barotrauma-game/serversettings.xml", .format = "xml" },
     .{ .id = "dst", .name = "Don't Starve Together", .container = "dst-server", .port = 10999, .config = "/opt/dst-server/DoNotStarveTogether/Cluster_1/cluster.ini", .format = "ini" },
     .{ .id = "ass", .name = "Airborne Submarine Squadron", .container = "ass-server", .port = 8081, .config = "", .format = "none" },
-    .{ .id = "idaptik", .name = "IDApTIK Sync", .container = "idaptik-sync", .port = 4000, .config = "", .format = "env" },
+    .{ .id = "idaptik", .name = "IDApTIK Sync", .container = "idaptik-sync", .port = 4030, .config = "", .format = "env" },
     .{ .id = "burble", .name = "Burble", .container = "burble", .port = 4001, .config = "", .format = "env" },
     .{ .id = "voidexpanse", .name = "Void Expanse", .container = "voidexpanse", .port = 6100, .config = "/opt/voidexpanse/SettingsServer.xml", .format = "xml" },
 };

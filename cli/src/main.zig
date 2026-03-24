@@ -183,7 +183,7 @@ const Config = struct {
     version: []const u8 = "0.1.0",
     identifier: []const u8 = "com.example.app",
     frontend_dist: []const u8 = "../public",
-    dev_url: []const u8 = "http://localhost:8000/",
+    dev_url: []const u8 = "http://localhost:4040/",
     before_dev_command: ?[]const u8 = null,
     before_build_command: ?[]const u8 = null,
     title: []const u8 = "Gossamer App",
@@ -570,7 +570,7 @@ fn cmdInit() !void {
             \\  "identifier": "com.example.myapp",
             \\  "build": {
             \\    "frontendDist": "../public",
-            \\    "devUrl": "http://localhost:8000/",
+            \\    "devUrl": "http://localhost:4040/",
             \\    "beforeDevCommand": "deno task dev",
             \\    "beforeBuildCommand": "deno task build",
             \\    "watch": {

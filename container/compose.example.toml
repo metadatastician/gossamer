@@ -56,7 +56,7 @@ healthcheck = { test = "curl -sf http://localhost:8080/health", interval = "30s"
 image = "ghcr.io/hyperpolymath/myproject-worker:latest.ctp"
 
 # Separate port for the worker's admin/metrics endpoint.
-ports = ["4000:4000"]
+ports = ["4040:4040"]
 
 # The worker connects to the Rust API over the internal selur network.
 # Service names resolve as hostnames within the compose network.
@@ -73,7 +73,7 @@ environment = {
 depends_on = ["rust-api"]
 
 restart = "always"
-healthcheck = { test = "curl -sf http://localhost:4000/health", interval = "30s", timeout = "5s", retries = 3 }
+healthcheck = { test = "curl -sf http://localhost:4040/health", interval = "30s", timeout = "5s", retries = 3 }
 
 # ---
 
@@ -93,7 +93,7 @@ ports = ["443:443", "80:80"]
 environment = {
   # Backend routing: svalinn proxies to internal services.
   SVALINN_BACKEND = "http://rust-api:8080",
-  SVALINN_WORKER_BACKEND = "http://elixir-worker:4000",
+  SVALINN_WORKER_BACKEND = "http://elixir-worker:4040",
 
   # Policy file: mounted from the svalinn-config volume.
   SVALINN_POLICY_FILE = "/etc/svalinn/gatekeeper.yaml",
