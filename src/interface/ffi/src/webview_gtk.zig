@@ -463,6 +463,8 @@ fn extractJsonField(json: []const u8, key: []const u8) ?[]const u8 {
 }
 
 /// Escape a string for embedding inside a JavaScript double-quoted string.
+/// Handles all control characters (0x00-0x1F) via \uXXXX escapes to ensure
+/// binary payloads don't corrupt the JS string.
 fn escapeForJS(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     var result = std.ArrayListUnmanaged(u8){};
     errdefer result.deinit(allocator);
@@ -474,6 +476,12 @@ fn escapeForJS(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
             '\n' => try result.appendSlice(allocator, "\\n"),
             '\r' => try result.appendSlice(allocator, "\\r"),
             '\t' => try result.appendSlice(allocator, "\\t"),
+            0x00...0x08, 0x0B, 0x0C, 0x0E...0x1F => {
+                // Escape other control characters as \u00XX
+                var escape_buf: [6]u8 = undefined;
+                _ = std.fmt.bufPrint(&escape_buf, "\\u{X:0>4}", .{ch}) catch unreachable;
+                try result.appendSlice(allocator, &escape_buf);
+            },
             else => try result.append(allocator, ch),
         }
     }

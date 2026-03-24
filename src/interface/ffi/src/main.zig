@@ -708,10 +708,16 @@ var revoked_tokens: [MAX_REVOKED]u64 = [_]u64{0} ** MAX_REVOKED;
 /// Number of revoked tokens currently tracked.
 var revoked_count: usize = 0;
 
+/// Sentinel value returned on capability grant failure.
+/// Distinct from 0 (null token) to avoid ambiguity.
+/// Callers should check: if (token == 0 || token == CAP_ERROR) { check gossamer_last_error() }
+pub const CAP_ERROR: u64 = std.math.maxInt(u64);
+
 /// Grant a capability token for the given resource kind.
 /// resource_kind is the ordinal of ResourceKind in Types.idr:
 ///   0=FileSystem, 1=Network, 2=Shell, 3=Clipboard, 4=Notification, 5=Tray
-/// Returns a unique token ID, or 0 on failure.
+/// Returns a unique token ID, 0 for null/invalid, or CAP_ERROR on failure.
+/// Always check gossamer_last_error() when the return value is 0 or CAP_ERROR.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__capGrant
 pub export fn gossamer_cap_grant(resource_kind: u32) u64 {
@@ -719,13 +725,13 @@ pub export fn gossamer_cap_grant(resource_kind: u32) u64 {
     // Validate resource kind (0..5 matches Types.idr ResourceKind constructors)
     if (resource_kind > 5) {
         setError("Invalid resource kind (must be 0-5)");
-        return 0;
+        return CAP_ERROR;
     }
 
     // Check capacity
     if (cap_count >= MAX_CAPABILITIES) {
         setError("Capability registry full (256 slots)");
-        return 0;
+        return CAP_ERROR;
     }
 
     // Generate a unique token ID using cryptographic randomness
@@ -752,7 +758,7 @@ pub export fn gossamer_cap_grant(resource_kind: u32) u64 {
 
     // Should not reach here given the count check above
     setError("Capability registry inconsistency");
-    return 0;
+    return CAP_ERROR;
 }
 
 /// Check a capability token before a gated operation.
@@ -846,15 +852,28 @@ export fn gossamer_cap_revoke(token: u64) void {
 // Error Handling
 //==============================================================================
 
+/// Thread-local buffer for error message copies returned by gossamer_last_error.
+const ERROR_BUF_SIZE = 1024;
+threadlocal var error_buf: [ERROR_BUF_SIZE]u8 = undefined;
+
 /// Get the last error message.
-/// Returns null if no error is set.
+/// Returns null if no error is set. Clears the error after reading
+/// (consume-on-read) so stale errors don't persist between calls.
+///
+/// The returned pointer is valid until the next call to any gossamer_*
+/// function on this thread. Callers must copy if they need to keep it.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__lastError
 export fn gossamer_last_error() ?[*:0]const u8 {
     const err = last_error orelse return null;
-    const allocator = std.heap.c_allocator;
-    const c_str = allocator.dupeZ(u8, err) catch return null;
-    return c_str.ptr;
+    // Clear immediately — consume-on-read prevents stale errors
+    last_error = null;
+
+    // Copy into thread-local buffer to avoid leaking allocations.
+    const copy_len = @min(err.len, ERROR_BUF_SIZE - 1);
+    @memcpy(error_buf[0..copy_len], err[0..copy_len]);
+    error_buf[copy_len] = 0;
+    return @ptrCast(&error_buf);
 }
 
 //==============================================================================
@@ -970,7 +989,7 @@ test "capability grant-check-revoke lifecycle" {
 
 test "capability grant rejects invalid resource kind" {
     const token = gossamer_cap_grant(99); // Invalid kind
-    try std.testing.expectEqual(@as(u64, 0), token);
+    try std.testing.expectEqual(CAP_ERROR, token);
 }
 
 test "async_ipc acquire and release slots" {

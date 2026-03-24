@@ -5,9 +5,14 @@
 //   "Name|ext1;ext2|Name2|ext3;ext4"
 // e.g. "JSON files|*.json;*.yaml|All files|*"
 //
-// All returned paths are heap-allocated C strings. The caller frees them
-// via gossamer_dialog_free_path(), or equivalently via libc free().
+// All returned paths are heap-allocated C strings via std.heap.c_allocator.
+// The caller frees them via gossamer_dialog_free_path().
 // Returns 0 (null) if the user cancels or an error occurs.
+//
+// INVARIANT: GTK-allocated strings (from gtk_file_chooser_get_filename etc.)
+// are ALWAYS copied to c_allocator via dupeZ(), then the GTK original is freed
+// with g_free(). This ensures gossamer_dialog_free_path() always frees from
+// the same allocator that allocated. Do NOT return GTK-allocated pointers.
 //
 // Dependencies: GTK 3 (already linked by webview_gtk.zig)
 //
