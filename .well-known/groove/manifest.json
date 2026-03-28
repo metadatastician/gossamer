@@ -1,0 +1,23 @@
+{
+  "groove_version": "1",
+  "service_id": "gossamer",
+  "service_version": "0.1.0",
+  "capabilities": {
+    "panel-ui": {
+      "type": "panel-ui",
+      "description": "Webview shell and panel workspace runtime",
+      "protocol": "http",
+      "endpoint": "/panels",
+      "requires_auth": false,
+      "panel_compatible": true
+    }
+  },
+  "consumes": ["voice", "text", "presence", "integrity", "octad-storage", "scanning"],
+  "endpoints": {
+    "health": "/health",
+    "groove": "/.well-known/groove",
+    "schema": "/schema/groove-manifest.schema.json"
+  },
+  "health": "/health",
+  "applicability": ["individual", "team"]
+}
