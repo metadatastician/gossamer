@@ -222,7 +222,7 @@ public export
 burbleManifest : GrooveManifest
   [Voice, Text, Presence, SpatialAudio, Recording, TTS, STT]
   [Integrity, OctadStorage, Scanning]
-burbleManifest = MkManifest "burble" "0.1.0" 6473 "/health"
+burbleManifest = MkManifest "burble" "0.1.0" 4020 "/health"
 
 ||| Vext: verifiable communications protocol.
 public export
@@ -236,7 +236,7 @@ public export
 verisimdbManifest : GrooveManifest
   [OctadStorage, DriftDetection, TemporalVer]
   [Scanning]
-verisimdbManifest = MkManifest "verisimdb" "0.1.0" 8080 "/health"
+verisimdbManifest = MkManifest "verisimdb" "0.1.0" 8093 "/health"
 
 ||| Hypatia: neurosymbolic CI/CD intelligence.
 public export
@@ -257,7 +257,7 @@ public export
 echidnaManifest : GrooveManifest
   [TheoremProve]
   [OctadStorage, Scanning]
-echidnaManifest = MkManifest "echidna" "0.1.0" 9000 "/health"
+echidnaManifest = MkManifest "echidna" "0.1.0" 8081 "/health"
 
 ||| RPA Elysium: robotic process automation.
 public export
