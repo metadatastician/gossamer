@@ -31,7 +31,7 @@ build-ffi-release:
 
 # Type-check all Gossamer core modules
 check:
-    {{ephapax}} check src/core/Shell.eph src/core/Bridge.eph src/core/Capabilities.eph --mode linear -v
+    {{ephapax}} check src/core/Shell.eph src/core/Bridge.eph src/core/Capabilities.eph src/core/SSG.eph --mode linear -v
 
 # Type-check in affine mode (more permissive)
 check-affine:
@@ -51,6 +51,65 @@ build-cli-release: build-ffi-release
 
 # Build everything (FFI + CLI + check)
 build: build-ffi build-cli check
+
+# ═══════════════════════════════════════════════════════════════
+# Static Site Generator
+# ═══════════════════════════════════════════════════════════════
+
+# Build the Gossamer project site from site/src/ into site/dist/
+build-site: build-ffi
+    #!/usr/bin/env bash
+    set -euo pipefail
+    GOSSAMER_ROOT="$(pwd)"
+    CONTENT_DIR="${GOSSAMER_ROOT}/site/src/content"
+    TEMPLATE_FILE="${GOSSAMER_ROOT}/site/src/templates/default.html"
+    OUT_DIR="${GOSSAMER_ROOT}/site/dist"
+    AWK_MD="${GOSSAMER_ROOT}/scripts/md-to-html.awk"
+    AWK_TMPL="${GOSSAMER_ROOT}/scripts/template-sub.awk"
+
+    echo "=== Gossamer SSG Build ==="
+
+    # Clean previous output.
+    rm -rf "${OUT_DIR}"
+    mkdir -p "${OUT_DIR}"
+
+    # Process each .md file in the content directory.
+    for md_file in "${CONTENT_DIR}"/*.md; do
+        [ -f "${md_file}" ] || continue
+        BASENAME=$(basename "${md_file}" .md)
+
+        # Extract front matter metadata.
+        TITLE="Untitled"
+        DATE=""
+        if head -1 "${md_file}" | grep -q "^---$"; then
+            TITLE=$(sed -n '/^---$/,/^---$/{ /^title:/s/^title: *//p }' "${md_file}" | tr -d '"' | tr -d "'")
+            DATE=$(sed -n '/^---$/,/^---$/{ /^date:/s/^date: *//p }' "${md_file}" | tr -d '"' | tr -d "'")
+        fi
+        [ -z "${TITLE}" ] && TITLE="Untitled"
+
+        # Convert Markdown body to HTML (writes to temp file to avoid
+        # awk argument length limits and special character escaping).
+        BODY_TMP=$(mktemp)
+        trap "rm -f ${BODY_TMP}" EXIT
+        awk -f "${AWK_MD}" "${md_file}" > "${BODY_TMP}"
+
+        # Apply template substitution, reading body from temp file.
+        awk -v title="${TITLE}" -v date="${DATE}" \
+            -v content_file="${BODY_TMP}" \
+            -f "${AWK_TMPL}" "${TEMPLATE_FILE}" > "${OUT_DIR}/${BASENAME}.html"
+
+        rm -f "${BODY_TMP}"
+        echo "  Built: ${BASENAME}.html"
+    done
+
+    # Copy static assets.
+    if [ -d "${GOSSAMER_ROOT}/site/src/assets" ]; then
+        cp -r "${GOSSAMER_ROOT}/site/src/assets/"* "${OUT_DIR}/" 2>/dev/null || true
+        echo "  Copied assets"
+    fi
+
+    echo "=== Site built to site/dist/ ==="
+    ls -la "${OUT_DIR}/"
 
 # ═══════════════════════════════════════════════════════════════
 # Run
