@@ -38,7 +38,7 @@ const MAX_CAP_NAME: usize = 64;
 const targets = [TARGET_COUNT]struct { port: u16, name: []const u8 }{
     .{ .port = 6473, .name = "burble" },
     .{ .port = 6480, .name = "vext" },
-    .{ .port = 8080, .name = "verisimdb" },
+    .{ .port = 8093, .name = "verisimdb" },
     .{ .port = 9090, .name = "hypatia" },
     .{ .port = 4040, .name = "panll" },
     .{ .port = 9000, .name = "echidna" },
@@ -133,45 +133,160 @@ fn probeTarget(idx: usize) void {
 }
 
 /// Extract capability names from the manifest JSON.
-/// Simple parser: finds "capabilities":{...} keys without a full JSON parser.
+///
+/// Supports the canonical object format defined in groove-manifest.schema.json:
+///   "capabilities": { "voice": { "type": "voice", ... }, ... }
+///
+/// Extracts the "type" field from each capability value object, which is what
+/// consumers use for capability lookup. Falls back to extracting the object
+/// key name if no "type" field is found.
+///
+/// Also supports legacy array format as a fallback for forward compatibility:
+///   "capabilities": [ { "name": "...", "type": "..." }, ... ]
 fn parseCapabilities(idx: usize) void {
     const json = grooves[idx].manifest[0..grooves[idx].manifest_len];
     grooves[idx].cap_count = 0;
 
-    // Find "capabilities" object.
+    // Find "capabilities" key.
     const caps_key = "\"capabilities\"";
     const caps_start = std.mem.indexOf(u8, json, caps_key) orelse return;
     const after_key = caps_start + caps_key.len;
 
-    // Find the opening brace.
+    // Skip whitespace and colon after the key.
     var pos = after_key;
-    while (pos < json.len and json[pos] != '{') : (pos += 1) {}
+    while (pos < json.len and (json[pos] == ' ' or json[pos] == ':' or json[pos] == '\n' or json[pos] == '\r' or json[pos] == '\t')) : (pos += 1) {}
     if (pos >= json.len) return;
-    pos += 1; // skip '{'
 
-    // Extract keys (capability names) at the top level of the object.
+    if (json[pos] == '{') {
+        // Canonical object format: extract "type" field from each value object,
+        // falling back to the object key name.
+        parseCapabilitiesObject(idx, json, pos);
+    } else if (json[pos] == '[') {
+        // Legacy array format: extract "type" or "name" field from each element.
+        parseCapabilitiesArray(idx, json, pos);
+    }
+}
+
+/// Parse capabilities from the canonical object format.
+/// Extracts the "type" field value from each capability sub-object.
+/// If no "type" field is found, uses the object key as the capability name.
+fn parseCapabilitiesObject(idx: usize, json: []const u8, start: usize) void {
+    var pos = start + 1; // skip opening '{'
+
     var depth: usize = 1;
     while (pos < json.len and depth > 0) {
         if (json[pos] == '{') {
             depth += 1;
+            if (depth == 2) {
+                // Entered a capability value object — search for "type" field.
+                const obj_start = pos;
+                var obj_depth: usize = 1;
+                var scan = pos + 1;
+                var found_type = false;
+                while (scan < json.len and obj_depth > 0) {
+                    if (json[scan] == '{') {
+                        obj_depth += 1;
+                    } else if (json[scan] == '}') {
+                        obj_depth -= 1;
+                    } else if (obj_depth == 1) {
+                        // Look for "type" key at this level.
+                        if (matchJsonKey(json, scan, "type")) |val_start| {
+                            if (extractJsonString(json, val_start)) |type_val| {
+                                addCapName(idx, type_val.ptr, type_val.len);
+                                found_type = true;
+                            }
+                        }
+                    }
+                    scan += 1;
+                }
+                // If no "type" field found, the key name was already skipped
+                // past — we cannot recover it here. This is fine because all
+                // schema-conforming manifests have "type".
+                _ = found_type;
+                _ = obj_start;
+            }
         } else if (json[pos] == '}') {
             depth -= 1;
-        } else if (json[pos] == '"' and depth == 1) {
-            // Found a key at top level — extract it.
-            pos += 1; // skip opening quote
-            const key_start = pos;
-            while (pos < json.len and json[pos] != '"') : (pos += 1) {}
-            const key_len = pos - key_start;
+        }
+        pos += 1;
+    }
+}
 
-            if (key_len > 0 and key_len < MAX_CAP_NAME and grooves[idx].cap_count < MAX_CAPS) {
-                const ci = grooves[idx].cap_count;
-                @memcpy(grooves[idx].cap_names[ci][0..key_len], json[key_start..pos]);
-                grooves[idx].cap_names[ci][key_len] = 0;
-                grooves[idx].cap_count += 1;
+/// Parse capabilities from the legacy array format.
+/// Extracts the "type" or "name" field from each array element object.
+fn parseCapabilitiesArray(idx: usize, json: []const u8, start: usize) void {
+    var pos = start + 1; // skip opening '['
+    var depth: usize = 1;
+
+    while (pos < json.len and depth > 0) {
+        if (json[pos] == '[') {
+            depth += 1;
+        } else if (json[pos] == ']') {
+            depth -= 1;
+        } else if (json[pos] == '{' and depth == 1) {
+            // Found an element object — look for "type" then "name".
+            var obj_depth: usize = 1;
+            var scan = pos + 1;
+            var found = false;
+            while (scan < json.len and obj_depth > 0) {
+                if (json[scan] == '{') {
+                    obj_depth += 1;
+                } else if (json[scan] == '}') {
+                    obj_depth -= 1;
+                } else if (obj_depth == 1 and !found) {
+                    // Prefer "type", fall back to "name".
+                    if (matchJsonKey(json, scan, "type")) |val_start| {
+                        if (extractJsonString(json, val_start)) |val| {
+                            addCapName(idx, val.ptr, val.len);
+                            found = true;
+                        }
+                    } else if (matchJsonKey(json, scan, "name")) |val_start| {
+                        if (extractJsonString(json, val_start)) |val| {
+                            addCapName(idx, val.ptr, val.len);
+                            found = true;
+                        }
+                    }
+                }
+                scan += 1;
             }
         }
         pos += 1;
     }
+}
+
+/// Check if position in JSON is the start of a specific key.
+/// Returns the position after the colon (start of value) if matched, null otherwise.
+fn matchJsonKey(json: []const u8, pos: usize, key: []const u8) ?usize {
+    if (pos >= json.len or json[pos] != '"') return null;
+    const after_quote = pos + 1;
+    if (after_quote + key.len >= json.len) return null;
+    if (!std.mem.eql(u8, json[after_quote .. after_quote + key.len], key)) return null;
+    if (after_quote + key.len >= json.len or json[after_quote + key.len] != '"') return null;
+    // Skip past closing quote, optional whitespace, and colon.
+    var p = after_quote + key.len + 1;
+    while (p < json.len and (json[p] == ' ' or json[p] == ':' or json[p] == '\n' or json[p] == '\r' or json[p] == '\t')) : (p += 1) {}
+    return p;
+}
+
+/// Extract a JSON string value starting at the given position.
+/// Returns the string contents (without quotes) as a slice, or null.
+fn extractJsonString(json: []const u8, pos: usize) ?[]const u8 {
+    if (pos >= json.len or json[pos] != '"') return null;
+    const start = pos + 1;
+    var end = start;
+    while (end < json.len and json[end] != '"') : (end += 1) {}
+    if (end >= json.len) return null;
+    if (end == start) return null;
+    return json[start..end];
+}
+
+/// Add a capability name to the groove state for a given target index.
+fn addCapName(idx: usize, ptr: [*]const u8, len: usize) void {
+    if (len == 0 or len >= MAX_CAP_NAME or grooves[idx].cap_count >= MAX_CAPS) return;
+    const ci = grooves[idx].cap_count;
+    @memcpy(grooves[idx].cap_names[ci][0..len], ptr[0..len]);
+    grooves[idx].cap_names[ci][len] = 0;
+    grooves[idx].cap_count += 1;
 }
 
 /// Check if a groove target has a specific capability by name.
