@@ -105,3 +105,6 @@ sync_report*.txt
 .hypatia/
 src/interface/ffi/.zig-cache/
 src/interface/ffi/zig-out/
+
+# SSG generated output
+site/dist/
