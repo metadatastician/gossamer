@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Gossamer
+GenericName=Desktop Webview Shell
+Comment=Build desktop apps that cannot leak resources — linear-type verified
+Exec=gossamer %u
+Icon=gossamer
+Categories=Development;WebDevelopment;
+Terminal=false
+StartupWMClass=gossamer
+Keywords=webview;desktop;linear-types;idris;zig;electron;tauri;
+MimeType=x-scheme-handler/gossamer;
