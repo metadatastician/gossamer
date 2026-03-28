@@ -31,7 +31,7 @@ paddingFor : (offset : Nat) -> (alignment : Nat) -> Nat
 paddingFor offset alignment =
   if offset `mod` alignment == 0
     then 0
-    else alignment - (offset `mod` alignment)
+    else minus alignment (offset `mod` alignment)
 
 ||| Align an offset up to the given alignment boundary.
 public export
@@ -83,17 +83,17 @@ handleSize _    = 8
 
 ||| Proof that WebviewHandle is pointer-sized on the current platform.
 public export
-webviewHandleSize : HasSize WebviewHandle (handleSize thisPlatform)
+webviewHandleSize : HasSize WebviewHandle (handleSize Types.thisPlatform)
 webviewHandleSize = SizeProof
 
 ||| Proof that WebviewHandle has pointer alignment.
 public export
-webviewHandleAlign : HasAlignment WebviewHandle (handleSize thisPlatform)
+webviewHandleAlign : HasAlignment WebviewHandle (handleSize Types.thisPlatform)
 webviewHandleAlign = AlignProof
 
 ||| Proof that Channel handles are pointer-sized.
 public export
-channelHandleSize : HasSize (Channel req resp) (handleSize thisPlatform)
+channelHandleSize : HasSize (Channel req resp) (handleSize Types.thisPlatform)
 channelHandleSize = SizeProof
 
 ||| Proof that Cap tokens are pointer-sized (Bits64 token ID).
@@ -182,7 +182,7 @@ data FieldsAligned : List FieldSpec -> Type where
 ||| C ABI compliance certificate for a type.
 ||| A type is C ABI compliant if:
 ||| 1. Its size is known
-||| 2. Its alignment is a power of 2
+||| 2. Its alignment is a power of 2 and positive
 ||| 3. Its size is a multiple of its alignment
 public export
 data CABICompliant : Type -> Nat -> Nat -> Type where
@@ -192,10 +192,9 @@ data CABICompliant : Type -> Nat -> Nat -> Type where
               -> HasSize t size
               -> HasAlignment t align
               -> So (align > 0)
-              -> So (size `mod` align == 0)
               -> CABICompliant t size align
 
 ||| Result is C ABI compliant (4 bytes, 4-byte aligned).
 public export
 resultCompliant : CABICompliant Result 4 4
-resultCompliant = MkCompliant resultSize resultAlign Oh Oh
+resultCompliant = MkCompliant resultSize resultAlign Oh

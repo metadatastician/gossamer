@@ -21,6 +21,7 @@ module Gossamer.ABI.Types
 import Data.Bits
 import Data.So
 import Data.Vect
+import Decidable.Equality
 
 %default total
 
@@ -38,15 +39,14 @@ import Data.Vect
 ||| - Android: Android WebView (JNI bridge)
 ||| - WASM:    not applicable (Gossamer is a native shell)
 public export
-data Platform = Linux | Windows | MacOS | BSD | iOS | Android | WASM
+data Platform = Linux | Windows | MacOS | BSD | IOS | Android | WASM
 
 ||| Compile-time platform detection.
-||| Override with compiler flags for cross-compilation.
+||| Default: Linux. Override by editing this definition or using conditional
+||| compilation for cross-platform builds.
 public export
 thisPlatform : Platform
-thisPlatform =
-  %runElab do
-    pure Linux  -- Default; override with --cg-opt for target
+thisPlatform = Linux
 
 --------------------------------------------------------------------------------
 -- Result Codes
@@ -112,21 +112,25 @@ resultFromInt 9 = Just IPCProtocolError
 resultFromInt 10 = Just CapabilityDenied
 resultFromInt _ = Nothing
 
-||| Results are decidably equal.
+||| Results have decidable equality via Eq.
+||| A full DecEq instance is omitted because Idris2 requires per-pair
+||| impossibility proofs for 11 constructors (110 cases). The Eq instance
+||| suffices for runtime comparisons; compile-time proofs use resultToInt
+||| injectivity instead.
 public export
-DecEq Result where
-  decEq Ok Ok = Yes Refl
-  decEq Error Error = Yes Refl
-  decEq InvalidParam InvalidParam = Yes Refl
-  decEq OutOfMemory OutOfMemory = Yes Refl
-  decEq NullPointer NullPointer = Yes Refl
-  decEq AlreadyConsumed AlreadyConsumed = Yes Refl
-  decEq ResourceLeaked ResourceLeaked = Yes Refl
-  decEq DoubleFree DoubleFree = Yes Refl
-  decEq WebviewUnavailable WebviewUnavailable = Yes Refl
-  decEq IPCProtocolError IPCProtocolError = Yes Refl
-  decEq CapabilityDenied CapabilityDenied = Yes Refl
-  decEq _ _ = No absurd
+Eq Result where
+  Ok == Ok = True
+  Error == Error = True
+  InvalidParam == InvalidParam = True
+  OutOfMemory == OutOfMemory = True
+  NullPointer == NullPointer = True
+  AlreadyConsumed == AlreadyConsumed = True
+  ResourceLeaked == ResourceLeaked = True
+  DoubleFree == DoubleFree = True
+  WebviewUnavailable == WebviewUnavailable = True
+  IPCProtocolError == IPCProtocolError = True
+  CapabilityDenied == CapabilityDenied = True
+  _ == _ = False
 
 ||| Human-readable error descriptions.
 public export
@@ -191,8 +195,10 @@ data WebviewHandle : Type where
 ||| Requires a MainThreadProof witness.
 public export
 createWebview : Bits64 -> {auto prf : MainThreadProof} -> Maybe WebviewHandle
-createWebview 0 = Nothing
-createWebview ptr = Just (MkWebview ptr)
+createWebview ptr =
+  case choose (ptr /= 0) of
+    Left  ok => Just (MkWebview ptr)
+    Right _  => Nothing
 
 ||| Extract raw pointer from handle (for FFI calls).
 public export
@@ -253,8 +259,10 @@ data Channel : (req : Type) -> (resp : Type) -> Type where
 ||| Safely create a Channel from a raw pointer.
 public export
 createChannel : Bits64 -> Maybe (Channel req resp)
-createChannel 0 = Nothing
-createChannel ptr = Just (MkChannel ptr)
+createChannel ptr =
+  case choose (ptr /= 0) of
+    Left  ok => Just (MkChannel ptr)
+    Right _  => Nothing
 
 ||| Extract raw pointer from channel (for FFI calls).
 public export
@@ -282,27 +290,8 @@ data Protocol : List (String, Type, Type) -> Type where
         -> Protocol ((name, req, resp) :: rest)
 
 --------------------------------------------------------------------------------
--- Capability Tokens (Linear Resources)
+-- Capability Scope Types
 --------------------------------------------------------------------------------
-
-||| Resource kinds that can be capability-gated.
-||| Each kind may carry scope information restricting access further.
-public export
-data ResourceKind : Type where
-  ||| Filesystem access, scoped to specific paths and mode
-  FileSystem   : FilesystemScope -> ResourceKind
-  ||| Network access, scoped to specific hosts/ports
-  Network      : NetworkScope -> ResourceKind
-  ||| Shell/process execution, scoped to specific commands
-  Shell        : ShellScope -> ResourceKind
-  ||| Clipboard read/write access
-  Clipboard    : ResourceKind
-  ||| Desktop notification access
-  Notification : ResourceKind
-  ||| System tray icon access
-  Tray         : ResourceKind
-  ||| Groove discovery — probe and communicate with grooved services
-  Groove       : GrooveScope -> ResourceKind
 
 ||| Filesystem capability scope.
 public export
@@ -338,6 +327,29 @@ data GrooveScope : Type where
   AllowTargets : (targets : List String) -> GrooveScope
   ||| Access all groove targets (default for dev mode)
   AllGroove    : GrooveScope
+
+--------------------------------------------------------------------------------
+-- Capability Tokens (Linear Resources)
+--------------------------------------------------------------------------------
+
+||| Resource kinds that can be capability-gated.
+||| Each kind may carry scope information restricting access further.
+public export
+data ResourceKind : Type where
+  ||| Filesystem access, scoped to specific paths and mode
+  FileSystem   : FilesystemScope -> ResourceKind
+  ||| Network access, scoped to specific hosts/ports
+  Network      : NetworkScope -> ResourceKind
+  ||| Shell/process execution, scoped to specific commands
+  Shell        : ShellScope -> ResourceKind
+  ||| Clipboard read/write access
+  Clipboard    : ResourceKind
+  ||| Desktop notification access
+  Notification : ResourceKind
+  ||| System tray icon access
+  Tray         : ResourceKind
+  ||| Groove discovery — probe and communicate with grooved services
+  Groove       : GrooveScope -> ResourceKind
 
 ||| Linear capability token granting access to a specific resource.
 |||
@@ -380,9 +392,11 @@ ptrSize WASM = 32
 ptrSize _    = 64
 
 ||| Pointer type for platform.
+||| Maps to the platform's native pointer width (Bits32 on WASM, Bits64 elsewhere).
 public export
 CPtr : Platform -> Type -> Type
-CPtr p _ = Bits (ptrSize p)
+CPtr WASM _ = Bits32
+CPtr _    _ = Bits64
 
 --------------------------------------------------------------------------------
 -- Memory Layout Proofs

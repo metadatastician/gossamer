@@ -20,8 +20,33 @@ module Gossamer.ABI.Foreign
 
 import Gossamer.ABI.Types
 import Gossamer.ABI.Layout
+import Data.List
+import Data.List1
+import Data.String
 
 %default total
+
+-- NOTE ON LINEARITY:
+-- The safe wrappers document borrowing/consuming semantics in doc comments.
+-- Idris2's IO monad does not yet support linear bindings, so the quantity
+-- annotations are omitted from function signatures. The type-level intent
+-- is preserved in documentation; runtime enforcement is in the Zig FFI layer.
+
+--------------------------------------------------------------------------------
+-- String Utilities
+--------------------------------------------------------------------------------
+
+||| Convert C string pointer (as Bits64) to Idris String.
+||| At the C ABI level, Bits64 and char* have the same representation
+||| on 64-bit platforms. This FFI declaration bridges the gap.
+export
+%foreign "C:gossamer_ptr_to_string, libgossamer"
+ptrToString : Bits64 -> String
+
+||| Split a string on newline characters. Helper for dialogOpenMultiple.
+splitOnNewline : String -> List String
+splitOnNewline s =
+  filter (/= "") (forget $ Data.String.split (== '\n') s)
 
 --------------------------------------------------------------------------------
 -- Webview Lifecycle
@@ -63,7 +88,7 @@ prim__loadHTML : Bits64 -> String -> PrimIO Bits32
 ||| Safe wrapper for loading HTML.
 ||| Returns the handle back (borrowing) plus the operation result.
 export
-loadHTML : (1 _ : WebviewHandle) -> (html : String)
+loadHTML : WebviewHandle -> (html : String)
          -> IO (WebviewHandle, Either Result ())
 loadHTML wv html = do
   code <- primIO (prim__loadHTML (webviewPtr wv) html)
@@ -80,7 +105,7 @@ prim__navigate : Bits64 -> String -> PrimIO Bits32
 
 ||| Safe wrapper for URL navigation.
 export
-navigate : (1 _ : WebviewHandle) -> (url : String)
+navigate : WebviewHandle -> (url : String)
          -> IO (WebviewHandle, Either Result ())
 navigate wv url = do
   code <- primIO (prim__navigate (webviewPtr wv) url)
@@ -97,7 +122,7 @@ prim__eval : Bits64 -> String -> PrimIO Bits32
 
 ||| Safe wrapper for JS evaluation.
 export
-eval : (1 _ : WebviewHandle) -> (js : String)
+eval : WebviewHandle -> (js : String)
      -> IO (WebviewHandle, Either Result ())
 eval wv js = do
   code <- primIO (prim__eval (webviewPtr wv) js)
@@ -114,7 +139,7 @@ prim__setTitle : Bits64 -> String -> PrimIO Bits32
 
 ||| Safe wrapper for setting the window title.
 export
-setTitle : (1 _ : WebviewHandle) -> (title : String)
+setTitle : WebviewHandle -> (title : String)
          -> IO (WebviewHandle, Either Result ())
 setTitle wv title = do
   code <- primIO (prim__setTitle (webviewPtr wv) title)
@@ -131,7 +156,7 @@ prim__resize : Bits64 -> Bits32 -> Bits32 -> PrimIO Bits32
 
 ||| Safe wrapper for window resizing.
 export
-resize : (1 _ : WebviewHandle) -> (width : Bits32) -> (height : Bits32)
+resize : WebviewHandle -> (width : Bits32) -> (height : Bits32)
        -> IO (WebviewHandle, Either Result ())
 resize wv w h = do
   code <- primIO (prim__resize (webviewPtr wv) w h)
@@ -150,7 +175,7 @@ prim__run : Bits64 -> PrimIO ()
 ||| Safe wrapper for running the event loop.
 ||| Consumes the webview handle — it cannot be used after this call.
 export
-run : (1 _ : WebviewHandle) -> IO ()
+run : WebviewHandle -> IO ()
 run wv = primIO (prim__run (webviewPtr wv))
 
 ||| Destroy the webview without running the event loop.
@@ -162,7 +187,7 @@ prim__destroy : Bits64 -> PrimIO ()
 ||| Safe wrapper for webview destruction.
 ||| Consumes the handle — it cannot be used after this call.
 export
-destroy : (1 _ : WebviewHandle) -> IO ()
+destroy : WebviewHandle -> IO ()
 destroy wv = primIO (prim__destroy (webviewPtr wv))
 
 --------------------------------------------------------------------------------
@@ -202,7 +227,7 @@ prim__channelClose : Bits64 -> PrimIO ()
 
 ||| Safe wrapper for closing an IPC channel.
 export
-channelClose : (1 _ : Channel req resp) -> IO ()
+channelClose : (Channel req resp) -> IO ()
 channelClose ch = primIO (prim__channelClose (channelPtr ch))
 
 --------------------------------------------------------------------------------
@@ -308,7 +333,7 @@ dialogOpen title filters = do
   if ptr == 0
     then pure Nothing
     else do
-      let path = prim__getString ptr
+      let path = ptrToString ptr
       primIO (prim__dialogFreePath ptr)
       pure (Just path)
 
@@ -321,7 +346,7 @@ dialogSave title filters = do
   if ptr == 0
     then pure Nothing
     else do
-      let path = prim__getString ptr
+      let path = ptrToString ptr
       primIO (prim__dialogFreePath ptr)
       pure (Just path)
 
@@ -334,7 +359,7 @@ dialogOpenDirectory title = do
   if ptr == 0
     then pure Nothing
     else do
-      let path = prim__getString ptr
+      let path = ptrToString ptr
       primIO (prim__dialogFreePath ptr)
       pure (Just path)
 
@@ -348,19 +373,10 @@ dialogOpenMultiple title filters = do
   if ptr == 0
     then pure []
     else do
-      let paths = prim__getString ptr
+      let paths = ptrToString ptr
       primIO (prim__dialogFreePath ptr)
       pure (splitOnNewline paths)
 
-||| Split a string on newline characters. Helper for dialogOpenMultiple.
-splitOnNewline : String -> List String
-splitOnNewline "" = []
-splitOnNewline s =
-  let chars = unpack s
-      (before, after) = break (== '\n') chars
-  in case after of
-    [] => [pack before]
-    (_ :: rest) => pack before :: splitOnNewline (pack rest)
 
 --------------------------------------------------------------------------------
 -- Filesystem Operations (capability-gated)
@@ -376,14 +392,14 @@ prim__fsReadText : String -> Bits64 -> PrimIO Bits64
 ||| Safe wrapper for reading a text file.
 ||| Returns Nothing on error or capability denial.
 export
-fsReadText : (path : String) -> (1 cap : Cap (FileSystem scope))
+fsReadText : (path : String) -> (cap : Cap (FileSystem scope))
            -> IO (Cap (FileSystem scope), Maybe String)
 fsReadText path cap@(MkCap token) = do
   ptr <- primIO (prim__fsReadText path token)
   if ptr == 0
     then pure (cap, Nothing)
     else do
-      let contents = prim__getString ptr
+      let contents = ptrToString ptr
       pure (cap, Just contents)
 
 ||| Write text to a file on the local filesystem.
@@ -397,7 +413,7 @@ prim__fsWriteText : String -> String -> Bits64 -> PrimIO Bits32
 ||| Returns an Either with the result.
 export
 fsWriteText : (path : String) -> (contents : String)
-            -> (1 cap : Cap (FileSystem scope))
+            -> (cap : Cap (FileSystem scope))
             -> IO (Cap (FileSystem scope), Either Result ())
 fsWriteText path contents cap@(MkCap token) = do
   code <- primIO (prim__fsWriteText path contents token)
@@ -414,7 +430,7 @@ prim__fsExists : String -> Bits64 -> PrimIO Bits32
 
 ||| Safe wrapper for file existence check.
 export
-fsExists : (path : String) -> (1 cap : Cap (FileSystem scope))
+fsExists : (path : String) -> (cap : Cap (FileSystem scope))
          -> IO (Cap (FileSystem scope), Bool)
 fsExists path cap@(MkCap token) = do
   result <- primIO (prim__fsExists path token)
@@ -441,11 +457,6 @@ export
 %foreign "C:gossamer_last_error, libgossamer"
 prim__lastError : PrimIO Bits64
 
-||| Convert C string pointer to Idris String.
-export
-%foreign "support:idris2_getString, libidris2_support"
-prim__getString : Bits64 -> String
-
 ||| Retrieve last error as a string.
 export
 lastError : IO (Maybe String)
@@ -453,7 +464,7 @@ lastError = do
   ptr <- primIO prim__lastError
   if ptr == 0
     then pure Nothing
-    else pure (Just (prim__getString ptr))
+    else pure (Just (ptrToString ptr))
 
 --------------------------------------------------------------------------------
 -- Version Information
@@ -469,7 +480,7 @@ export
 version : IO String
 version = do
   ptr <- primIO prim__version
-  pure (prim__getString ptr)
+  pure (ptrToString ptr)
 
 --------------------------------------------------------------------------------
 -- Static Site Generator (SSG)
@@ -490,7 +501,7 @@ ssgReadFile path = do
   ptr <- primIO (prim__ssgReadFile path)
   if ptr == 0
     then pure Nothing
-    else pure (Just (prim__getString ptr))
+    else pure (Just (ptrToString ptr))
 
 ||| Write content to a file, creating parent directories as needed.
 ||| Returns 0 on success, non-zero on error.
@@ -518,7 +529,7 @@ ssgListFiles dir ext = do
   ptr <- primIO (prim__ssgListFiles dir ext)
   if ptr == 0
     then pure Nothing
-    else pure (Just (prim__getString ptr))
+    else pure (Just (ptrToString ptr))
 
 ||| Parse YAML front matter from content (between --- delimiters).
 ||| Returns the front matter text, or empty string if none found.
@@ -531,7 +542,7 @@ export
 ssgParseFrontMatter : String -> IO String
 ssgParseFrontMatter content = do
   ptr <- primIO (prim__ssgParseFrontMatter content)
-  pure (prim__getString ptr)
+  pure (ptrToString ptr)
 
 ||| Parse body content (everything after front matter).
 export
@@ -543,7 +554,7 @@ export
 ssgParseBody : String -> IO String
 ssgParseBody content = do
   ptr <- primIO (prim__ssgParseBody content)
-  pure (prim__getString ptr)
+  pure (ptrToString ptr)
 
 ||| Convert Markdown to HTML.
 ||| Supports headings, bold, italic, code, links, code blocks.
@@ -556,7 +567,7 @@ export
 ssgMdToHtml : String -> IO String
 ssgMdToHtml markdown = do
   ptr <- primIO (prim__ssgMdToHtml markdown)
-  pure (prim__getString ptr)
+  pure (ptrToString ptr)
 
 ||| Substitute {{key}} placeholders in a template with key=value pairs.
 export
@@ -568,7 +579,7 @@ export
 ssgTemplateSubstitute : String -> String -> IO String
 ssgTemplateSubstitute template vars = do
   ptr <- primIO (prim__ssgTemplateSubstitute template vars)
-  pure (prim__getString ptr)
+  pure (ptrToString ptr)
 
 ||| Build an entire static site from content directory + template.
 ||| Returns 0 on success, non-zero on error.

@@ -30,6 +30,7 @@ module Gossamer.ABI.Groove
 import Gossamer.ABI.Types
 import Data.So
 import Data.List
+import Data.List.Elem
 import Data.Bits
 
 %default total
@@ -309,8 +310,10 @@ data GrooveHandle : (offers : CapSet) -> (consumes : CapSet) -> Type where
 ||| Returns Nothing if the pointer is null.
 public export
 createGroove : Bits64 -> Maybe (GrooveHandle offers consumes)
-createGroove 0 = Nothing
-createGroove ptr = Just (MkGroove ptr)
+createGroove ptr =
+  case choose (ptr /= 0) of
+    Left  ok => Just (MkGroove ptr)
+    Right _  => Nothing
 
 ||| Extract raw pointer from groove handle (for FFI calls).
 public export
@@ -340,9 +343,12 @@ data GrooveCompat : (aOffers : CapSet) -> (aConsumes : CapSet)
 
 ||| Runtime compatibility check between two manifests.
 ||| Returns True if both sides can satisfy each other's requirements.
+||| Takes the capability sets as explicit arguments since the record's
+||| type parameters are erased at runtime.
 public export
-isCompatible : GrooveManifest aOff aCon -> GrooveManifest bOff bCon -> Bool
-isCompatible {aOff} {aCon} {bOff} {bCon} _ _ =
+isCompatible : (aOff, aCon, bOff, bCon : CapSet)
+            -> GrooveManifest aOff aCon -> GrooveManifest bOff bCon -> Bool
+isCompatible aOff aCon bOff bCon _ _ =
   checkSubset bCon aOff && checkSubset aCon bOff
 
 ||| A composed groove pair — two handles that have been verified compatible.

@@ -1,0 +1,30 @@
+-- SPDX-License-Identifier: PMPL-1.0-or-later
+-- Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+--
+-- Gossamer ABI — Idris2 package for type-checking the formal ABI proofs.
+--
+-- Includes the core Gossamer webview ABI (Types, Layout, Foreign) and
+-- the Groove protocol for type-safe inter-service discovery.
+--
+-- Build:   idris2 --build gossamer-abi.ipkg
+-- Check:   idris2 --typecheck gossamer-abi.ipkg
+
+package gossamer-abi
+
+version = 0.1.0
+
+authors = "Jonathan D.A. Jewell"
+
+brief = "Formally verified ABI for the Gossamer webview shell and Groove protocol"
+
+-- Source files live in src/interface/abi/ but declare module Gossamer.ABI.*
+-- Symlinks in src/interface/Gossamer/ABI/ map the Idris2 module namespace
+-- to the physical file locations.
+sourcedir = "src/interface"
+
+depends = base
+
+modules = Gossamer.ABI.Types
+        , Gossamer.ABI.Layout
+        , Gossamer.ABI.Foreign
+        , Gossamer.ABI.Groove
