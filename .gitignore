@@ -108,3 +108,6 @@ src/interface/ffi/zig-out/
 
 # SSG generated output
 site/dist/
+
+# asdf version manager
+.tool-versions
