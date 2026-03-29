@@ -36,10 +36,14 @@ All 18 IPC commands wired through gossamer_channel_bind in main.eph:
 Sidebar buttons in App.res call gossamerInvoke() for each command.
 EditorLevelCmd.res provides typed ReScript wrappers for all 12.
 
-### P1 — Ephapax SSG
+### P1 — Ephapax SSG [PARTIAL — 2026-03-29]
 
-Build a static site generator in Ephapax. Use it to generate the Gossamer
-docs site. Dogfooding: Gossamer's website built by Gossamer's language.
+AWK SSG pipeline working: 5 pages (index, architecture, getting-started,
+ephapax-primer, platform-support) built from site/src/content/ via
+scripts/md-to-html.awk + template-sub.awk. Site sources committed.
+
+Remaining: rewrite SSG in Ephapax (the full dogfooding goal — Gossamer's
+website built by Gossamer's language, not AWK).
 
 ### P2 — arXiv submission
 
