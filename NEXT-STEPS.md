@@ -25,11 +25,16 @@
 
 ## Next Session Priorities
 
-### P0 — Wire IPC (make buttons work)
+### P0 — Wire IPC (make buttons work) [DONE 2026-03-29]
 
-The IDApTIK UMS sidebar buttons are static HTML. Wire `gossamer_channel_bind`
-so that JS `onclick` events call `__ffi("idaptik_ums_create_level", ...)`
-through the IPC bridge. This is the "make it interactive" step.
+All 18 IPC commands wired through gossamer_channel_bind in main.eph:
+- 6 disk/system commands (load_level, save_level, validate_level_abi,
+  list_levels, export_level_config, get_system_info)
+- 12 level-building commands (create_level, destroy_level, add_zone,
+  add_device, add_guard, add_dog, add_drone, set_mission, set_physical,
+  validate_level, serialize_level, deserialize_level)
+Sidebar buttons in App.res call gossamerInvoke() for each command.
+EditorLevelCmd.res provides typed ReScript wrappers for all 12.
 
 ### P1 — Ephapax SSG
 
@@ -57,7 +62,7 @@ Implement macOS (WKWebView via Cocoa Objective-C runtime) and Windows
 
 ### P5 — IDApTIK full migration
 
-- Wire all 12 UMS FFI functions through IPC
+- [x] Wire all 12 UMS FFI functions through IPC (done in P0, 2026-03-29)
 - Migrate UMS from Tauri to Gossamer for desktop
 - Keep Tauri for mobile (until Phase 3)
 - Test with real level editing workflow
