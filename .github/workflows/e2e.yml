@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+#
+# Gossamer — E2E + Safety + Symbol Verification
+#
+# Tests the webview shell framework: FFI build, integration tests, CLI build,
+# C-ABI symbol exports, and safety aspects.
+
+name: E2E + Safety
+
+on:
+  push:
+    branches: [main, master, develop]
+    paths:
+      - 'src/**'
+      - 'cli/**'
+      - 'tests/**'
+      - '.github/workflows/e2e.yml'
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions: read-all
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: E2E — FFI Build + Integration + CLI
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@7ab2955eb728f5440978d7b4f723a50dea1f3608  # v2
+        with:
+          version: 0.15.0
+
+      - name: Install GTK/WebKit dev headers
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Run E2E test suite
+        run: bash tests/e2e.sh
