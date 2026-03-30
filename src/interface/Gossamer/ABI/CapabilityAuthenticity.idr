@@ -1,0 +1,1 @@
+../../abi/CapabilityAuthenticity.idr
