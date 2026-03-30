@@ -59,8 +59,8 @@ comptime {
     _ = @import("csp.zig");
 }
 
-// Version information
-const VERSION = "0.1.0";
+// Version information — bump on each release
+const VERSION = "0.3.0";
 const BUILD_INFO = "Gossamer " ++ VERSION ++ " built with Zig " ++ @import("builtin").zig_version_string;
 
 /// Platform-specific webview implementation.
@@ -529,11 +529,13 @@ export fn gossamer_channel_open(handle_ptr: u64) u64 {
         \\    if (typeof name !== "string") return undefined;
         \\    if (name === "on") return window.__gossamer_on;
         \\    if (name === "emit") return window.__gossamer_emit;
+        \\    if (name === "platform") return window.__gossamer_platform;
         \\    return function(payload) {
         \\      return window.__gossamer_invoke(name, payload);
         \\    };
         \\  }
         \\});
+    ++ "window.__gossamer_platform=" ++ PLATFORM_JSON ++ ";"
     ;
 
     platform.eval(&handle.webview, bridge_js) catch {
@@ -891,6 +893,101 @@ export fn gossamer_build_info() [*:0]const u8 {
 }
 
 //==============================================================================
+// Platform Detection Query API
+//==============================================================================
+// Runtime-queryable platform information for cross-platform applications.
+// Allows frontend JS and Ephapax code to adjust behaviour based on the
+// host platform without compile-time conditionals.
+
+/// Platform identifier string.
+/// Returns one of: "linux", "macos", "windows", "freebsd", "openbsd",
+/// "netbsd", "ios", or "unknown".
+export fn gossamer_platform() [*:0]const u8 {
+    return switch (builtin.os.tag) {
+        .linux => "linux",
+        .macos => "macos",
+        .windows => "windows",
+        .freebsd => "freebsd",
+        .openbsd => "openbsd",
+        .netbsd => "netbsd",
+        .ios => "ios",
+        else => "unknown",
+    };
+}
+
+/// CPU architecture string.
+/// Returns one of: "x86_64", "aarch64", "riscv64", "wasm32", or "unknown".
+export fn gossamer_arch() [*:0]const u8 {
+    return switch (builtin.cpu.arch) {
+        .x86_64 => "x86_64",
+        .aarch64 => "aarch64",
+        .riscv64 => "riscv64",
+        .wasm32 => "wasm32",
+        else => "unknown",
+    };
+}
+
+/// Webview engine name for the current platform.
+/// Returns one of: "webkitgtk", "wkwebview", "webview2", or "none".
+export fn gossamer_webview_engine() [*:0]const u8 {
+    return switch (builtin.os.tag) {
+        .linux, .freebsd, .openbsd, .netbsd => "webkitgtk",
+        .macos, .ios => "wkwebview",
+        .windows => "webview2",
+        else => "none",
+    };
+}
+
+/// Whether the current platform is a desktop platform (not mobile/embedded).
+/// Returns 1 for desktop, 0 for mobile/other.
+export fn gossamer_is_desktop() u8 {
+    return switch (builtin.os.tag) {
+        .linux, .macos, .windows, .freebsd, .openbsd, .netbsd => 1,
+        else => 0,
+    };
+}
+
+/// Platform information as a JSON string.
+/// Includes platform, architecture, webview engine, version, and desktop flag.
+/// Useful for the JS bridge to query all platform info in one call.
+const PLATFORM_JSON = blk: {
+    const plat = switch (builtin.os.tag) {
+        .linux => "linux",
+        .macos => "macos",
+        .windows => "windows",
+        .freebsd => "freebsd",
+        .openbsd => "openbsd",
+        .netbsd => "netbsd",
+        .ios => "ios",
+        else => "unknown",
+    };
+    const arch = switch (builtin.cpu.arch) {
+        .x86_64 => "x86_64",
+        .aarch64 => "aarch64",
+        .riscv64 => "riscv64",
+        .wasm32 => "wasm32",
+        else => "unknown",
+    };
+    const engine = switch (builtin.os.tag) {
+        .linux, .freebsd, .openbsd, .netbsd => "webkitgtk",
+        .macos, .ios => "wkwebview",
+        .windows => "webview2",
+        else => "none",
+    };
+    const desktop = switch (builtin.os.tag) {
+        .linux, .macos, .windows, .freebsd, .openbsd, .netbsd => "true",
+        else => "false",
+    };
+    break :blk "{\"platform\":\"" ++ plat ++ "\",\"arch\":\"" ++ arch ++
+        "\",\"engine\":\"" ++ engine ++ "\",\"version\":\"" ++ VERSION ++
+        "\",\"desktop\":" ++ desktop ++ "}";
+};
+
+export fn gossamer_platform_json() [*:0]const u8 {
+    return PLATFORM_JSON;
+}
+
+//==============================================================================
 // Internal Helpers
 //==============================================================================
 
@@ -951,7 +1048,7 @@ test "null handle returns null_pointer" {
 test "version string" {
     const ver = gossamer_version();
     const ver_str = std.mem.span(ver);
-    try std.testing.expectEqualStrings("0.1.0", ver_str);
+    try std.testing.expectEqualStrings("0.3.0", ver_str);
 }
 
 test "capability grant returns non-zero token" {
@@ -1085,4 +1182,76 @@ test "BindingEntry defaults to synchronous" {
 test "async inflight count export returns zero initially" {
     async_ipc.reset();
     try std.testing.expectEqual(@as(u32, 0), gossamer_async_inflight_count());
+}
+
+test "version string reflects v0.3.0" {
+    const ver = gossamer_version();
+    const ver_str = std.mem.span(ver);
+    try std.testing.expectEqualStrings("0.3.0", ver_str);
+}
+
+test "platform returns a known platform string" {
+    const plat = gossamer_platform();
+    const plat_str = std.mem.span(plat);
+    // On the build machine this must be one of the known platforms
+    try std.testing.expect(
+        std.mem.eql(u8, plat_str, "linux") or
+            std.mem.eql(u8, plat_str, "macos") or
+            std.mem.eql(u8, plat_str, "windows") or
+            std.mem.eql(u8, plat_str, "freebsd") or
+            std.mem.eql(u8, plat_str, "openbsd") or
+            std.mem.eql(u8, plat_str, "netbsd") or
+            std.mem.eql(u8, plat_str, "ios") or
+            std.mem.eql(u8, plat_str, "unknown"),
+    );
+}
+
+test "arch returns a known architecture string" {
+    const arch = gossamer_arch();
+    const arch_str = std.mem.span(arch);
+    try std.testing.expect(
+        std.mem.eql(u8, arch_str, "x86_64") or
+            std.mem.eql(u8, arch_str, "aarch64") or
+            std.mem.eql(u8, arch_str, "riscv64") or
+            std.mem.eql(u8, arch_str, "wasm32") or
+            std.mem.eql(u8, arch_str, "unknown"),
+    );
+}
+
+test "webview engine returns a known engine string" {
+    const engine = gossamer_webview_engine();
+    const engine_str = std.mem.span(engine);
+    try std.testing.expect(
+        std.mem.eql(u8, engine_str, "webkitgtk") or
+            std.mem.eql(u8, engine_str, "wkwebview") or
+            std.mem.eql(u8, engine_str, "webview2") or
+            std.mem.eql(u8, engine_str, "none"),
+    );
+}
+
+test "desktop flag consistent with platform" {
+    const is_desktop = gossamer_is_desktop();
+    const plat = std.mem.span(gossamer_platform());
+    if (std.mem.eql(u8, plat, "linux") or
+        std.mem.eql(u8, plat, "macos") or
+        std.mem.eql(u8, plat, "windows") or
+        std.mem.eql(u8, plat, "freebsd") or
+        std.mem.eql(u8, plat, "openbsd") or
+        std.mem.eql(u8, plat, "netbsd"))
+    {
+        try std.testing.expectEqual(@as(u8, 1), is_desktop);
+    }
+}
+
+test "platform JSON is valid-looking JSON" {
+    const json = gossamer_platform_json();
+    const json_str = std.mem.span(json);
+    // Must start with { and end with }
+    try std.testing.expect(json_str.len > 0);
+    try std.testing.expectEqual(@as(u8, '{'), json_str[0]);
+    try std.testing.expectEqual(@as(u8, '}'), json_str[json_str.len - 1]);
+    // Must contain "platform" field
+    try std.testing.expect(std.mem.indexOf(u8, json_str, "\"platform\"") != null);
+    // Must contain "version" field with "0.3.0"
+    try std.testing.expect(std.mem.indexOf(u8, json_str, "\"version\":\"0.3.0\"") != null);
 }

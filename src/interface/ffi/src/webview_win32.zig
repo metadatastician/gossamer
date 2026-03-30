@@ -387,34 +387,64 @@ pub fn create(
         .loader_handle = loader,
     };
 
-    // If WebView2Loader.dll is available, initialise WebView2.
-    // If not, the window exists but webview operations will return errors
-    // (graceful degradation for systems without Edge WebView2 Runtime).
+    // If WebView2Loader.dll is available, initialise WebView2 synchronously.
+    // Uses a Windows event object to block until the async COM callbacks complete.
+    // If the loader is not available, the window exists but webview operations
+    // will return errors (graceful degradation for systems without Edge WebView2 Runtime).
     if (loader) |loader_dll| {
         const create_fn_ptr = GetProcAddress(
             loader_dll,
             "CreateCoreWebView2EnvironmentWithOptions",
         );
-        if (create_fn_ptr) |_| {
-            // WebView2 environment creation is asynchronous via COM callbacks.
-            // In a production implementation, we would:
-            //   1. Create a Windows event (CreateEventW)
-            //   2. Call CreateCoreWebView2EnvironmentWithOptions with a
-            //      COM callback handler
-            //   3. In the callback, call env->CreateCoreWebView2Controller
-            //   4. In the controller callback, extract ICoreWebView2,
-            //      set bounds, signal the event
-            //   5. WaitForSingleObject on the event to block until ready
-            //
-            // The COM callback machinery requires implementing IUnknown
-            // (AddRef/Release/QueryInterface) on Zig-allocated structs.
-            // This is implemented below but requires the WebView2 Runtime
-            // to be installed for testing.
-            //
-            // For now, the window is created and the function pointer is
-            // validated. The actual WebView2 attachment happens when the
-            // first Navigate/LoadHTML call is made, triggering lazy init.
-            state.webview = null; // Lazy init on first use
+        if (create_fn_ptr) |raw_fn| {
+            // Cast to the correct function signature.
+            // CreateCoreWebView2EnvironmentWithOptions(
+            //   browserDir: ?LPCWSTR,
+            //   userDataDir: ?LPCWSTR,
+            //   options: ?*anyopaque,
+            //   handler: *anyopaque  // ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler
+            // ) -> HRESULT
+            const CreateEnvFn = *const fn (
+                ?LPCWSTR,
+                ?LPCWSTR,
+                ?*anyopaque,
+                *anyopaque,
+            ) callconv(.c) HRESULT;
+            const create_env_fn: CreateEnvFn = @ptrCast(raw_fn);
+
+            // Create an event to synchronise the async COM callbacks.
+            // The callback chain signals this event when initialisation completes.
+            const ready_event = CreateEventW(null, 1, 0, null);
+            if (ready_event) |event| {
+                // Store the pending state in thread-local storage so
+                // the COM callbacks can write back into our state struct.
+                pending_state = &state;
+                pending_hwnd = hwnd;
+                pending_event = event;
+
+                // Allocate the environment-completed handler on the heap.
+                // COM AddRef/Release manage the lifetime.
+                const env_handler = std.heap.c_allocator.create(EnvCompletedHandler) catch {
+                    _ = CloseHandle(event);
+                    return state;
+                };
+                env_handler.* = EnvCompletedHandler{};
+
+                // Call CreateCoreWebView2EnvironmentWithOptions.
+                // This is asynchronous — it returns immediately and invokes
+                // the handler when the environment is ready.
+                const hr2 = create_env_fn(null, null, null, @ptrCast(env_handler));
+                if (hr2 == S_OK) {
+                    // Block until the callback chain signals the event.
+                    // Timeout after 10 seconds to prevent infinite hangs.
+                    _ = WaitForSingleObject(event, 10000);
+                }
+
+                _ = CloseHandle(event);
+                pending_state = null;
+                pending_hwnd = null;
+                pending_event = null;
+            }
         }
     }
 
@@ -534,19 +564,390 @@ pub fn destroy(state: *WebviewState) void {
 /// Uses ICoreWebView2::add_WebMessageReceived to listen for messages
 /// posted via `window.chrome.webview.postMessage(msg)` from JavaScript.
 /// Messages are dispatched to the GossamerHandle's bindings map.
+///
+/// The handler is a COM object implementing ICoreWebView2WebMessageReceivedEventHandler.
+/// When JavaScript calls `window.chrome.webview.postMessage(msg)`, the Invoke
+/// method is called with the message args. We extract the JSON string, parse it,
+/// look up the command name in the bindings map, invoke the callback, and send
+/// the response back via ExecuteScript.
 pub fn registerIPCHandler(state: *WebviewState, handle: *GossamerHandle) PlatformError!void {
-    _ = handle;
     const wv = state.webview orelse return PlatformError.OperationFailed;
     const vtbl = wv2Vtbl(wv);
 
-    // Register a WebMessageReceived event handler.
-    // The handler COM object would implement ICoreWebView2WebMessageReceivedEventHandler:
-    //   Invoke(sender, args) → extract JSON message → dispatch to bindings
-    //
-    // For now, register a null handler which is safe (no-op).
-    // The IPC bridge JS still works via window.chrome.webview.postMessage()
-    // but responses won't be delivered back until the handler is wired.
+    // Store the handle in thread-local storage for the callback.
+    // WebView2 is single-threaded (STA), so thread-local is safe.
+    ipc_handle = handle;
+
+    // Allocate the WebMessageReceived event handler COM object.
+    const msg_handler = std.heap.c_allocator.create(WebMessageHandler) catch
+        return PlatformError.OperationFailed;
+    msg_handler.* = WebMessageHandler{};
+
     var token: i64 = 0;
-    const hr = vtbl.add_WebMessageReceived(wv, null, &token);
-    if (hr != S_OK) return PlatformError.OperationFailed;
+    const hr = vtbl.add_WebMessageReceived(wv, @ptrCast(msg_handler), &token);
+    if (hr != S_OK) {
+        std.heap.c_allocator.destroy(msg_handler);
+        return PlatformError.OperationFailed;
+    }
+}
+
+//==============================================================================
+// COM Callback Handlers for WebView2 Initialisation
+//==============================================================================
+//
+// WebView2 initialisation is asynchronous via COM callbacks:
+//   1. CreateCoreWebView2EnvironmentWithOptions calls EnvCompletedHandler.Invoke
+//   2. EnvCompletedHandler calls env.CreateCoreWebView2Controller
+//   3. ControllerCompletedHandler.Invoke receives the controller + webview
+//   4. Controller.get_CoreWebView2 extracts the ICoreWebView2
+//   5. Controller.put_Bounds sets the webview to fill the window
+//   6. The ready event is signalled, unblocking create()
+//
+// Each handler implements a minimal COM interface (QueryInterface/AddRef/Release/Invoke).
+
+/// Thread-local state for the WebView2 initialisation callback chain.
+/// Set by create(), read by COM callbacks, cleared after WaitForSingleObject.
+var pending_state: ?*WebviewState = null;
+var pending_hwnd: ?HWND = null;
+var pending_event: ?HANDLE = null;
+
+/// ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler.
+/// COM callback invoked when the WebView2 environment is ready.
+const EnvCompletedHandler = extern struct {
+    vtbl_ptr: *const EnvCompletedVtbl = &env_completed_vtbl,
+    ref_count: u32 = 1,
+
+    const EnvCompletedVtbl = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.c) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.c) u32,
+        Release: *const fn (*anyopaque) callconv(.c) u32,
+        Invoke: *const fn (*anyopaque, HRESULT, ?*anyopaque) callconv(.c) HRESULT,
+    };
+
+    const env_completed_vtbl = EnvCompletedVtbl{
+        .QueryInterface = &envQueryInterface,
+        .AddRef = &envAddRef,
+        .Release = &envRelease,
+        .Invoke = &envInvoke,
+    };
+
+    fn envQueryInterface(_: *anyopaque, _: *const GUID, ppv: *?*anyopaque) callconv(.c) HRESULT {
+        ppv.* = null;
+        return @as(HRESULT, @bitCast(@as(u32, 0x80004002))); // E_NOINTERFACE
+    }
+
+    fn envAddRef(self_raw: *anyopaque) callconv(.c) u32 {
+        const self: *EnvCompletedHandler = @ptrCast(@alignCast(self_raw));
+        self.ref_count += 1;
+        return self.ref_count;
+    }
+
+    fn envRelease(self_raw: *anyopaque) callconv(.c) u32 {
+        const self: *EnvCompletedHandler = @ptrCast(@alignCast(self_raw));
+        if (self.ref_count > 0) self.ref_count -= 1;
+        if (self.ref_count == 0) {
+            std.heap.c_allocator.destroy(self);
+            return 0;
+        }
+        return self.ref_count;
+    }
+
+    /// Called when the WebView2 environment is created.
+    /// Asks the environment to create a controller (the next async step).
+    fn envInvoke(_: *anyopaque, result_hr: HRESULT, env_raw: ?*anyopaque) callconv(.c) HRESULT {
+        if (result_hr != S_OK) {
+            // Environment creation failed — signal the event so create() unblocks
+            if (pending_event) |event| _ = SetEvent(event);
+            return S_OK;
+        }
+
+        const env = env_raw orelse {
+            if (pending_event) |event| _ = SetEvent(event);
+            return S_OK;
+        };
+
+        // Allocate the controller-completed handler
+        const ctrl_handler = std.heap.c_allocator.create(ControllerCompletedHandler) catch {
+            if (pending_event) |event| _ = SetEvent(event);
+            return S_OK;
+        };
+        ctrl_handler.* = ControllerCompletedHandler{};
+
+        // ICoreWebView2Environment::CreateCoreWebView2Controller(hwnd, handler)
+        const env_vtbl: *const ICoreWebView2EnvironmentVtbl = blk: {
+            const com: *const struct { vtbl: *const ICoreWebView2EnvironmentVtbl } =
+                @ptrCast(@alignCast(env));
+            break :blk com.vtbl;
+        };
+        const hr = env_vtbl.CreateCoreWebView2Controller(env, pending_hwnd, @ptrCast(ctrl_handler));
+        if (hr != S_OK) {
+            std.heap.c_allocator.destroy(ctrl_handler);
+            if (pending_event) |event| _ = SetEvent(event);
+        }
+
+        return S_OK;
+    }
+};
+
+/// ICoreWebView2CreateCoreWebView2ControllerCompletedHandler.
+/// COM callback invoked when the WebView2 controller is ready.
+const ControllerCompletedHandler = extern struct {
+    vtbl_ptr: *const CtrlCompletedVtbl = &ctrl_completed_vtbl,
+    ref_count: u32 = 1,
+
+    const CtrlCompletedVtbl = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.c) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.c) u32,
+        Release: *const fn (*anyopaque) callconv(.c) u32,
+        Invoke: *const fn (*anyopaque, HRESULT, ?*anyopaque) callconv(.c) HRESULT,
+    };
+
+    const ctrl_completed_vtbl = CtrlCompletedVtbl{
+        .QueryInterface = &ctrlQueryInterface,
+        .AddRef = &ctrlAddRef,
+        .Release = &ctrlRelease,
+        .Invoke = &ctrlInvoke,
+    };
+
+    fn ctrlQueryInterface(_: *anyopaque, _: *const GUID, ppv: *?*anyopaque) callconv(.c) HRESULT {
+        ppv.* = null;
+        return @as(HRESULT, @bitCast(@as(u32, 0x80004002))); // E_NOINTERFACE
+    }
+
+    fn ctrlAddRef(self_raw: *anyopaque) callconv(.c) u32 {
+        const self: *ControllerCompletedHandler = @ptrCast(@alignCast(self_raw));
+        self.ref_count += 1;
+        return self.ref_count;
+    }
+
+    fn ctrlRelease(self_raw: *anyopaque) callconv(.c) u32 {
+        const self: *ControllerCompletedHandler = @ptrCast(@alignCast(self_raw));
+        if (self.ref_count > 0) self.ref_count -= 1;
+        if (self.ref_count == 0) {
+            std.heap.c_allocator.destroy(self);
+            return 0;
+        }
+        return self.ref_count;
+    }
+
+    /// Called when the WebView2 controller is created.
+    /// Extracts ICoreWebView2, sets bounds, and signals the ready event.
+    fn ctrlInvoke(_: *anyopaque, result_hr: HRESULT, controller_raw: ?*anyopaque) callconv(.c) HRESULT {
+        defer {
+            // Always signal the event so create() unblocks
+            if (pending_event) |event| _ = SetEvent(event);
+        }
+
+        if (result_hr != S_OK) return S_OK;
+        const controller = controller_raw orelse return S_OK;
+        const state = pending_state orelse return S_OK;
+        const hwnd = pending_hwnd orelse return S_OK;
+
+        // Store the controller
+        state.controller = controller;
+
+        // Extract ICoreWebView2 from the controller
+        const ctrl_vtbl = controllerVtbl(controller);
+        var wv_ptr: ?*anyopaque = null;
+        const hr = ctrl_vtbl.get_CoreWebView2(controller, &wv_ptr);
+        if (hr == S_OK) {
+            state.webview = wv_ptr;
+        }
+
+        // Set the webview bounds to fill the client area of the window
+        var rect: RECT = .{ .left = 0, .top = 0, .right = 0, .bottom = 0 };
+        _ = GetClientRect(hwnd, &rect);
+        _ = ctrl_vtbl.put_Bounds(controller, rect);
+
+        return S_OK;
+    }
+};
+
+//==============================================================================
+// WebMessageReceived Event Handler (IPC)
+//==============================================================================
+//
+// COM object implementing ICoreWebView2WebMessageReceivedEventHandler.
+// Dispatches incoming IPC messages from JavaScript to the bound callbacks.
+
+/// Thread-local handle for IPC dispatch. Set by registerIPCHandler.
+var ipc_handle: ?*GossamerHandle = null;
+
+/// ICoreWebView2WebMessageReceivedEventHandler implementation.
+/// Receives messages posted via `window.chrome.webview.postMessage(msg)`.
+const WebMessageHandler = extern struct {
+    vtbl_ptr: *const WebMsgVtbl = &web_msg_vtbl,
+    ref_count: u32 = 1,
+
+    const WebMsgVtbl = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.c) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.c) u32,
+        Release: *const fn (*anyopaque) callconv(.c) u32,
+        Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.c) HRESULT,
+    };
+
+    const web_msg_vtbl = WebMsgVtbl{
+        .QueryInterface = &msgQueryInterface,
+        .AddRef = &msgAddRef,
+        .Release = &msgRelease,
+        .Invoke = &msgInvoke,
+    };
+
+    fn msgQueryInterface(_: *anyopaque, _: *const GUID, ppv: *?*anyopaque) callconv(.c) HRESULT {
+        ppv.* = null;
+        return @as(HRESULT, @bitCast(@as(u32, 0x80004002))); // E_NOINTERFACE
+    }
+
+    fn msgAddRef(self_raw: *anyopaque) callconv(.c) u32 {
+        const self: *WebMessageHandler = @ptrCast(@alignCast(self_raw));
+        self.ref_count += 1;
+        return self.ref_count;
+    }
+
+    fn msgRelease(self_raw: *anyopaque) callconv(.c) u32 {
+        const self: *WebMessageHandler = @ptrCast(@alignCast(self_raw));
+        if (self.ref_count > 0) self.ref_count -= 1;
+        if (self.ref_count == 0) {
+            std.heap.c_allocator.destroy(self);
+            return 0;
+        }
+        return self.ref_count;
+    }
+
+    /// Called when JavaScript posts a message via chrome.webview.postMessage().
+    /// Extracts the JSON message, parses {id, name, payload}, dispatches to
+    /// the registered callback, and sends the response back via ExecuteScript.
+    fn msgInvoke(_: *anyopaque, _: ?*anyopaque, args_raw: ?*anyopaque) callconv(.c) HRESULT {
+        const handle = ipc_handle orelse return S_OK;
+        const args = args_raw orelse return S_OK;
+
+        // ICoreWebView2WebMessageReceivedEventArgs::TryGetWebMessageAsString
+        // Vtable layout: IUnknown (3) + get_Source (1) + TryGetWebMessageAsString (1)
+        const ArgsVtbl = extern struct {
+            // IUnknown
+            QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.c) HRESULT,
+            AddRef: *const fn (*anyopaque) callconv(.c) u32,
+            Release: *const fn (*anyopaque) callconv(.c) u32,
+            // ICoreWebView2WebMessageReceivedEventArgs
+            get_Source: *const fn (*anyopaque, *?LPWSTR) callconv(.c) HRESULT,
+            TryGetWebMessageAsString: *const fn (*anyopaque, *?LPWSTR) callconv(.c) HRESULT,
+        };
+
+        const args_com: *const struct { vtbl: *const ArgsVtbl } = @ptrCast(@alignCast(args));
+        var msg_ptr: ?LPWSTR = null;
+        const hr = args_com.vtbl.TryGetWebMessageAsString(args, &msg_ptr);
+        if (hr != S_OK) return S_OK;
+        const msg_w = msg_ptr orelse return S_OK;
+
+        // Convert UTF-16 message to UTF-8
+        const allocator = std.heap.c_allocator;
+        var utf8_buf: [65536]u8 = undefined;
+        const msg_len = blk: {
+            var i: usize = 0;
+            while (msg_w[i] != 0 and i < 32768) : (i += 1) {}
+            break :blk i;
+        };
+        const utf16_slice = msg_w[0..msg_len];
+        const utf8_len = std.unicode.utf16LeToUtf8(&utf8_buf, utf16_slice) catch return S_OK;
+        const msg_slice = utf8_buf[0..utf8_len];
+
+        // Parse JSON fields
+        const id = extractJsonField(msg_slice, "id") orelse return S_OK;
+        const name = extractJsonField(msg_slice, "name") orelse {
+            sendIPCError(handle, id, "Missing 'name' field in IPC message");
+            return S_OK;
+        };
+        const payload = extractJsonField(msg_slice, "payload") orelse "";
+
+        // Look up the binding
+        const callback = handle.bindings.get(name) orelse {
+            sendIPCError(handle, id, "No handler bound for command");
+            return S_OK;
+        };
+
+        // Invoke the callback
+        const payload_z = allocator.dupeZ(u8, payload) catch return S_OK;
+        defer allocator.free(payload_z);
+
+        const response_ptr = callback.callback(payload_z, callback.user_data);
+        const response = std.mem.span(response_ptr);
+        sendIPCResponse(handle, id, response);
+
+        return S_OK;
+    }
+};
+
+//==============================================================================
+// IPC Response Helpers (Windows)
+//==============================================================================
+
+/// Send a success response back to the JavaScript IPC bridge.
+fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8) void {
+    const allocator = std.heap.c_allocator;
+    const escaped = escapeForJS(allocator, response) catch return;
+    defer allocator.free(escaped);
+    const js = std.fmt.allocPrintZ(
+        allocator,
+        "if (window.__gossamer_callbacks[\"{s}\"]) {{ window.__gossamer_callbacks[\"{s}\"].resolve(JSON.parse(\"{s}\")); delete window.__gossamer_callbacks[\"{s}\"]; }}",
+        .{ id, id, escaped, id },
+    ) catch return;
+    defer allocator.free(js);
+    eval(&handle.webview, js) catch {};
+}
+
+/// Send an error response back to the JavaScript IPC bridge.
+fn sendIPCError(handle: *GossamerHandle, id: []const u8, msg_text: []const u8) void {
+    const allocator = std.heap.c_allocator;
+    const js = std.fmt.allocPrintZ(
+        allocator,
+        "if (window.__gossamer_callbacks[\"{s}\"]) {{ window.__gossamer_callbacks[\"{s}\"].reject(new Error(\"{s}\")); delete window.__gossamer_callbacks[\"{s}\"]; }}",
+        .{ id, id, msg_text, id },
+    ) catch return;
+    defer allocator.free(js);
+    eval(&handle.webview, js) catch {};
+}
+
+/// Extract a JSON string field value by key name.
+fn extractJsonField(json: []const u8, key: []const u8) ?[]const u8 {
+    const allocator = std.heap.c_allocator;
+    const search = std.fmt.allocPrint(allocator, "\"{s}\":\"", .{key}) catch return null;
+    defer allocator.free(search);
+    const start_idx = std.mem.indexOf(u8, json, search) orelse return null;
+    const value_start = start_idx + search.len;
+    var i: usize = value_start;
+    while (i < json.len) : (i += 1) {
+        if (json[i] == '"' and (i == 0 or json[i - 1] != '\\')) {
+            return json[value_start..i];
+        }
+    }
+    return null;
+}
+
+/// Escape a string for embedding inside a JavaScript double-quoted string.
+fn escapeForJS(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    var result = std.ArrayListUnmanaged(u8){};
+    errdefer result.deinit(allocator);
+    for (input) |ch| {
+        switch (ch) {
+            '"' => try result.appendSlice(allocator, "\\\""),
+            '\\' => try result.appendSlice(allocator, "\\\\"),
+            '\n' => try result.appendSlice(allocator, "\\n"),
+            '\r' => try result.appendSlice(allocator, "\\r"),
+            '\t' => try result.appendSlice(allocator, "\\t"),
+            else => try result.append(allocator, ch),
+        }
+    }
+    return result.toOwnedSlice(allocator);
+}
+
+/// Handle WM_SIZE messages by resizing the WebView2 controller bounds.
+/// Called from the window procedure when the window is resized.
+fn onResize(hwnd: HWND, state_ptr: ?*WebviewState) void {
+    const state = state_ptr orelse return;
+    if (state.controller) |ctrl| {
+        var rect: RECT = .{ .left = 0, .top = 0, .right = 0, .bottom = 0 };
+        _ = GetClientRect(hwnd, &rect);
+        const vtbl = controllerVtbl(ctrl);
+        _ = vtbl.put_Bounds(ctrl, rect);
+    }
 }

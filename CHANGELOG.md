@@ -10,10 +10,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-03-29
+
 ### Added
+- **Cross-platform support**: v0.3.0 is the cross-platform desktop release
+- **Windows WebView2 COM callbacks**: Full async COM callback chain for WebView2 initialisation — `EnvCompletedHandler` creates environment, `ControllerCompletedHandler` extracts ICoreWebView2 and sets bounds, synchronised via Windows event object with 10s timeout
+- **Windows IPC handler**: `WebMessageHandler` COM object implements `ICoreWebView2WebMessageReceivedEventHandler` — receives `chrome.webview.postMessage()`, dispatches to bindings map, sends responses via `ExecuteScript`
+- **Platform detection query API**: 6 new exported functions (`gossamer_platform`, `gossamer_arch`, `gossamer_webview_engine`, `gossamer_is_desktop`, `gossamer_platform_json`) — compile-time evaluated, zero-cost, queryable from JS/Ephapax/Idris2
+- **Idris2 ABI declarations**: `platform`, `arch`, `webviewEngine`, `isDesktop`, `platformJson` in Foreign.idr with safe wrappers
+- **Cross-compilation Justfile recipes**: `build-macos-x64`, `build-macos-arm`, `build-windows`, `build-linux-arm`, `build-linux-riscv`, `build-freebsd`, `build-all-platforms`, `platforms` (show supported targets)
+- 7 new unit tests for platform detection API
 - SSG docs site: 3 new pages (getting-started, ephapax-primer, platform-support)
 - Updated nav template with 5 navigation links
 - AWK SSG pipeline verified — all pages build from site/src/content/
+
+### Changed
+- Version bumped from 0.1.0 to 0.3.0 (main.zig + build.zig)
+- Windows `registerIPCHandler` now creates a real COM event handler instead of passing null
+- IPC JS bridge already supports all three transport paths: `webkit.messageHandlers` (GTK/Cocoa), `chrome.webview` (Win32), `GossamerBridge` (Android)
+
+### Fixed
+- Windows WebView2 was previously stub-only (window created but no webview attached) — now performs full async initialisation via COM callbacks
 
 ## [0.2.0] — 2026-03-23
 

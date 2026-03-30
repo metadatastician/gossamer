@@ -7,8 +7,10 @@ typed IPC protocol, and linear capability tokens.
 
 == Current Status
 
-**v0.1.0 released** — Linux (WebKitGTK) is fully operational with formal ABI
-proofs, typed IPC, and capability token lifecycle. All Phase 1 targets met.
+**v0.3.0 released** — Cross-platform desktop support. Linux (WebKitGTK) fully
+operational. macOS (WKWebView/Cocoa) implemented with full IPC. Windows
+(WebView2/COM) implemented with async COM callback chain and IPC handler.
+Platform detection query API for runtime platform introspection.
 
 == Phase 1 — Foundation (v0.1.x) ✓
 
@@ -58,27 +60,40 @@ Desktop platforms beyond Linux.
 * [x] NSApplication / NSWindow / WKWebView lifecycle
 * [x] IPC via WKScriptMessageHandler
 * [x] Window management (setTitle, resize)
+* [x] Full IPC dispatch with response/error delivery
 * [ ] Code signing and notarisation support
 * [ ] NSMenu integration for system tray
 * [ ] Touch Bar support (if applicable)
 
-=== Windows (webview_win32.zig) — Partial
+=== Windows (webview_win32.zig) — Implemented
 
 * [x] Win32 window creation (RegisterClassExW, CreateWindowExW)
 * [x] COM initialisation (CoInitializeEx)
 * [x] Window procedure and message loop
 * [x] Window title and resize
-* [ ] WebView2 environment creation (CreateCoreWebView2EnvironmentWithOptions)
-* [ ] WebView2 COM vtable bindings (ICoreWebView2, ICoreWebView2Controller)
-* [ ] NavigateToString / Navigate / ExecuteScript via COM interface
-* [ ] WebMessageReceived event handler for IPC
-* [ ] WebView2Loader.dll dynamic loading
+* [x] WebView2 environment creation (CreateCoreWebView2EnvironmentWithOptions)
+* [x] WebView2 COM vtable bindings (ICoreWebView2, ICoreWebView2Controller)
+* [x] NavigateToString / Navigate / ExecuteScript via COM interface
+* [x] WebMessageReceived event handler for IPC
+* [x] WebView2Loader.dll dynamic loading
+* [x] Async COM callback chain (EnvCompletedHandler + ControllerCompletedHandler)
+* [x] Event-synchronised create() (blocks until WebView2 ready, 10s timeout)
+
+=== Platform Detection — Implemented
+
+* [x] gossamer_platform() — runtime platform identifier
+* [x] gossamer_arch() — CPU architecture string
+* [x] gossamer_webview_engine() — webview engine name
+* [x] gossamer_is_desktop() — desktop vs mobile flag
+* [x] gossamer_platform_json() — JSON platform info bundle
+* [x] Idris2 ABI declarations in Foreign.idr
+* [x] Cross-compilation Justfile recipes for all targets
 
 === System Integration
 
-* [ ] System tray icons (gossamer_tray_create)
-* [ ] Desktop notifications (gossamer_notify)
-* [ ] File open/save dialogs (gossamer_dialog_open, gossamer_dialog_save)
+* [x] System tray icons (gossamer_tray_create) — implemented in tray.zig
+* [x] Desktop notifications (gossamer_notify) — implemented in tray.zig
+* [x] File open/save dialogs (gossamer_dialog_open, gossamer_dialog_save)
 * [ ] Clipboard access (read/write with capability gating)
 
 == Phase 3 — Mobile (v0.3.x)

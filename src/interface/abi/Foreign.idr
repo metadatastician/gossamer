@@ -449,6 +449,76 @@ export
 prim__fsRemove : String -> Bits64 -> PrimIO Bits32
 
 --------------------------------------------------------------------------------
+-- Platform Detection Query API
+--------------------------------------------------------------------------------
+
+||| Get the platform identifier string at runtime.
+||| Returns one of: "linux", "macos", "windows", "freebsd", "openbsd",
+||| "netbsd", "ios", or "unknown".
+export
+%foreign "C:gossamer_platform, libgossamer"
+prim__platform : PrimIO Bits64
+
+||| Safe wrapper for platform detection.
+export
+platform : IO String
+platform = do
+  ptr <- primIO prim__platform
+  pure (ptrToString ptr)
+
+||| Get the CPU architecture string at runtime.
+||| Returns one of: "x86_64", "aarch64", "riscv64", "wasm32", or "unknown".
+export
+%foreign "C:gossamer_arch, libgossamer"
+prim__arch : PrimIO Bits64
+
+||| Safe wrapper for architecture detection.
+export
+arch : IO String
+arch = do
+  ptr <- primIO prim__arch
+  pure (ptrToString ptr)
+
+||| Get the webview engine name for the current platform.
+||| Returns one of: "webkitgtk", "wkwebview", "webview2", or "none".
+export
+%foreign "C:gossamer_webview_engine, libgossamer"
+prim__webviewEngine : PrimIO Bits64
+
+||| Safe wrapper for webview engine detection.
+export
+webviewEngine : IO String
+webviewEngine = do
+  ptr <- primIO prim__webviewEngine
+  pure (ptrToString ptr)
+
+||| Check whether the current platform is a desktop platform.
+||| Returns True for Linux, macOS, Windows, BSD; False for mobile/other.
+export
+%foreign "C:gossamer_is_desktop, libgossamer"
+prim__isDesktop : PrimIO Bits32
+
+||| Safe wrapper for desktop detection.
+export
+isDesktop : IO Bool
+isDesktop = do
+  val <- primIO prim__isDesktop
+  pure (val == 1)
+
+||| Get all platform information as a JSON string.
+||| Includes platform, architecture, webview engine, version, and desktop flag.
+export
+%foreign "C:gossamer_platform_json, libgossamer"
+prim__platformJson : PrimIO Bits64
+
+||| Safe wrapper for platform JSON.
+export
+platformJson : IO String
+platformJson = do
+  ptr <- primIO prim__platformJson
+  pure (ptrToString ptr)
+
+--------------------------------------------------------------------------------
 -- Error Handling
 --------------------------------------------------------------------------------
 

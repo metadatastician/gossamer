@@ -179,10 +179,8 @@ fn parseCapabilitiesObject(idx: usize, json: []const u8, start: usize) void {
             depth += 1;
             if (depth == 2) {
                 // Entered a capability value object — search for "type" field.
-                const obj_start = pos;
                 var obj_depth: usize = 1;
                 var scan = pos + 1;
-                var found_type = false;
                 while (scan < json.len and obj_depth > 0) {
                     if (json[scan] == '{') {
                         obj_depth += 1;
@@ -193,7 +191,6 @@ fn parseCapabilitiesObject(idx: usize, json: []const u8, start: usize) void {
                         if (matchJsonKey(json, scan, "type")) |val_start| {
                             if (extractJsonString(json, val_start)) |type_val| {
                                 addCapName(idx, type_val.ptr, type_val.len);
-                                found_type = true;
                             }
                         }
                     }
@@ -202,8 +199,6 @@ fn parseCapabilitiesObject(idx: usize, json: []const u8, start: usize) void {
                 // If no "type" field found, the key name was already skipped
                 // past — we cannot recover it here. This is fine because all
                 // schema-conforming manifests have "type".
-                _ = found_type;
-                _ = obj_start;
             }
         } else if (json[pos] == '}') {
             depth -= 1;

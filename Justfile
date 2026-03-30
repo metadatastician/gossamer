@@ -31,7 +31,7 @@ build-ffi-release:
 
 # Type-check all Gossamer core modules
 check:
-    {{ephapax}} check src/core/Shell.eph src/core/Bridge.eph src/core/Capabilities.eph src/core/SSG.eph --mode linear -v
+    {{ephapax}} check src/core/Shell.eph src/core/Bridge.eph src/core/Capabilities.eph src/core/SSG.eph src/core/Platform.eph --mode linear -v
 
 # Type-check in affine mode (more permissive)
 check-affine:
@@ -110,6 +110,57 @@ build-site: build-ffi
 
     echo "=== Site built to site/dist/ ==="
     ls -la "${OUT_DIR}/"
+
+# ═══════════════════════════════════════════════════════════════
+# Cross-Platform Builds (v0.3.0+)
+# ═══════════════════════════════════════════════════════════════
+
+# Cross-compile for macOS Intel
+build-macos-x64:
+    cd src/interface/ffi && zig build -Dtarget=x86_64-macos
+
+# Cross-compile for macOS Apple Silicon
+build-macos-arm:
+    cd src/interface/ffi && zig build -Dtarget=aarch64-macos
+
+# Cross-compile for Windows x64
+build-windows:
+    cd src/interface/ffi && zig build -Dtarget=x86_64-windows
+
+# Cross-compile for Linux ARM64 (Raspberry Pi, etc.)
+build-linux-arm:
+    cd src/interface/ffi && zig build -Dtarget=aarch64-linux
+
+# Cross-compile for Linux RISC-V 64
+build-linux-riscv:
+    cd src/interface/ffi && zig build -Dtarget=riscv64-linux
+
+# Cross-compile for FreeBSD x64
+build-freebsd:
+    cd src/interface/ffi && zig build -Dtarget=x86_64-freebsd
+
+# Build for all desktop platforms (cross-compilation)
+build-all-platforms: build-ffi build-macos-x64 build-macos-arm build-windows build-linux-arm build-linux-riscv
+    @echo "Built for: linux-x64, macos-x64, macos-arm64, windows-x64, linux-arm64, linux-riscv64"
+
+# Show supported platform targets
+platforms:
+    @echo "=== Gossamer Supported Platforms ==="
+    @echo ""
+    @echo "Desktop (Phase 2 — v0.3.0):"
+    @echo "  linux-x64      WebKitGTK         zig build (native)"
+    @echo "  linux-arm64    WebKitGTK         zig build -Dtarget=aarch64-linux"
+    @echo "  linux-riscv64  WebKitGTK         zig build -Dtarget=riscv64-linux"
+    @echo "  macos-x64      WKWebView/Cocoa   zig build -Dtarget=x86_64-macos"
+    @echo "  macos-arm64    WKWebView/Cocoa   zig build -Dtarget=aarch64-macos"
+    @echo "  windows-x64    WebView2/COM      zig build -Dtarget=x86_64-windows"
+    @echo "  freebsd-x64    WebKitGTK         zig build -Dtarget=x86_64-freebsd"
+    @echo "  openbsd-x64    WebKitGTK         zig build -Dtarget=x86_64-openbsd"
+    @echo "  netbsd-x64     WebKitGTK         zig build -Dtarget=x86_64-netbsd"
+    @echo ""
+    @echo "Mobile (Phase 3 — v0.4.0+):"
+    @echo "  ios-arm64      WKWebView/UIKit   planned"
+    @echo "  android-arm64  Android WebView   planned"
 
 # ═══════════════════════════════════════════════════════════════
 # Run

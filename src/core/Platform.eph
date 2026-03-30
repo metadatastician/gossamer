@@ -1,0 +1,48 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+//
+// Gossamer.Platform — Runtime platform detection and query.
+//
+// Provides compile-time-evaluated, zero-cost platform introspection.
+// All values are string constants baked into the binary at compile time
+// via Zig's comptime evaluation — no runtime cost to query.
+//
+// Use these functions to adapt application behaviour based on the
+// host platform without preprocessor conditionals or build flags.
+//
+// Platform strings:  "linux", "macos", "windows", "freebsd", "openbsd",
+//                    "netbsd", "ios", "unknown"
+// Architecture:      "x86_64", "aarch64", "riscv64", "wasm32", "unknown"
+// Webview engine:    "webkitgtk", "wkwebview", "webview2", "none"
+
+// Get the platform identifier string.
+// Returns one of: "linux", "macos", "windows", "freebsd", "openbsd",
+// "netbsd", "ios", or "unknown".
+// FFI: gossamer_platform() -> string pointer
+fn platform(): String =
+  __ffi("gossamer_platform")
+
+// Get the CPU architecture string.
+// Returns one of: "x86_64", "aarch64", "riscv64", "wasm32", or "unknown".
+// FFI: gossamer_arch() -> string pointer
+fn arch(): String =
+  __ffi("gossamer_arch")
+
+// Get the webview engine name for the current platform.
+// Returns one of: "webkitgtk", "wkwebview", "webview2", or "none".
+// FFI: gossamer_webview_engine() -> string pointer
+fn webviewEngine(): String =
+  __ffi("gossamer_webview_engine")
+
+// Check whether the current platform is a desktop platform.
+// Returns 1 for desktop (Linux, macOS, Windows, BSD), 0 for mobile/other.
+// FFI: gossamer_is_desktop() -> u8
+fn isDesktop(): I32 =
+  __ffi("gossamer_is_desktop")
+
+// Get all platform information as a JSON string.
+// Includes platform, architecture, webview engine, version, and desktop flag.
+// Useful for passing to the frontend JS in one call.
+// FFI: gossamer_platform_json() -> string pointer
+fn platformJson(): String =
+  __ffi("gossamer_platform_json")

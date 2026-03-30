@@ -51,10 +51,15 @@ Upload `docs/whitepapers/gossamer-arxiv-paper.tex` to arxiv.org.
 Category: cs.PL (Programming Languages) or cs.SE (Software Engineering).
 Also submit the dyadic paper from the ephapax repo.
 
-### P3 — Phase 2 platforms
+### P3 — Phase 2 platforms [DONE 2026-03-29]
 
-Implement macOS (WKWebView via Cocoa Objective-C runtime) and Windows
-(WebView2 via COM). The Zig stubs are ready — fill in the platform calls.
+Windows WebView2: Full COM callback chain (EnvCompletedHandler +
+ControllerCompletedHandler) with event-synchronised create(). IPC handler
+(WebMessageHandler) receives chrome.webview.postMessage, dispatches to
+bindings map, sends responses via ExecuteScript. Platform detection query
+API (6 exports). Idris2 ABI declarations. Cross-compilation Justfile recipes.
+macOS Cocoa already had full lifecycle — verified IPC dispatch path.
+Version bumped to 0.3.0.
 
 ### P4 — Ecosystem visibility
 
