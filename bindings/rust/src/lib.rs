@@ -40,6 +40,7 @@ use std::ffi::{c_char, c_int, c_void, CStr, CString};
 // FFI declarations — matches gossamer/src/interface/ffi/src/main.zig exports
 // =============================================================================
 
+#[link(name = "gossamer")]
 extern "C" {
     fn gossamer_create(
         title: *const c_char,
