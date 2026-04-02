@@ -16,7 +16,7 @@
 ||| 3. Consumption proof: a consumed handle cannot be reused.
 ||| 4. No-clone: there is no function that duplicates a handle.
 |||
-||| Zero believe_me. All proofs are constructive.
+||| Zero unchecked escapes. All proofs are constructive.
 
 module Gossamer.ABI.HandleLinearity
 

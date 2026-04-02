@@ -15,7 +15,7 @@
 ||| 3. Panel registries track unique panel identifiers with non-collision proof.
 ||| 4. No panel can forge another panel's state token.
 |||
-||| Zero believe_me. All proofs are constructive.
+||| Zero unchecked escapes. All proofs are constructive.
 
 module Gossamer.ABI.PanelIsolation
 

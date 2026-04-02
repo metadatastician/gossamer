@@ -18,7 +18,7 @@
 ||| 4. Revocation completeness: revoking a capability removes all derived
 |||    capabilities.
 |||
-||| Zero believe_me. All proofs are constructive.
+||| Zero unchecked escapes. All proofs are constructive.
 
 module Gossamer.ABI.CapabilityAuthenticity
 

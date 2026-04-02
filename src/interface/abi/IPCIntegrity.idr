@@ -15,7 +15,7 @@
 ||| 3. Protocol conformance: messages match the declared protocol schema.
 ||| 4. No phantom messages: every received message has a corresponding send.
 |||
-||| Zero believe_me. All proofs are constructive.
+||| Zero unchecked escapes. All proofs are constructive.
 
 module Gossamer.ABI.IPCIntegrity
 
