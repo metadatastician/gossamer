@@ -153,6 +153,40 @@ invocations with `deno task`:
 
 == App Configuration
 
+=== Presentation Mode
+
+`app.mode` selects the presentation layer the launcher should use.
+
+[cols="1,1,1,3", options="header"]
+|===
+| Value | Meaning | Current behavior | Notes
+
+| `gui`
+| Standalone webview window.
+| Default.
+| Launches the normal desktop shell.
+
+| `panel-host`
+| GUI shell that can participate in PanLL/groove discovery.
+| Probes the groove layer and falls back to GUI if PanLL is absent.
+| Useful when you want the same app to join the wider panel workspace.
+
+| `headless`
+| No native window.
+| Skips webview launch.
+| Intended for server-style or backend-only runs.
+
+| `cli`
+| Reserved terminal/command-line presentation.
+| Not implemented yet.
+| Parsed now so the launcher can evolve without a config break.
+
+| `tui`
+| Reserved text UI presentation.
+| Not implemented yet.
+| Same as `cli`, but for terminal rendering.
+|===
+
 === Windows
 
 Each entry in `app.windows` defines a window created at launch.
@@ -722,9 +756,11 @@ A full configuration for PanLL migrated from Tauri to Gossamer:
       "resizable": true,
       "fullscreen": false,
       "decorations": true,
+      "visible": true,
       "transparent": false,
       "center": true
     }],
+    "mode": "panel-host",
     "security": {
       "csp": null,
       "capabilities": ["filesystem", "network", "shell", "clipboard"],

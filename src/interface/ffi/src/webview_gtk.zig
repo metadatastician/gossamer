@@ -56,9 +56,14 @@ pub fn create(
     title: [*:0]const u8,
     width: u32,
     height: u32,
+    min_width: u32,
+    min_height: u32,
+    max_width: u32,
+    max_height: u32,
     resizable: bool,
     decorations: bool,
     fullscreen: bool,
+    visible: bool,
 ) PlatformError!WebviewState {
     // Initialise GTK (safe to call multiple times)
     if (c.gtk_init_check(null, null) == 0) {
@@ -79,6 +84,31 @@ pub fn create(
     );
     c.gtk_window_set_resizable(@ptrCast(window), @intFromBool(resizable));
     c.gtk_window_set_decorated(@ptrCast(window), @intFromBool(decorations));
+
+    if (min_width != 0 or min_height != 0 or max_width != 0 or max_height != 0) {
+        var geometry: c.GdkGeometry = std.mem.zeroes(c.GdkGeometry);
+        var hints: u32 = 0;
+
+        geometry.min_width = if (min_width != 0) @intCast(min_width) else 0;
+        geometry.min_height = if (min_height != 0) @intCast(min_height) else 0;
+        geometry.max_width = if (max_width != 0) @intCast(max_width) else std.math.maxInt(c_int);
+        geometry.max_height = if (max_height != 0) @intCast(max_height) else std.math.maxInt(c_int);
+
+        if (min_width != 0 or min_height != 0) {
+            hints |= @as(u32, @intCast(c.GDK_HINT_MIN_SIZE));
+        }
+        if (max_width != 0 or max_height != 0) {
+            hints |= @as(u32, @intCast(c.GDK_HINT_MAX_SIZE));
+        }
+
+        const hint_mask: c.GdkWindowHints = @bitCast(hints);
+        c.gtk_window_set_geometry_hints(
+            @ptrCast(window),
+            null,
+            &geometry,
+            hint_mask,
+        );
+    }
 
     if (fullscreen) {
         c.gtk_window_fullscreen(@ptrCast(window));
@@ -103,8 +133,10 @@ pub fn create(
         0,
     );
 
-    // Show everything
-    c.gtk_widget_show_all(window);
+    // Show everything unless the window should start hidden.
+    if (visible) {
+        c.gtk_widget_show_all(window);
+    }
 
     return WebviewState{
         .window = window,
@@ -155,6 +187,41 @@ pub fn resize(state: *WebviewState, width: u32, height: u32) PlatformError!void 
     );
 }
 
+/// Show the webview window.
+pub fn show(state: *WebviewState) PlatformError!void {
+    c.gtk_widget_show_all(state.window);
+}
+
+/// Hide the webview window.
+pub fn hide(state: *WebviewState) PlatformError!void {
+    c.gtk_widget_hide(state.window);
+}
+
+/// Minimize the webview window.
+pub fn minimize(state: *WebviewState) PlatformError!void {
+    c.gtk_window_iconify(@ptrCast(state.window));
+}
+
+/// Maximize the webview window.
+pub fn maximize(state: *WebviewState) PlatformError!void {
+    c.gtk_window_maximize(@ptrCast(state.window));
+}
+
+/// Restore the webview window from minimized or maximized state.
+pub fn restore(state: *WebviewState) PlatformError!void {
+    c.gtk_window_deiconify(@ptrCast(state.window));
+    c.gtk_window_unmaximize(@ptrCast(state.window));
+    c.gtk_widget_show_all(state.window);
+}
+
+/// Request that the GTK window close.
+pub fn requestClose(state: *WebviewState) PlatformError!void {
+    if (state.gtk_initialized) {
+        c.gtk_widget_destroy(state.window);
+        state.gtk_initialized = false;
+    }
+}
+
 /// Run the GTK main event loop. Blocks until the window is closed.
 pub fn run(_: *WebviewState) void {
     c.gtk_main();
@@ -170,7 +237,9 @@ pub fn destroy(state: *WebviewState) void {
 
 // Signal handler: called when the GTK window is destroyed.
 fn onWindowDestroy(_: ?*c.GtkWidget, _: ?*anyopaque) callconv(.c) void {
-    c.gtk_main_quit();
+    if (c.gtk_main_level() > 0) {
+        c.gtk_main_quit();
+    }
 }
 
 //==============================================================================

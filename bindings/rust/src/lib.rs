@@ -41,6 +41,7 @@ use std::ffi::{c_char, c_int, c_void, CStr, CString};
 // =============================================================================
 
 #[link(name = "gossamer")]
+#[allow(dead_code)]
 extern "C" {
     fn gossamer_create(
         title: *const c_char,
@@ -51,11 +52,31 @@ extern "C" {
         fullscreen: u8,
     ) -> u64;
 
+    fn gossamer_create_ex(
+        title: *const c_char,
+        width: u32,
+        height: u32,
+        min_width: u32,
+        min_height: u32,
+        max_width: u32,
+        max_height: u32,
+        resizable: u8,
+        decorations: u8,
+        fullscreen: u8,
+        visible: u8,
+    ) -> u64;
+
     fn gossamer_load_html(handle: u64, html: *const c_char) -> c_int;
     fn gossamer_navigate(handle: u64, url: *const c_char) -> c_int;
     fn gossamer_eval(handle: u64, js: *const c_char) -> c_int;
     fn gossamer_set_title(handle: u64, title: *const c_char) -> c_int;
     fn gossamer_resize(handle: u64, width: u32, height: u32) -> c_int;
+    fn gossamer_show(handle: u64) -> c_int;
+    fn gossamer_hide(handle: u64) -> c_int;
+    fn gossamer_minimize(handle: u64) -> c_int;
+    fn gossamer_maximize(handle: u64) -> c_int;
+    fn gossamer_restore(handle: u64) -> c_int;
+    fn gossamer_request_close(handle: u64) -> c_int;
     fn gossamer_run(handle: u64);
     fn gossamer_destroy(handle: u64);
 
@@ -82,7 +103,9 @@ extern "C" {
     fn gossamer_version() -> *const c_char;
     fn gossamer_last_error() -> *const c_char;
 
+    #[allow(dead_code)]
     fn gossamer_tray_create(tooltip: *const c_char) -> u64;
+    #[allow(dead_code)]
     fn gossamer_tray_add_menu_item(
         tray: u64,
         label: *const c_char,
@@ -276,9 +299,14 @@ pub struct WindowConfig {
     pub title: String,
     pub width: u32,
     pub height: u32,
+    pub min_width: Option<u32>,
+    pub min_height: Option<u32>,
+    pub max_width: Option<u32>,
+    pub max_height: Option<u32>,
     pub resizable: bool,
     pub decorations: bool,
     pub fullscreen: bool,
+    pub visible: bool,
 }
 
 impl Default for WindowConfig {
@@ -287,9 +315,14 @@ impl Default for WindowConfig {
             title: "Gossamer App".to_string(),
             width: 800,
             height: 600,
+            min_width: None,
+            min_height: None,
+            max_width: None,
+            max_height: None,
             resizable: true,
             decorations: true,
             fullscreen: false,
+            visible: true,
         }
     }
 }
@@ -323,6 +356,14 @@ impl App {
         })
     }
 
+    /// Get the raw Gossamer window handle.
+    ///
+    /// This is useful for compatibility layers that need to call lower-level
+    /// FFI helpers such as event emission or tray/window controls.
+    pub fn raw_handle(&self) -> u64 {
+        self.handle
+    }
+
     /// Create a new Gossamer application with full window configuration.
     pub fn with_config(config: WindowConfig) -> Result<Self, Error> {
         let title =
@@ -330,13 +371,18 @@ impl App {
 
         // SAFETY: FFI call to create a webview window
         let handle = unsafe {
-            gossamer_create(
+            gossamer_create_ex(
                 title.as_ptr(),
                 config.width,
                 config.height,
+                config.min_width.unwrap_or(0),
+                config.min_height.unwrap_or(0),
+                config.max_width.unwrap_or(0),
+                config.max_height.unwrap_or(0),
                 config.resizable as u8,
                 config.decorations as u8,
                 config.fullscreen as u8,
+                config.visible as u8,
             )
         };
 
@@ -487,6 +533,43 @@ impl App {
     pub fn resize(&self, width: u32, height: u32) -> Result<(), Error> {
         // SAFETY: handle is valid
         check_result(unsafe { gossamer_resize(self.handle, width, height) })
+    }
+
+    /// Show the window.
+    pub fn show(&self) -> Result<(), Error> {
+        // SAFETY: handle is valid
+        check_result(unsafe { gossamer_show(self.handle) })
+    }
+
+    /// Hide the window.
+    pub fn hide(&self) -> Result<(), Error> {
+        // SAFETY: handle is valid
+        check_result(unsafe { gossamer_hide(self.handle) })
+    }
+
+    /// Minimize the window.
+    pub fn minimize(&self) -> Result<(), Error> {
+        // SAFETY: handle is valid
+        check_result(unsafe { gossamer_minimize(self.handle) })
+    }
+
+    /// Maximize the window.
+    pub fn maximize(&self) -> Result<(), Error> {
+        // SAFETY: handle is valid
+        check_result(unsafe { gossamer_maximize(self.handle) })
+    }
+
+    /// Restore the window from minimized or maximized state.
+    pub fn restore(&self) -> Result<(), Error> {
+        // SAFETY: handle is valid
+        check_result(unsafe { gossamer_restore(self.handle) })
+    }
+
+    /// Request that the window close, while keeping the app handle alive
+    /// until normal teardown runs.
+    pub fn request_close(&self) -> Result<(), Error> {
+        // SAFETY: handle is valid
+        check_result(unsafe { gossamer_request_close(self.handle) })
     }
 
     /// Apply a Content-Security-Policy to the webview.

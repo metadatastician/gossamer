@@ -36,11 +36,31 @@ extern fn gossamer_create(
     fullscreen: u8,
 ) ?*gossamer.GossamerHandle;
 
+extern fn gossamer_create_ex(
+    title: [*:0]const u8,
+    width: u32,
+    height: u32,
+    min_width: u32,
+    min_height: u32,
+    max_width: u32,
+    max_height: u32,
+    resizable: u8,
+    decorations: u8,
+    fullscreen: u8,
+    visible: u8,
+) ?*gossamer.GossamerHandle;
+
 extern fn gossamer_load_html(handle_ptr: u64, html: [*:0]const u8) Result;
 extern fn gossamer_navigate(handle_ptr: u64, url: [*:0]const u8) Result;
 extern fn gossamer_eval(handle_ptr: u64, js: [*:0]const u8) Result;
 extern fn gossamer_set_title(handle_ptr: u64, title: [*:0]const u8) Result;
 extern fn gossamer_resize(handle_ptr: u64, width: u32, height: u32) Result;
+extern fn gossamer_show(handle_ptr: u64) Result;
+extern fn gossamer_hide(handle_ptr: u64) Result;
+extern fn gossamer_minimize(handle_ptr: u64) Result;
+extern fn gossamer_maximize(handle_ptr: u64) Result;
+extern fn gossamer_restore(handle_ptr: u64) Result;
+extern fn gossamer_request_close(handle_ptr: u64) Result;
 extern fn gossamer_destroy(handle_ptr: u64) void;
 extern fn gossamer_run(handle_ptr: u64) void;
 
@@ -272,6 +292,64 @@ test "display: resize live webview returns ok" {
     gossamer_destroy(ptr);
 }
 
+test "display: create_ex supports launch-time constraints and hidden start" {
+    if (!displayAvailable()) {
+        std.debug.print("SKIP: no display server available\n", .{});
+        return;
+    }
+
+    const handle = gossamer_create_ex(
+        "Constrained",
+        640,
+        480,
+        320,
+        240,
+        1280,
+        960,
+        1,
+        1,
+        0,
+        0,
+    ) orelse {
+        std.debug.print("SKIP: gossamer_create_ex returned null\n", .{});
+        return;
+    };
+    const ptr = handleToU64(handle);
+
+    const result = gossamer_load_html(ptr, "<html><body><h1>Hidden</h1></body></html>");
+    try testing.expectEqual(Result.ok, result);
+    try testing.expectEqual(Result.ok, gossamer_show(ptr));
+    try testing.expectEqual(Result.ok, gossamer_hide(ptr));
+
+    gossamer_destroy(ptr);
+}
+
+test "display: window state controls return ok" {
+    if (!displayAvailable()) {
+        std.debug.print("SKIP: no display server available\n", .{});
+        return;
+    }
+
+    const handle = gossamer_create("Window State", 400, 300, 1, 1, 0) orelse {
+        std.debug.print("SKIP: gossamer_create returned null\n", .{});
+        return;
+    };
+    const ptr = handleToU64(handle);
+
+    try testing.expectEqual(Result.ok, gossamer_show(ptr));
+    try testing.expectEqual(Result.ok, gossamer_hide(ptr));
+    try testing.expectEqual(Result.ok, gossamer_show(ptr));
+    try testing.expectEqual(Result.ok, gossamer_minimize(ptr));
+    try testing.expectEqual(Result.ok, gossamer_restore(ptr));
+    try testing.expectEqual(Result.ok, gossamer_maximize(ptr));
+    try testing.expectEqual(Result.ok, gossamer_restore(ptr));
+    try testing.expectEqual(Result.ok, gossamer_request_close(ptr));
+    try testing.expectEqual(Result.already_consumed, gossamer_show(ptr));
+
+    // The handle remains valid for final teardown even after request_close.
+    gossamer_destroy(ptr);
+}
+
 //==============================================================================
 // IPC Channel Tests (with real webview)
 //==============================================================================
@@ -418,7 +496,7 @@ test "display: version string is valid with display initialised" {
 
     const ver = gossamer_version();
     const ver_str = std.mem.span(ver);
-    try testing.expectEqualStrings("0.1.0", ver_str);
+    try testing.expectEqualStrings("0.3.0", ver_str);
 }
 
 test "display: build info contains Gossamer and version" {
@@ -436,7 +514,7 @@ test "display: build info contains Gossamer and version" {
     const info = gossamer_build_info();
     const info_str = std.mem.span(info);
     try testing.expect(std.mem.indexOf(u8, info_str, "Gossamer") != null);
-    try testing.expect(std.mem.indexOf(u8, info_str, "0.1.0") != null);
+    try testing.expect(std.mem.indexOf(u8, info_str, "0.3.0") != null);
 }
 
 //==============================================================================

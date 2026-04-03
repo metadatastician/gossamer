@@ -52,12 +52,18 @@ splitOnNewline s =
 -- Webview Lifecycle
 --------------------------------------------------------------------------------
 
-||| Create a new webview window.
+||| Legacy create for backwards compatibility.
 ||| Returns a pointer to the webview handle, or 0 on failure.
 ||| MUST be called from the main thread.
 export
 %foreign "C:gossamer_create, libgossamer"
 prim__create : String -> Bits32 -> Bits32 -> Bits32 -> Bits32 -> Bits32 -> PrimIO Bits64
+
+||| Create a new webview window with launch-time size constraints and visibility.
+||| min/max values use 0 as the "unset" sentinel.
+export
+%foreign "C:gossamer_create_ex, libgossamer"
+prim__createEx : String -> Bits32 -> Bits32 -> Bits32 -> Bits32 -> Bits32 -> Bits32 -> Bits32 -> Bits32 -> Bits32 -> Bits32 -> PrimIO Bits64
 
 ||| Safe wrapper for webview creation.
 |||
@@ -73,8 +79,10 @@ create cfg = do
   let resizable_flag : Bits32 = if cfg.resizable then 1 else 0
   let decorations_flag : Bits32 = if cfg.decorations then 1 else 0
   let fullscreen_flag : Bits32 = if cfg.fullscreen then 1 else 0
-  ptr <- primIO (prim__create cfg.title cfg.width cfg.height
-                              resizable_flag decorations_flag fullscreen_flag)
+  let visible_flag : Bits32 = if cfg.visible then 1 else 0
+  ptr <- primIO (prim__createEx cfg.title cfg.width cfg.height
+                                cfg.minWidth cfg.minHeight cfg.maxWidth cfg.maxHeight
+                                resizable_flag decorations_flag fullscreen_flag visible_flag)
   case createWebview ptr of
     Nothing => pure (Left WebviewUnavailable)
     Just wv => pure (Right wv)
@@ -160,6 +168,103 @@ resize : WebviewHandle -> (width : Bits32) -> (height : Bits32)
        -> IO (WebviewHandle, Either Result ())
 resize wv w h = do
   code <- primIO (prim__resize (webviewPtr wv) w h)
+  case resultFromInt code of
+    Just Ok => pure (wv, Right ())
+    Just err => pure (wv, Left err)
+    Nothing => pure (wv, Left Error)
+
+||| Show the webview window.
+||| BORROWING operation.
+export
+%foreign "C:gossamer_show, libgossamer"
+prim__show : Bits64 -> PrimIO Bits32
+
+||| Safe wrapper for showing the window.
+export
+show : WebviewHandle -> IO (WebviewHandle, Either Result ())
+show wv = do
+  code <- primIO (prim__show (webviewPtr wv))
+  case resultFromInt code of
+    Just Ok => pure (wv, Right ())
+    Just err => pure (wv, Left err)
+    Nothing => pure (wv, Left Error)
+
+||| Hide the webview window.
+||| BORROWING operation.
+export
+%foreign "C:gossamer_hide, libgossamer"
+prim__hide : Bits64 -> PrimIO Bits32
+
+||| Safe wrapper for hiding the window.
+export
+hide : WebviewHandle -> IO (WebviewHandle, Either Result ())
+hide wv = do
+  code <- primIO (prim__hide (webviewPtr wv))
+  case resultFromInt code of
+    Just Ok => pure (wv, Right ())
+    Just err => pure (wv, Left err)
+    Nothing => pure (wv, Left Error)
+
+||| Minimize the webview window.
+||| BORROWING operation.
+export
+%foreign "C:gossamer_minimize, libgossamer"
+prim__minimize : Bits64 -> PrimIO Bits32
+
+||| Safe wrapper for minimizing the window.
+export
+minimize : WebviewHandle -> IO (WebviewHandle, Either Result ())
+minimize wv = do
+  code <- primIO (prim__minimize (webviewPtr wv))
+  case resultFromInt code of
+    Just Ok => pure (wv, Right ())
+    Just err => pure (wv, Left err)
+    Nothing => pure (wv, Left Error)
+
+||| Maximize the webview window.
+||| BORROWING operation.
+export
+%foreign "C:gossamer_maximize, libgossamer"
+prim__maximize : Bits64 -> PrimIO Bits32
+
+||| Safe wrapper for maximizing the window.
+export
+maximize : WebviewHandle -> IO (WebviewHandle, Either Result ())
+maximize wv = do
+  code <- primIO (prim__maximize (webviewPtr wv))
+  case resultFromInt code of
+    Just Ok => pure (wv, Right ())
+    Just err => pure (wv, Left err)
+    Nothing => pure (wv, Left Error)
+
+||| Restore the webview window from minimized or maximized state.
+||| BORROWING operation.
+export
+%foreign "C:gossamer_restore, libgossamer"
+prim__restore : Bits64 -> PrimIO Bits32
+
+||| Safe wrapper for restoring the window.
+export
+restore : WebviewHandle -> IO (WebviewHandle, Either Result ())
+restore wv = do
+  code <- primIO (prim__restore (webviewPtr wv))
+  case resultFromInt code of
+    Just Ok => pure (wv, Right ())
+    Just err => pure (wv, Left err)
+    Nothing => pure (wv, Left Error)
+
+||| Request that the webview window close.
+||| BORROWING operation: returns the handle for later cleanup, but the
+||| window becomes logically closed and further borrowing operations fail.
+export
+%foreign "C:gossamer_request_close, libgossamer"
+prim__requestClose : Bits64 -> PrimIO Bits32
+
+||| Safe wrapper for a close request.
+export
+requestClose : WebviewHandle -> IO (WebviewHandle, Either Result ())
+requestClose wv = do
+  code <- primIO (prim__requestClose (webviewPtr wv))
   case resultFromInt code of
     Just Ok => pure (wv, Right ())
     Just err => pure (wv, Left err)
