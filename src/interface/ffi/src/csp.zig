@@ -69,6 +69,11 @@ export fn gossamer_set_csp(handle_ptr: u64, csp: [*:0]const u8) main.Result {
         return .@"error";
     }
 
+    if (handle.closed) {
+        main.setError("Webview already closed");
+        return .already_consumed;
+    }
+
     const allocator = std.heap.c_allocator;
     const csp_slice = std.mem.span(csp);
 
@@ -151,6 +156,11 @@ export fn gossamer_emit(
         return .@"error";
     }
 
+    if (handle.closed) {
+        main.setError("Webview already closed");
+        return .already_consumed;
+    }
+
     const allocator = std.heap.c_allocator;
     const event_slice = std.mem.span(event_name);
     const payload_slice = std.mem.span(payload_json);
@@ -210,8 +220,11 @@ fn emitIdleCallback(user_data: ?*anyopaque) callconv(.c) c_int {
     const ctx: *EmitContext = @ptrCast(@alignCast(user_data orelse return 0));
     const allocator = ctx.allocator;
 
-    // Evaluate the JS on the webview (now safe — we are on the GTK thread)
-    platform.eval(&ctx.handle.webview, ctx.js) catch {};
+    // Evaluate the JS on the webview (now safe — we are on the GTK thread).
+    // Skip if the window has already been closed.
+    if (ctx.handle.initialized and !ctx.handle.closed) {
+        platform.eval(&ctx.handle.webview, ctx.js) catch {};
+    }
 
     // Clean up
     allocator.free(ctx.js);

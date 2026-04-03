@@ -14,6 +14,7 @@
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 const std = @import("std");
+const main = @import("main.zig");
 
 const c = @cImport({
     @cInclude("gtk/gtk.h");
@@ -32,6 +33,8 @@ pub const TrayHandle = struct {
     status_icon: *c.GtkStatusIcon,
     /// Right-click context menu
     menu: *c.GtkWidget,
+    /// Attached main window, if any.
+    window: ?*main.GossamerHandle,
     /// Allocator
     allocator: std.mem.Allocator,
     /// Callback for menu item activation (item_id -> void)
@@ -88,6 +91,7 @@ export fn gossamer_tray_create(tooltip: [*:0]const u8) u64 {
     handle.* = .{
         .status_icon = status_icon,
         .menu = menu,
+        .window = null,
         .allocator = allocator,
         .menu_callback = null,
         .menu_item_count = 0,
@@ -126,6 +130,7 @@ export fn gossamer_tray_destroy(handle_ptr: u64) void {
     c.g_object_unref(@ptrCast(handle.status_icon));
     c.gtk_widget_destroy(handle.menu);
 
+    handle.window = null;
     handle.visible = false;
     if (global_tray == handle) global_tray = null;
     handle.allocator.destroy(handle);
@@ -217,6 +222,29 @@ export fn gossamer_tray_set_visible(handle_ptr: u64, visible: u32) u32 {
     return 0;
 }
 
+/// Attach a main window handle to the tray so left-click can toggle it.
+/// Passing 0 detaches the current window.
+export fn gossamer_tray_set_window(handle_ptr: u64, window_ptr: u64) u32 {
+    const handle = trayFromU64(handle_ptr) orelse return 1;
+    if (window_ptr == 0) {
+        handle.window = null;
+        return 0;
+    }
+
+    const window = main.ptrFromU64(window_ptr) orelse return 2;
+    if (!window.initialized or window.closed) return 2;
+    handle.window = window;
+    return 0;
+}
+
+/// Clear any attached main window from the singleton tray.
+/// Used when the main window is being destroyed.
+export fn gossamer_tray_clear_window() void {
+    if (global_tray) |tray| {
+        tray.window = null;
+    }
+}
+
 //==============================================================================
 // Notifications
 //==============================================================================
@@ -284,9 +312,19 @@ fn onTrayActivate(
     _: ?*c.GtkStatusIcon,
     _: ?*anyopaque,
 ) callconv(.c) void {
-    // In PanLL integration, this would toggle the main window.
-    // For now, invoke menu item 0 (typically "Open PanLL").
     if (global_tray) |tray| {
+        if (tray.window) |window| {
+            if (window.initialized and !window.closed) {
+                const handle_ptr = @intFromPtr(window);
+                if (window.visible) {
+                    _ = main.gossamer_hide(handle_ptr);
+                } else {
+                    _ = main.gossamer_restore(handle_ptr);
+                }
+                return;
+            }
+        }
+
         if (tray.menu_callback) |cb| {
             cb(0); // item_id 0 = "Open PanLL"
         }

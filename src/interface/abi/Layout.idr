@@ -136,8 +136,9 @@ resultFitsInBits32 CapabilityDenied = Oh
 --------------------------------------------------------------------------------
 
 ||| WindowConfig field specifications for C ABI layout calculation.
-||| Fields: title (ptr), width (u32), height (u32), resizable (bool/u8),
-|||          decorations (bool/u8), fullscreen (bool/u8)
+||| Fields: title (ptr), width (u32), height (u32), min/max bounds (u32),
+|||          resizable (bool/u8), decorations (bool/u8), fullscreen (bool/u8),
+|||          visible (bool/u8)
 |||
 ||| Note: In the FFI, title is passed as a C string pointer, not embedded
 ||| in the struct. The struct layout here is for documentation and
@@ -148,17 +149,24 @@ windowConfigFields =
   [ MkFieldSpec "title_ptr"   8 8   -- Pointer to title string
   , MkFieldSpec "width"       4 4   -- Bits32
   , MkFieldSpec "height"      4 4   -- Bits32
+  , MkFieldSpec "minWidth"    4 4   -- Bits32 (0 = unconstrained)
+  , MkFieldSpec "minHeight"   4 4   -- Bits32 (0 = unconstrained)
+  , MkFieldSpec "maxWidth"    4 4   -- Bits32 (0 = unconstrained)
+  , MkFieldSpec "maxHeight"   4 4   -- Bits32 (0 = unconstrained)
   , MkFieldSpec "resizable"   4 4   -- Bits32 (bool as C int for alignment)
   , MkFieldSpec "decorations" 4 4   -- Bits32
   , MkFieldSpec "fullscreen"  4 4   -- Bits32
+  , MkFieldSpec "visible"     4 4   -- Bits32 (bool as C int for alignment)
   ]
 
-||| WindowConfig total size: 32 bytes (8-byte aligned).
+||| WindowConfig total size: 48 bytes (8-byte aligned).
 ||| title_ptr(0..7) + width(8..11) + height(12..15)
-||| + resizable(16..19) + decorations(20..23) + fullscreen(24..27)
-||| + 4 bytes padding for 8-byte alignment = 32 bytes
+||| + minWidth(16..19) + minHeight(20..23) + maxWidth(24..27)
+||| + maxHeight(28..31) + resizable(32..35) + decorations(36..39)
+||| + fullscreen(40..43) + visible(44..47)
+||| + no trailing padding needed = 48 bytes
 public export
-windowConfigSize : HasSize WindowConfig 32
+windowConfigSize : HasSize WindowConfig 48
 windowConfigSize = SizeProof
 
 ||| WindowConfig alignment: 8 bytes (due to pointer field).

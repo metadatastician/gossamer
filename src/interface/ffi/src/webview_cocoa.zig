@@ -53,6 +53,12 @@ fn msgSendBool(target: ?*anyopaque, sel: c.SEL, val: bool) void {
     func(target, sel, if (val) @as(c.BOOL, 1) else @as(c.BOOL, 0));
 }
 
+/// Helper: send a message returning a BOOL.
+fn msgSendBoolRet(target: ?*anyopaque, sel: c.SEL) bool {
+    const func: *const fn (?*anyopaque, c.SEL) callconv(.c) c.BOOL = @ptrCast(&objc_msgSend);
+    return func(target, sel) != 0;
+}
+
 /// Create an NSString from a C string.
 fn nsString(str: [*:0]const u8) ?*anyopaque {
     const cls = c.objc_getClass("NSString") orelse return null;
@@ -89,9 +95,14 @@ pub fn create(
     title: [*:0]const u8,
     width: u32,
     height: u32,
+    min_width: u32,
+    min_height: u32,
+    max_width: u32,
+    max_height: u32,
     resizable: bool,
     decorations: bool,
     fullscreen: bool,
+    visible: bool,
 ) PlatformError!WebviewState {
     // 1. [NSApplication sharedApplication]
     const nsapp_cls = c.objc_getClass("NSApplication") orelse return PlatformError.CocoaInitFailed;
@@ -144,6 +155,24 @@ pub fn create(
     const ns_title = nsString(title) orelse return PlatformError.WindowCreateFailed;
     msgSendVoid1(window, set_title_sel, ns_title);
 
+    // Apply launch-time size constraints.
+    if (min_width != 0 or min_height != 0) {
+        const set_min_sel = c.sel_registerName("setContentMinSize:") orelse return PlatformError.WindowCreateFailed;
+        const size_func: *const fn (?*anyopaque, c.SEL, f64, f64) callconv(.c) void = @ptrCast(&objc_msgSend);
+        size_func(window, set_min_sel, @floatFromInt(min_width), @floatFromInt(min_height));
+    }
+    if (max_width != 0 or max_height != 0) {
+        const set_max_sel = c.sel_registerName("setContentMaxSize:") orelse return PlatformError.WindowCreateFailed;
+        const size_func: *const fn (?*anyopaque, c.SEL, f64, f64) callconv(.c) void = @ptrCast(&objc_msgSend);
+        const max_default: f64 = @floatFromInt(std.math.maxInt(u32));
+        size_func(
+            window,
+            set_max_sel,
+            if (max_width != 0) @floatFromInt(max_width) else max_default,
+            if (max_height != 0) @floatFromInt(max_height) else max_default,
+        );
+    }
+
     // Center the window
     const center_sel = c.sel_registerName("center") orelse return PlatformError.WindowCreateFailed;
     msgSendVoid(window, center_sel);
@@ -176,13 +205,15 @@ pub fn create(
     const set_content_sel = c.sel_registerName("setContentView:") orelse return PlatformError.WebviewCreateFailed;
     msgSendVoid1(window, set_content_sel, webview);
 
-    // 6. Show window
-    const show_sel = c.sel_registerName("makeKeyAndOrderFront:") orelse return PlatformError.WebviewCreateFailed;
-    msgSendVoid1(window, show_sel, null);
+    if (visible) {
+        // 6. Show window
+        const show_sel = c.sel_registerName("makeKeyAndOrderFront:") orelse return PlatformError.WebviewCreateFailed;
+        msgSendVoid1(window, show_sel, null);
 
-    // Activate the application
-    const activate_sel = c.sel_registerName("activateIgnoringOtherApps:") orelse return PlatformError.CocoaInitFailed;
-    msgSendBool(app, activate_sel, true);
+        // Activate the application
+        const activate_sel = c.sel_registerName("activateIgnoringOtherApps:") orelse return PlatformError.CocoaInitFailed;
+        msgSendBool(app, activate_sel, true);
+    }
 
     if (fullscreen) {
         const fs_sel = c.sel_registerName("toggleFullScreen:") orelse return PlatformError.WindowCreateFailed;
@@ -252,6 +283,77 @@ pub fn resize(state: *WebviewState, width: u32, height: u32) PlatformError!void 
     // NSSize is {width, height} as doubles
     const func: *const fn (?*anyopaque, c.SEL, f64, f64) callconv(.c) void = @ptrCast(&objc_msgSend);
     func(window, sel, @floatFromInt(width), @floatFromInt(height));
+}
+
+/// Show the window and activate the application.
+pub fn show(state: *WebviewState) PlatformError!void {
+    const window = state.window orelse return PlatformError.OperationFailed;
+
+    const app_cls = c.objc_getClass("NSApplication") orelse return PlatformError.CocoaInitFailed;
+    const shared_sel = c.sel_registerName("sharedApplication") orelse return PlatformError.CocoaInitFailed;
+    const app = msgSend(@ptrCast(app_cls), shared_sel) orelse return PlatformError.CocoaInitFailed;
+
+    const activate_sel = c.sel_registerName("activateIgnoringOtherApps:") orelse return PlatformError.CocoaInitFailed;
+    msgSendBool(app, activate_sel, true);
+
+    const show_sel = c.sel_registerName("makeKeyAndOrderFront:") orelse return PlatformError.OperationFailed;
+    msgSendVoid1(window, show_sel, null);
+}
+
+/// Hide the window.
+pub fn hide(state: *WebviewState) PlatformError!void {
+    const window = state.window orelse return PlatformError.OperationFailed;
+    const sel = c.sel_registerName("orderOut:") orelse return PlatformError.OperationFailed;
+    msgSendVoid1(window, sel, null);
+}
+
+/// Minimize the window.
+pub fn minimize(state: *WebviewState) PlatformError!void {
+    const window = state.window orelse return PlatformError.OperationFailed;
+    const sel = c.sel_registerName("miniaturize:") orelse return PlatformError.OperationFailed;
+    msgSendVoid1(window, sel, null);
+}
+
+/// Maximize the window.
+pub fn maximize(state: *WebviewState) PlatformError!void {
+    const window = state.window orelse return PlatformError.OperationFailed;
+    const is_zoomed_sel = c.sel_registerName("isZoomed") orelse return PlatformError.OperationFailed;
+    if (!msgSendBoolRet(window, is_zoomed_sel)) {
+        const zoom_sel = c.sel_registerName("zoom:") orelse return PlatformError.OperationFailed;
+        msgSendVoid1(window, zoom_sel, null);
+    }
+}
+
+/// Restore the window from minimized or maximized state.
+pub fn restore(state: *WebviewState) PlatformError!void {
+    const window = state.window orelse return PlatformError.OperationFailed;
+
+    const is_miniaturized_sel = c.sel_registerName("isMiniaturized") orelse return PlatformError.OperationFailed;
+    if (msgSendBoolRet(window, is_miniaturized_sel)) {
+        const deminiaturize_sel = c.sel_registerName("deminiaturize:") orelse return PlatformError.OperationFailed;
+        msgSendVoid1(window, deminiaturize_sel, null);
+    }
+
+    const is_zoomed_sel = c.sel_registerName("isZoomed") orelse return PlatformError.OperationFailed;
+    if (msgSendBoolRet(window, is_zoomed_sel)) {
+        const zoom_sel = c.sel_registerName("zoom:") orelse return PlatformError.OperationFailed;
+        msgSendVoid1(window, zoom_sel, null);
+    }
+
+    try show(state);
+}
+
+/// Request that the window close.
+pub fn requestClose(state: *WebviewState) PlatformError!void {
+    if (state.cocoa_initialized) {
+        if (state.window) |window| {
+            const close_sel = c.sel_registerName("close") orelse return PlatformError.OperationFailed;
+            msgSendVoid(window, close_sel);
+        }
+        state.window = null;
+        state.webview = null;
+        state.cocoa_initialized = false;
+    }
 }
 
 /// Run the Cocoa event loop. Blocks until the application terminates.

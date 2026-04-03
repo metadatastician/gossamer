@@ -14,6 +14,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+extern fn gossamer_tray_clear_window() void;
+
 // Static Site Generator FFI functions (gossamer_ssg_*).
 // Imported here to ensure all exports are included in the shared library.
 comptime {
@@ -122,6 +124,12 @@ pub const GossamerHandle = struct {
     initialized: bool,
     /// Whether the event loop has been started
     running: bool,
+    /// Whether the window has been logically closed.
+    /// Borrowing operations reject closed handles, but cleanup still owns
+    /// the final resource release path.
+    closed: bool,
+    /// Whether the window is currently shown to the user.
+    visible: bool,
     /// Allocator used for this handle (for cleanup)
     allocator: std.mem.Allocator,
     /// IPC callback bindings (name -> callback + user data)
@@ -147,6 +155,37 @@ pub const BindingEntry = struct {
     /// I/O-heavy operations do not block the GTK event loop.
     run_async: bool = false,
 };
+
+/// Borrowed-window guard used by window operations that should fail once the
+/// window has been closed.
+fn requireOpen(handle: *GossamerHandle) ?Result {
+    if (!handle.initialized) {
+        setError("Webview not initialized");
+        return .@"error";
+    }
+
+    if (handle.closed) {
+        setError("Webview already closed");
+        return .already_consumed;
+    }
+
+    return null;
+}
+
+fn validateWindowConstraints(
+    min_width: u32,
+    min_height: u32,
+    max_width: u32,
+    max_height: u32,
+) bool {
+    if (min_width != 0 and max_width != 0 and min_width > max_width) {
+        return false;
+    }
+    if (min_height != 0 and max_height != 0 and min_height > max_height) {
+        return false;
+    }
+    return true;
+}
 
 //==============================================================================
 // Async IPC Inflight Tracking
@@ -240,7 +279,66 @@ pub const ChannelHandle = struct {
 // Webview Lifecycle
 //==============================================================================
 
-/// Create a new webview window.
+/// Internal helper used by both compatibility and config-driven create calls.
+fn createHandle(
+    title: [*:0]const u8,
+    width: u32,
+    height: u32,
+    min_width: u32,
+    min_height: u32,
+    max_width: u32,
+    max_height: u32,
+    resizable: u8,
+    decorations: u8,
+    fullscreen: u8,
+    visible: u8,
+) ?*GossamerHandle {
+    clearError();
+    if (!validateWindowConstraints(min_width, min_height, max_width, max_height)) {
+        setError("Invalid window size constraints");
+        return null;
+    }
+
+    const allocator = std.heap.c_allocator;
+
+    const handle = allocator.create(GossamerHandle) catch {
+        setError("Failed to allocate GossamerHandle");
+        return null;
+    };
+
+    const webview_state = platform.create(
+        title,
+        width,
+        height,
+        min_width,
+        min_height,
+        max_width,
+        max_height,
+        resizable != 0,
+        decorations != 0,
+        fullscreen != 0,
+        visible != 0,
+    ) catch {
+        setError("Failed to create platform webview");
+        allocator.destroy(handle);
+        return null;
+    };
+
+    handle.* = .{
+        .webview = webview_state,
+        .initialized = true,
+        .running = false,
+        .closed = false,
+        .visible = visible != 0,
+        .allocator = allocator,
+        .bindings = std.StringHashMap(BindingEntry).init(allocator),
+    };
+
+    clearError();
+    return handle;
+}
+
+/// Create a new webview window using the legacy 6-argument ABI.
 ///
 /// Returns a pointer to GossamerHandle, or null on failure.
 /// Must be called from the main/UI thread.
@@ -254,37 +352,41 @@ export fn gossamer_create(
     decorations: u8,
     fullscreen: u8,
 ) ?*GossamerHandle {
-    clearError();
-    const allocator = std.heap.c_allocator;
+    return createHandle(title, width, height, 0, 0, 0, 0, resizable, decorations, fullscreen, 1);
+}
 
-    const handle = allocator.create(GossamerHandle) catch {
-        setError("Failed to allocate GossamerHandle");
-        return null;
-    };
-
-    const webview_state = platform.create(
+/// Create a new webview window with launch-time size constraints and visibility.
+///
+/// min/max values use 0 as the "unset" sentinel.
+/// visible uses 0/1 to control whether the window starts hidden.
+///
+/// Matches: Gossamer.ABI.Foreign.prim__createEx
+export fn gossamer_create_ex(
+    title: [*:0]const u8,
+    width: u32,
+    height: u32,
+    min_width: u32,
+    min_height: u32,
+    max_width: u32,
+    max_height: u32,
+    resizable: u8,
+    decorations: u8,
+    fullscreen: u8,
+    visible: u8,
+) ?*GossamerHandle {
+    return createHandle(
         title,
         width,
         height,
-        resizable != 0,
-        decorations != 0,
-        fullscreen != 0,
-    ) catch {
-        setError("Failed to create platform webview");
-        allocator.destroy(handle);
-        return null;
-    };
-
-    handle.* = .{
-        .webview = webview_state,
-        .initialized = true,
-        .running = false,
-        .allocator = allocator,
-        .bindings = std.StringHashMap(BindingEntry).init(allocator),
-    };
-
-    clearError();
-    return handle;
+        min_width,
+        min_height,
+        max_width,
+        max_height,
+        resizable,
+        decorations,
+        fullscreen,
+        visible,
+    );
 }
 
 /// Load HTML content into the webview.
@@ -297,9 +399,8 @@ export fn gossamer_load_html(handle_ptr: u64, html: [*:0]const u8) Result {
         return .null_pointer;
     };
 
-    if (!handle.initialized) {
-        setError("Webview not initialized");
-        return .@"error";
+    if (requireOpen(handle)) |err| {
+        return err;
     }
 
     platform.loadHTML(&handle.webview, html) catch {
@@ -321,9 +422,8 @@ export fn gossamer_navigate(handle_ptr: u64, url: [*:0]const u8) Result {
         return .null_pointer;
     };
 
-    if (!handle.initialized) {
-        setError("Webview not initialized");
-        return .@"error";
+    if (requireOpen(handle)) |err| {
+        return err;
     }
 
     platform.navigate(&handle.webview, url) catch {
@@ -345,9 +445,8 @@ export fn gossamer_eval(handle_ptr: u64, js: [*:0]const u8) Result {
         return .null_pointer;
     };
 
-    if (!handle.initialized) {
-        setError("Webview not initialized");
-        return .@"error";
+    if (requireOpen(handle)) |err| {
+        return err;
     }
 
     platform.eval(&handle.webview, js) catch {
@@ -369,9 +468,8 @@ export fn gossamer_set_title(handle_ptr: u64, title: [*:0]const u8) Result {
         return .null_pointer;
     };
 
-    if (!handle.initialized) {
-        setError("Webview not initialized");
-        return .@"error";
+    if (requireOpen(handle)) |err| {
+        return err;
     }
 
     platform.setTitle(&handle.webview, title) catch {
@@ -393,9 +491,8 @@ export fn gossamer_resize(handle_ptr: u64, width: u32, height: u32) Result {
         return .null_pointer;
     };
 
-    if (!handle.initialized) {
-        setError("Webview not initialized");
-        return .@"error";
+    if (requireOpen(handle)) |err| {
+        return err;
     }
 
     platform.resize(&handle.webview, width, height) catch {
@@ -416,12 +513,167 @@ export fn gossamer_run(handle_ptr: u64) void {
     const handle = ptrFromU64(handle_ptr) orelse return;
 
     if (!handle.initialized) return;
+    if (handle.closed) {
+        cleanup(handle);
+        return;
+    }
 
     handle.running = true;
     platform.run(&handle.webview);
     // Event loop returned — window is closed. Clean up.
     handle.running = false;
     cleanup(handle);
+}
+
+/// Show the webview window.
+///
+/// Matches: Gossamer.ABI.Foreign.prim__show
+pub export fn gossamer_show(handle_ptr: u64) Result {
+    clearError();
+    const handle = ptrFromU64(handle_ptr) orelse {
+        setError("Null webview handle");
+        return .null_pointer;
+    };
+
+    if (requireOpen(handle)) |err| {
+        return err;
+    }
+
+    platform.show(&handle.webview) catch {
+        setError("Failed to show window");
+        return .@"error";
+    };
+
+    handle.visible = true;
+    clearError();
+    return .ok;
+}
+
+/// Hide the webview window.
+///
+/// Matches: Gossamer.ABI.Foreign.prim__hide
+pub export fn gossamer_hide(handle_ptr: u64) Result {
+    clearError();
+    const handle = ptrFromU64(handle_ptr) orelse {
+        setError("Null webview handle");
+        return .null_pointer;
+    };
+
+    if (requireOpen(handle)) |err| {
+        return err;
+    }
+
+    platform.hide(&handle.webview) catch {
+        setError("Failed to hide window");
+        return .@"error";
+    };
+
+    handle.visible = false;
+    clearError();
+    return .ok;
+}
+
+/// Minimize the webview window.
+///
+/// Matches: Gossamer.ABI.Foreign.prim__minimize
+export fn gossamer_minimize(handle_ptr: u64) Result {
+    clearError();
+    const handle = ptrFromU64(handle_ptr) orelse {
+        setError("Null webview handle");
+        return .null_pointer;
+    };
+
+    if (requireOpen(handle)) |err| {
+        return err;
+    }
+
+    platform.minimize(&handle.webview) catch {
+        setError("Failed to minimize window");
+        return .@"error";
+    };
+
+    handle.visible = false;
+    clearError();
+    return .ok;
+}
+
+/// Maximize the webview window.
+///
+/// Matches: Gossamer.ABI.Foreign.prim__maximize
+export fn gossamer_maximize(handle_ptr: u64) Result {
+    clearError();
+    const handle = ptrFromU64(handle_ptr) orelse {
+        setError("Null webview handle");
+        return .null_pointer;
+    };
+
+    if (requireOpen(handle)) |err| {
+        return err;
+    }
+
+    platform.maximize(&handle.webview) catch {
+        setError("Failed to maximize window");
+        return .@"error";
+    };
+
+    handle.visible = true;
+    clearError();
+    return .ok;
+}
+
+/// Restore the webview window from a minimized or maximized state.
+///
+/// Matches: Gossamer.ABI.Foreign.prim__restore
+pub export fn gossamer_restore(handle_ptr: u64) Result {
+    clearError();
+    const handle = ptrFromU64(handle_ptr) orelse {
+        setError("Null webview handle");
+        return .null_pointer;
+    };
+
+    if (requireOpen(handle)) |err| {
+        return err;
+    }
+
+    platform.restore(&handle.webview) catch {
+        setError("Failed to restore window");
+        return .@"error";
+    };
+
+    handle.visible = true;
+    clearError();
+    return .ok;
+}
+
+/// Request that the webview window close.
+///
+/// This performs the user-visible close action but does not free the
+/// surrounding handle. Cleanup still runs once the event loop exits or the
+/// owner calls destroy().
+///
+/// Matches: Gossamer.ABI.Foreign.prim__requestClose
+export fn gossamer_request_close(handle_ptr: u64) Result {
+    clearError();
+    const handle = ptrFromU64(handle_ptr) orelse {
+        setError("Null webview handle");
+        return .null_pointer;
+    };
+
+    if (requireOpen(handle)) |err| {
+        return err;
+    }
+
+    handle.closed = true;
+    platform.requestClose(&handle.webview) catch {
+        handle.closed = false;
+        setError("Failed to close window");
+        return .@"error";
+    };
+
+    handle.visible = false;
+    gossamer_tray_clear_window();
+    clearError();
+    return .ok;
 }
 
 /// Destroy the webview without running the event loop.
@@ -451,6 +703,11 @@ export fn gossamer_channel_open(handle_ptr: u64) u64 {
 
     if (!handle.initialized) {
         setError("Webview not initialized");
+        return 0;
+    }
+
+    if (handle.closed) {
+        setError("Webview already closed");
         return 0;
     }
 
@@ -578,6 +835,16 @@ export fn gossamer_channel_bind(
         return .invalid_param;
     };
 
+    if (!channel.parent.initialized) {
+        setError("Webview not initialized");
+        return .@"error";
+    }
+
+    if (channel.parent.closed) {
+        setError("Webview already closed");
+        return .already_consumed;
+    }
+
     // Duplicate the name string — caller may free it after this returns
     const name_slice = std.mem.span(name);
     const duped_name = channel.allocator.dupeZ(u8, name_slice) catch {
@@ -632,6 +899,16 @@ export fn gossamer_channel_bind_async(
         setError("Null callback");
         return .invalid_param;
     };
+
+    if (!channel.parent.initialized) {
+        setError("Webview not initialized");
+        return .@"error";
+    }
+
+    if (channel.parent.closed) {
+        setError("Webview already closed");
+        return .already_consumed;
+    }
 
     // Duplicate the name string — caller may free it after this returns
     const name_slice = std.mem.span(name);
@@ -1013,6 +1290,8 @@ fn u64FromPtr(ptr: anytype) u64 {
 fn cleanup(handle: *GossamerHandle) void {
     if (!handle.initialized) return;
 
+    gossamer_tray_clear_window();
+
     // Destroy platform webview
     platform.destroy(&handle.webview);
 
@@ -1020,6 +1299,9 @@ fn cleanup(handle: *GossamerHandle) void {
     handle.bindings.deinit();
 
     handle.initialized = false;
+    handle.running = false;
+    handle.closed = true;
+    handle.visible = false;
     handle.allocator.destroy(handle);
 }
 

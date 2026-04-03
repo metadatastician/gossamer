@@ -20,38 +20,68 @@ fn create(title: String, width: I32, height: I32): I64 =
 
 // Load HTML content into the webview. Borrows the handle.
 // FFI: gossamer_load_html(handle, html) -> result
-fn loadHTML(handle: I64, html: String): I32 =
-  __ffi("gossamer_load_html", handle, html)
+fn loadHTML(h: I64, html: String): I32 =
+  __ffi("gossamer_load_html", h, html)
 
 // Navigate to a URL. Borrows the handle.
 // FFI: gossamer_navigate(handle, url) -> result
-fn navigate(handle: I64, url: String): I32 =
-  __ffi("gossamer_navigate", handle, url)
+fn navigate(h: I64, url: String): I32 =
+  __ffi("gossamer_navigate", h, url)
 
 // Evaluate JavaScript in the webview. Borrows the handle.
 // FFI: gossamer_eval(handle, js) -> result
-fn eval(handle: I64, js: String): I32 =
-  __ffi("gossamer_eval", handle, js)
+fn eval(h: I64, js: String): I32 =
+  __ffi("gossamer_eval", h, js)
 
 // Set the window title. Borrows the handle.
 // FFI: gossamer_set_title(handle, title) -> result
-fn setTitle(handle: I64, title: String): I32 =
-  __ffi("gossamer_set_title", handle, title)
+fn setTitle(h: I64, title: String): I32 =
+  __ffi("gossamer_set_title", h, title)
 
 // Run the event loop. CONSUMES the handle — window is destroyed after.
 // FFI: gossamer_run(handle) -> void
-fn run(handle: I64): () =
-  __ffi("gossamer_run", handle)
+fn run(h: I64): () =
+  __ffi("gossamer_run", h)
 
 // Resize the webview window. Borrows the handle.
 // FFI: gossamer_resize(handle, width, height) -> result
-fn resize(handle: I64, width: I32, height: I32): I32 =
-  __ffi("gossamer_resize", handle, width, height)
+fn resize(h: I64, width: I32, height: I32): I32 =
+  __ffi("gossamer_resize", h, width, height)
+
+// Show the webview window. Borrows the handle.
+// FFI: gossamer_show(handle) -> result
+fn show(h: I64): I32 =
+  __ffi("gossamer_show", h)
+
+// Hide the webview window. Borrows the handle.
+// FFI: gossamer_hide(handle) -> result
+fn hide(h: I64): I32 =
+  __ffi("gossamer_hide", h)
+
+// Minimize the webview window. Borrows the handle.
+// FFI: gossamer_minimize(handle) -> result
+fn minimize(h: I64): I32 =
+  __ffi("gossamer_minimize", h)
+
+// Maximize the webview window. Borrows the handle.
+// FFI: gossamer_maximize(handle) -> result
+fn maximize(h: I64): I32 =
+  __ffi("gossamer_maximize", h)
+
+// Restore the webview window. Borrows the handle.
+// FFI: gossamer_restore(handle) -> result
+fn restore(h: I64): I32 =
+  __ffi("gossamer_restore", h)
+
+// Request that the window close. Borrows the handle.
+// FFI: gossamer_request_close(handle) -> result
+fn requestClose(h: I64): I32 =
+  __ffi("gossamer_request_close", h)
 
 // Destroy the webview without running. CONSUMES the handle.
 // FFI: gossamer_destroy(handle) -> void
-fn destroy(handle: I64): () =
-  __ffi("gossamer_destroy", handle)
+fn destroy(h: I64): () =
+  __ffi("gossamer_destroy", h)
 
 // Get the last error message from the FFI layer.
 // Returns a pointer to the error string, or 0 if no error.

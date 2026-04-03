@@ -115,14 +115,41 @@ const WNDCLASSEXW = extern struct {
 
 const WM_DESTROY: u32 = 0x0002;
 const WM_SIZE: u32 = 0x0005;
+const WM_GETMINMAXINFO: u32 = 0x0024;
 const WS_OVERLAPPEDWINDOW: u32 = 0x00CF0000;
 const WS_VISIBLE: u32 = 0x10000000;
 const CW_USEDEFAULT: i32 = @as(i32, @bitCast(@as(u32, 0x80000000)));
+const SW_HIDE: i32 = 0;
 const SW_SHOW: i32 = 5;
+const SW_MINIMIZE: i32 = 6;
+const SW_RESTORE: i32 = 9;
+const SW_MAXIMIZE: i32 = 3;
 const COINIT_APARTMENTTHREADED: u32 = 0x2;
 const WAIT_OBJECT_0: u32 = 0;
 const INFINITE: u32 = 0xFFFFFFFF;
 const S_OK: HRESULT = 0;
+
+const POINT = extern struct {
+    x: i32,
+    y: i32,
+};
+
+const MINMAXINFO = extern struct {
+    ptReserved: POINT,
+    ptMaxSize: POINT,
+    ptMaxPosition: POINT,
+    ptMinTrackSize: POINT,
+    ptMaxTrackSize: POINT,
+};
+
+const WindowConstraints = struct {
+    min_width: u32 = 0,
+    min_height: u32 = 0,
+    max_width: u32 = 0,
+    max_height: u32 = 0,
+};
+
+threadlocal var window_constraints: WindowConstraints = .{};
 
 //==============================================================================
 // WebView2 COM Interface Definitions (Vtable-based)
@@ -301,6 +328,24 @@ fn controllerVtbl(ptr: *anyopaque) *const ICoreWebView2ControllerVtbl {
 /// Window procedure callback.
 fn wndProc(hwnd: HWND, msg: u32, wParam: WPARAM, lParam: LPARAM) callconv(.c) LRESULT {
     switch (msg) {
+        WM_GETMINMAXINFO => {
+            const mmi: *MINMAXINFO = @ptrFromInt(@as(usize, @intCast(lParam)));
+
+            if (window_constraints.min_width != 0) {
+                mmi.ptMinTrackSize.x = @intCast(window_constraints.min_width);
+            }
+            if (window_constraints.min_height != 0) {
+                mmi.ptMinTrackSize.y = @intCast(window_constraints.min_height);
+            }
+            if (window_constraints.max_width != 0) {
+                mmi.ptMaxTrackSize.x = @intCast(window_constraints.max_width);
+            }
+            if (window_constraints.max_height != 0) {
+                mmi.ptMaxTrackSize.y = @intCast(window_constraints.max_height);
+            }
+
+            return 0;
+        },
         WM_DESTROY => {
             PostQuitMessage(0);
             return 0;
@@ -323,9 +368,14 @@ pub fn create(
     title: [*:0]const u8,
     width: u32,
     height: u32,
+    min_width: u32,
+    min_height: u32,
+    max_width: u32,
+    max_height: u32,
     resizable: bool,
     decorations: bool,
     fullscreen: bool,
+    visible: bool,
 ) PlatformError!WebviewState {
     _ = resizable;
     _ = fullscreen;
@@ -355,6 +405,16 @@ pub fn create(
     if (decorations) {
         style |= WS_OVERLAPPEDWINDOW;
     }
+    if (visible) {
+        style |= WS_VISIBLE;
+    }
+
+    window_constraints = .{
+        .min_width = min_width,
+        .min_height = min_height,
+        .max_width = max_width,
+        .max_height = max_height,
+    };
 
     // Create the window
     const hwnd = CreateWindowExW(
@@ -372,7 +432,9 @@ pub fn create(
         null,
     ) orelse return PlatformError.WindowCreateFailed;
 
-    _ = ShowWindow(hwnd, SW_SHOW);
+    if (visible) {
+        _ = ShowWindow(hwnd, SW_SHOW);
+    }
 
     // Load WebView2Loader.dll dynamically.
     // This DLL is part of the Microsoft Edge WebView2 Runtime.
@@ -522,6 +584,46 @@ pub fn resize(state: *WebviewState, width: u32, height: u32) PlatformError!void 
             .bottom = @intCast(height),
         };
         _ = vtbl.put_Bounds(ctrl, bounds);
+    }
+}
+
+/// Show the window.
+pub fn show(state: *WebviewState) PlatformError!void {
+    const hwnd = state.hwnd orelse return PlatformError.OperationFailed;
+    _ = ShowWindow(hwnd, SW_SHOW);
+}
+
+/// Hide the window.
+pub fn hide(state: *WebviewState) PlatformError!void {
+    const hwnd = state.hwnd orelse return PlatformError.OperationFailed;
+    _ = ShowWindow(hwnd, SW_HIDE);
+}
+
+/// Minimize the window.
+pub fn minimize(state: *WebviewState) PlatformError!void {
+    const hwnd = state.hwnd orelse return PlatformError.OperationFailed;
+    _ = ShowWindow(hwnd, SW_MINIMIZE);
+}
+
+/// Maximize the window.
+pub fn maximize(state: *WebviewState) PlatformError!void {
+    const hwnd = state.hwnd orelse return PlatformError.OperationFailed;
+    _ = ShowWindow(hwnd, SW_MAXIMIZE);
+}
+
+/// Restore the window.
+pub fn restore(state: *WebviewState) PlatformError!void {
+    const hwnd = state.hwnd orelse return PlatformError.OperationFailed;
+    _ = ShowWindow(hwnd, SW_RESTORE);
+}
+
+/// Request that the window close.
+pub fn requestClose(state: *WebviewState) PlatformError!void {
+    if (state.hwnd) |hwnd| {
+        if (DestroyWindow(hwnd) == 0) {
+            return PlatformError.OperationFailed;
+        }
+        state.hwnd = null;
     }
 }
 

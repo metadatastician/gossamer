@@ -177,6 +177,9 @@ export fn gossamer_create(
 ) ?*GossamerHandle { ... }
 ```
 
+`gossamer_create_ex` extends the same launch path with min/max size bounds and
+initial visibility. `gossamer_create` remains as the compatibility shim.
+
 === 2. Compile-Time Platform Dispatch
 
 No runtime overhead for platform selection:
@@ -345,7 +348,7 @@ zig build test-integration
 ```idris
 -- Compile-time verification — these are checked by the compiler
 resultSize      : HasSize Result 4              -- ✓
-windowConfigSize : HasSize WindowConfig 32       -- ✓
+windowConfigSize : HasSize WindowConfig 48       -- ✓
 resultCompliant : CABICompliant Result 4 4       -- ✓
 ```
 

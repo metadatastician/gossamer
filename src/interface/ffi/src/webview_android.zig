@@ -92,16 +92,26 @@ pub fn create(
     title: [*:0]const u8,
     width: u32,
     height: u32,
+    min_width: u32,
+    min_height: u32,
+    max_width: u32,
+    max_height: u32,
     resizable: bool,
     decorations: bool,
     fullscreen: bool,
+    visible: bool,
 ) PlatformError!WebviewState {
     _ = title; // Set via Activity.setTitle after creation
     _ = width; // Android fills the Activity
     _ = height;
+    _ = min_width;
+    _ = min_height;
+    _ = max_width;
+    _ = max_height;
     _ = resizable;
     _ = decorations;
     _ = fullscreen;
+    _ = visible;
 
     // Check if JNI references have been provided by the Java launcher
     const env = android_jni_env orelse return PlatformError.JniInitFailed;
@@ -221,6 +231,36 @@ pub fn setTitle(state: *WebviewState, title: [*:0]const u8) PlatformError!void {
 /// Resize the window (no-op on Android — WebView fills the Activity).
 pub fn resize(_: *WebviewState, _: u32, _: u32) PlatformError!void {
     // Android WebView fills the Activity — resize is not applicable
+}
+
+/// Window visibility/state controls are not supported on Android.
+pub fn show(_: *WebviewState) PlatformError!void {
+    return PlatformError.OperationFailed;
+}
+
+/// Window visibility/state controls are not supported on Android.
+pub fn hide(_: *WebviewState) PlatformError!void {
+    return PlatformError.OperationFailed;
+}
+
+/// Window visibility/state controls are not supported on Android.
+pub fn minimize(_: *WebviewState) PlatformError!void {
+    return PlatformError.OperationFailed;
+}
+
+/// Window visibility/state controls are not supported on Android.
+pub fn maximize(_: *WebviewState) PlatformError!void {
+    return PlatformError.OperationFailed;
+}
+
+/// Window visibility/state controls are not supported on Android.
+pub fn restore(_: *WebviewState) PlatformError!void {
+    return PlatformError.OperationFailed;
+}
+
+/// Requesting close is not supported on Android from the native shell layer.
+pub fn requestClose(_: *WebviewState) PlatformError!void {
+    return PlatformError.OperationFailed;
 }
 
 /// Run the event loop.
