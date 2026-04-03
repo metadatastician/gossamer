@@ -47,7 +47,7 @@ test "version string is semantic version format" {
     const ver_str = std.mem.span(ver);
 
     // Must be "X.Y.Z" format
-    try testing.expectEqualStrings("0.1.0", ver_str);
+    try testing.expectEqualStrings("0.3.0", ver_str);
 }
 
 test "build info string contains version" {
@@ -56,7 +56,7 @@ test "build info string contains version" {
 
     // Build info should mention Gossamer and the version
     try testing.expect(std.mem.indexOf(u8, info_str, "Gossamer") != null);
-    try testing.expect(std.mem.indexOf(u8, info_str, "0.1.0") != null);
+    try testing.expect(std.mem.indexOf(u8, info_str, "0.3.0") != null);
 }
 
 //==============================================================================
@@ -85,6 +85,36 @@ test "set_title with null handle returns null_pointer" {
 
 test "resize with null handle returns null_pointer" {
     const result = gossamer.gossamer_resize(0, 800, 600);
+    try testing.expectEqual(Result.null_pointer, result);
+}
+
+test "show with null handle returns null_pointer" {
+    const result = gossamer.gossamer_show(0);
+    try testing.expectEqual(Result.null_pointer, result);
+}
+
+test "hide with null handle returns null_pointer" {
+    const result = gossamer.gossamer_hide(0);
+    try testing.expectEqual(Result.null_pointer, result);
+}
+
+test "minimize with null handle returns null_pointer" {
+    const result = gossamer.gossamer_minimize(0);
+    try testing.expectEqual(Result.null_pointer, result);
+}
+
+test "maximize with null handle returns null_pointer" {
+    const result = gossamer.gossamer_maximize(0);
+    try testing.expectEqual(Result.null_pointer, result);
+}
+
+test "restore with null handle returns null_pointer" {
+    const result = gossamer.gossamer_restore(0);
+    try testing.expectEqual(Result.null_pointer, result);
+}
+
+test "request_close with null handle returns null_pointer" {
+    const result = gossamer.gossamer_request_close(0);
     try testing.expectEqual(Result.null_pointer, result);
 }
 

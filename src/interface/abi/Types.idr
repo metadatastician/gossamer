@@ -209,6 +209,42 @@ webviewPtr (MkWebview ptr) = ptr
 -- Window Configuration (Plain Value)
 --------------------------------------------------------------------------------
 
+||| Presentation mode for a Gossamer application.
+|||
+||| Gui: standalone webview window.
+||| PanelHost: GUI shell that can participate in PanLL/groove discovery.
+||| Headless: no native window.
+||| Cli/Tui: reserved for future terminal-backed presentation layers.
+public export
+data AppMode = Gui | PanelHost | Headless | Cli | Tui
+
+public export
+Eq AppMode where
+  Gui == Gui = True
+  PanelHost == PanelHost = True
+  Headless == Headless = True
+  Cli == Cli = True
+  Tui == Tui = True
+  _ == _ = False
+
+public export
+appModeToString : AppMode -> String
+appModeToString Gui = "gui"
+appModeToString PanelHost = "panel-host"
+appModeToString Headless = "headless"
+appModeToString Cli = "cli"
+appModeToString Tui = "tui"
+
+public export
+appModeFromString : String -> Maybe AppMode
+appModeFromString "gui" = Just Gui
+appModeFromString "panel-host" = Just PanelHost
+appModeFromString "panel_host" = Just PanelHost
+appModeFromString "headless" = Just Headless
+appModeFromString "cli" = Just Cli
+appModeFromString "tui" = Just Tui
+appModeFromString _ = Nothing
+
 ||| Window configuration — a plain value, not a resource.
 ||| Can be freely copied, stored, serialised.
 public export
@@ -220,23 +256,38 @@ record WindowConfig where
   width       : Bits32
   ||| Initial window height in pixels
   height      : Bits32
+  ||| Minimum window width in pixels (0 = unconstrained)
+  minWidth    : Bits32
+  ||| Minimum window height in pixels (0 = unconstrained)
+  minHeight   : Bits32
+  ||| Maximum window width in pixels (0 = unconstrained)
+  maxWidth    : Bits32
+  ||| Maximum window height in pixels (0 = unconstrained)
+  maxHeight   : Bits32
   ||| Whether the window can be resized
   resizable   : Bool
   ||| Whether to show window decorations (title bar, borders)
   decorations : Bool
   ||| Whether the window starts in fullscreen mode
   fullscreen  : Bool
+  ||| Whether the window starts visible
+  visible     : Bool
 
-||| Default window configuration: 800x600, resizable, decorated.
+||| Default window configuration: 800x600, resizable, decorated, visible.
 public export
 defaultConfig : WindowConfig
 defaultConfig = MkWindowConfig
   { title = "Gossamer"
   , width = 800
   , height = 600
+  , minWidth = 0
+  , minHeight = 0
+  , maxWidth = 0
+  , maxHeight = 0
   , resizable = True
   , decorations = True
   , fullscreen = False
+  , visible = True
   }
 
 --------------------------------------------------------------------------------

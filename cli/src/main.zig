@@ -46,6 +46,20 @@ extern fn gossamer_create(
     fullscreen: u8,
 ) ?*anyopaque;
 
+extern fn gossamer_create_ex(
+    title: [*:0]const u8,
+    width: u32,
+    height: u32,
+    min_width: u32,
+    min_height: u32,
+    max_width: u32,
+    max_height: u32,
+    resizable: u8,
+    decorations: u8,
+    fullscreen: u8,
+    visible: u8,
+) ?*anyopaque;
+
 extern fn gossamer_navigate(handle: u64, url: [*:0]const u8) c_int;
 extern fn gossamer_load_html(handle: u64, html: [*:0]const u8) c_int;
 extern fn gossamer_channel_open(handle: u64) u64;
@@ -60,6 +74,18 @@ extern fn gossamer_last_error() ?[*:0]const u8;
 extern fn gossamer_set_title(handle: u64, title: [*:0]const u8) c_int;
 extern fn gossamer_set_csp(handle: u64, csp: [*:0]const u8) c_int;
 extern fn gossamer_emit(handle: u64, event_name: [*:0]const u8, payload_json: [*:0]const u8) c_int;
+extern fn gossamer_groove_discover() u32;
+extern fn gossamer_groove_status(target_id: u32) u32;
+
+const AppMode = enum {
+    gui,
+    panel_host,
+    headless,
+    cli,
+    tui,
+};
+
+const PANLL_GROOVE_ID: u32 = 4;
 
 //==============================================================================
 // Shell-exec IPC handler for OPSM runtime commands
@@ -189,9 +215,15 @@ const Config = struct {
     title: []const u8 = "Gossamer App",
     width: u32 = 800,
     height: u32 = 600,
+    min_width: ?u32 = null,
+    min_height: ?u32 = null,
+    max_width: ?u32 = null,
+    max_height: ?u32 = null,
     resizable: bool = true,
     fullscreen: bool = false,
     decorations: bool = true,
+    mode: AppMode = .gui,
+    visible: bool = true,
     /// Content-Security-Policy directive from gossamer.conf.json security.csp.
     /// When non-null, injected as a <meta> CSP tag after the IPC bridge is set up.
     csp: ?[]const u8 = null,
@@ -213,9 +245,15 @@ fn parseConfig(json_str: []const u8) Config {
     config.title = extractStringField(json_str, "title") orelse config.title;
     config.width = extractIntField(json_str, "width") orelse config.width;
     config.height = extractIntField(json_str, "height") orelse config.height;
+    config.min_width = extractIntField(json_str, "minWidth");
+    config.min_height = extractIntField(json_str, "minHeight");
+    config.max_width = extractIntField(json_str, "maxWidth");
+    config.max_height = extractIntField(json_str, "maxHeight");
     config.resizable = extractBoolField(json_str, "resizable") orelse config.resizable;
     config.fullscreen = extractBoolField(json_str, "fullscreen") orelse config.fullscreen;
     config.decorations = extractBoolField(json_str, "decorations") orelse config.decorations;
+    config.visible = extractBoolField(json_str, "visible") orelse config.visible;
+    config.mode = parseAppMode(extractStringField(json_str, "mode")) orelse config.mode;
     // Parse security.csp — the field is "csp":"..." inside the "security" block.
     // extractStringField finds the first match, which works since "csp" only appears in security.
     config.csp = extractStringField(json_str, "csp");
@@ -265,6 +303,30 @@ fn extractBoolField(json: []const u8, key: []const u8) ?bool {
     return null;
 }
 
+fn parseAppMode(value: ?[]const u8) ?AppMode {
+    const mode = value orelse return null;
+    if (std.mem.eql(u8, mode, "gui")) return .gui;
+    if (std.mem.eql(u8, mode, "panel-host") or std.mem.eql(u8, mode, "panel_host")) return .panel_host;
+    if (std.mem.eql(u8, mode, "headless")) return .headless;
+    if (std.mem.eql(u8, mode, "cli")) return .cli;
+    if (std.mem.eql(u8, mode, "tui")) return .tui;
+    return null;
+}
+
+fn modeName(mode: AppMode) []const u8 {
+    return switch (mode) {
+        .gui => "gui",
+        .panel_host => "panel-host",
+        .headless => "headless",
+        .cli => "cli",
+        .tui => "tui",
+    };
+}
+
+fn modeSupportsWindow(mode: AppMode) bool {
+    return mode == .gui or mode == .panel_host;
+}
+
 //==============================================================================
 // Shell command execution
 //==============================================================================
@@ -290,6 +352,16 @@ fn runShellCommandBackground(allocator: std.mem.Allocator, command: []const u8) 
     return child;
 }
 
+fn announcePanelHostMode() void {
+    const discovered = gossamer_groove_discover();
+    const panll_status = gossamer_groove_status(PANLL_GROOVE_ID);
+    if (panll_status == 2 or panll_status == 3) {
+        out("  \x1b[32m✓\x1b[0m PanLL groove detected ({d} groove(s) available)\n", .{discovered});
+    } else {
+        out("  \x1b[33m!\x1b[0m PanLL not detected ({d} groove(s) available)\n", .{discovered});
+    }
+}
+
 //==============================================================================
 // Commands
 //==============================================================================
@@ -297,6 +369,15 @@ fn runShellCommandBackground(allocator: std.mem.Allocator, command: []const u8) 
 fn cmdDev(allocator: std.mem.Allocator, config: Config, config_data: []const u8) !void {
     out("\n  \x1b[36mGossamer\x1b[0m v{s}\n", .{std.mem.span(gossamer_version())});
     out("  \x1b[2m{s}\x1b[0m\n\n", .{config.product_name});
+
+    if (!modeSupportsWindow(config.mode)) {
+        switch (config.mode) {
+            .headless => out("  \x1b[33m!\x1b[0m Headless mode selected; skipping webview launch.\n\n", .{}),
+            .cli, .tui => out("  \x1b[33m!\x1b[0m Terminal mode is not implemented yet; skipping webview launch.\n\n", .{}),
+            else => {},
+        }
+        return;
+    }
 
     var dev_proc: ?std.process.Child = null;
     if (config.before_dev_command) |cmd| {
@@ -314,13 +395,22 @@ fn cmdDev(allocator: std.mem.Allocator, config: Config, config_data: []const u8)
     const title_z = try allocator.dupeZ(u8, config.title);
     defer allocator.free(title_z);
 
-    const handle_ptr = gossamer_create(
+    if (config.mode == .panel_host) {
+        announcePanelHostMode();
+    }
+
+    const handle_ptr = gossamer_create_ex(
         title_z,
         config.width,
         config.height,
+        config.min_width orelse 0,
+        config.min_height orelse 0,
+        config.max_width orelse 0,
+        config.max_height orelse 0,
         if (config.resizable) 1 else 0,
         if (config.decorations) 1 else 0,
         if (config.fullscreen) 1 else 0,
+        if (config.visible) 1 else 0,
     );
 
     if (handle_ptr == null) {
@@ -408,6 +498,15 @@ fn cmdBuild(allocator: std.mem.Allocator, config: Config) !void {
 fn cmdRun(allocator: std.mem.Allocator, config: Config) !void {
     out("\n  \x1b[36mGossamer\x1b[0m run\n", .{});
 
+    if (!modeSupportsWindow(config.mode)) {
+        switch (config.mode) {
+            .headless => out("  \x1b[33m!\x1b[0m Headless mode selected; skipping webview launch.\n\n", .{}),
+            .cli, .tui => out("  \x1b[33m!\x1b[0m Terminal mode is not implemented yet; skipping webview launch.\n\n", .{}),
+            else => {},
+        }
+        return;
+    }
+
     var path_buf: [4096]u8 = undefined;
     const index_path = std.fmt.bufPrint(&path_buf, "{s}/index.html", .{config.frontend_dist}) catch return error.PathTooLong;
 
@@ -420,11 +519,22 @@ fn cmdRun(allocator: std.mem.Allocator, config: Config) !void {
     const title_z = try allocator.dupeZ(u8, config.title);
     defer allocator.free(title_z);
 
-    const handle_ptr = gossamer_create(
-        title_z, config.width, config.height,
+    if (config.mode == .panel_host) {
+        announcePanelHostMode();
+    }
+
+    const handle_ptr = gossamer_create_ex(
+        title_z,
+        config.width,
+        config.height,
+        config.min_width orelse 0,
+        config.min_height orelse 0,
+        config.max_width orelse 0,
+        config.max_height orelse 0,
         if (config.resizable) 1 else 0,
         if (config.decorations) 1 else 0,
         if (config.fullscreen) 1 else 0,
+        if (config.visible) 1 else 0,
     );
     if (handle_ptr == null) return error.WebviewCreateFailed;
     const handle = @intFromPtr(handle_ptr.?);
@@ -453,7 +563,19 @@ fn cmdInfo(config: Config) void {
     out("  Identifier:   {s}\n", .{config.identifier});
     out("  Frontend:     {s}\n", .{config.frontend_dist});
     out("  Dev URL:      {s}\n", .{config.dev_url});
+    out("  Mode:         {s}\n", .{modeName(config.mode)});
     out("  Window:       {d}x{d}\n", .{ config.width, config.height });
+    if (config.min_width != null or config.min_height != null) {
+        out("  Min size:     {d}x{d}\n", .{ config.min_width orelse 0, config.min_height orelse 0 });
+    } else {
+        out("  Min size:     unconstrained\n", .{});
+    }
+    if (config.max_width != null or config.max_height != null) {
+        out("  Max size:     {d}x{d}\n", .{ config.max_width orelse 0, config.max_height orelse 0 });
+    } else {
+        out("  Max size:     unconstrained\n", .{});
+    }
+    out("  Visible:      {s}\n", .{if (config.visible) "true" else "false"});
     out("  Gossamer:     {s}\n", .{std.mem.span(gossamer_version())});
     out("  Build:        {s}\n\n", .{std.mem.span(gossamer_build_info())});
 }
@@ -584,9 +706,15 @@ fn cmdInit() !void {
             \\      "title": "My Gossamer App",
             \\      "width": 800,
             \\      "height": 600,
+            \\      "minWidth": null,
+            \\      "minHeight": null,
+            \\      "maxWidth": null,
+            \\      "maxHeight": null,
             \\      "resizable": true,
-            \\      "decorations": true
+            \\      "decorations": true,
+            \\      "visible": true
             \\    }],
+            \\    "mode": "gui",
             \\    "security": { "capabilities": ["filesystem", "network"] },
             \\    "ipc": { "protocol": "json", "bridgeInjection": true }
             \\  },

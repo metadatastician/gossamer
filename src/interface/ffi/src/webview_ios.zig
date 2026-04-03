@@ -88,13 +88,22 @@ pub fn create(
     title: [*:0]const u8,
     width: u32,
     height: u32,
+    min_width: u32,
+    min_height: u32,
+    max_width: u32,
+    max_height: u32,
     resizable: bool,
     decorations: bool,
     fullscreen: bool,
+    visible: bool,
 ) PlatformError!WebviewState {
     _ = title; // iOS doesn't have window titles
     _ = width; // iOS uses full screen
     _ = height;
+    _ = min_width;
+    _ = min_height;
+    _ = max_width;
+    _ = max_height;
     _ = resizable; // Always full screen
     _ = decorations; // No window decorations
     _ = fullscreen; // Always full screen
@@ -150,9 +159,11 @@ pub fn create(
     const set_root_sel = c.sel_registerName("setRootViewController:") orelse return PlatformError.WindowCreateFailed;
     msgSendVoid1(window, set_root_sel, vc);
 
-    // [window makeKeyAndVisible]
-    const visible_sel = c.sel_registerName("makeKeyAndVisible") orelse return PlatformError.WindowCreateFailed;
-    msgSendVoid(window, visible_sel);
+    if (visible) {
+        // [window makeKeyAndVisible]
+        const visible_sel = c.sel_registerName("makeKeyAndVisible") orelse return PlatformError.WindowCreateFailed;
+        msgSendVoid(window, visible_sel);
+    }
 
     return WebviewState{
         .window = window,
@@ -208,6 +219,36 @@ pub fn setTitle(state: *WebviewState, title: [*:0]const u8) PlatformError!void {
 /// Resize (no-op on iOS — always fills the screen).
 pub fn resize(_: *WebviewState, _: u32, _: u32) PlatformError!void {
     // iOS apps always fill the screen
+}
+
+/// Window visibility/state controls are not supported on iOS.
+pub fn show(_: *WebviewState) PlatformError!void {
+    return PlatformError.OperationFailed;
+}
+
+/// Window visibility/state controls are not supported on iOS.
+pub fn hide(_: *WebviewState) PlatformError!void {
+    return PlatformError.OperationFailed;
+}
+
+/// Window visibility/state controls are not supported on iOS.
+pub fn minimize(_: *WebviewState) PlatformError!void {
+    return PlatformError.OperationFailed;
+}
+
+/// Window visibility/state controls are not supported on iOS.
+pub fn maximize(_: *WebviewState) PlatformError!void {
+    return PlatformError.OperationFailed;
+}
+
+/// Window visibility/state controls are not supported on iOS.
+pub fn restore(_: *WebviewState) PlatformError!void {
+    return PlatformError.OperationFailed;
+}
+
+/// Requesting close is not supported on iOS from the native shell layer.
+pub fn requestClose(_: *WebviewState) PlatformError!void {
+    return PlatformError.OperationFailed;
 }
 
 /// Run the UIKit event loop.
