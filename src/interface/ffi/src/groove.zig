@@ -376,7 +376,7 @@ export fn gossamer_groove_check_compat(target_a: u32, target_b: u32) callconv(.c
 
 /// Send a JSON message to a grooved service.
 /// Uses HTTP POST to /.well-known/groove/message on the target port.
-export fn gossamer_groove_send(target_id: u32, msg_ptr: [*:0]const u8) callconv(.c) u32 {
+pub export fn gossamer_groove_send(target_id: u32, msg_ptr: [*:0]const u8) callconv(.c) u32 {
     if (target_id >= TARGET_COUNT) return 1;
     if (grooves[target_id].status == .not_found) return 1;
 

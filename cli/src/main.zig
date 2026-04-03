@@ -126,7 +126,9 @@ extern fn gossamer_debug_open(handle: u64) c_int;
 extern fn gossamer_debug_close(handle: u64) c_int;
 extern fn gossamer_debug_toggle(handle: u64) c_int;
 
-// Groove typed connections
+// Groove docking + typed connections
+extern fn gossamer_groove_dock(handle: u64, url: [*:0]const u8, width: u32) c_int;
+extern fn gossamer_groove_undock(handle: u64) c_int;
 extern fn gossamer_groove_connect_typed(target_id: u32, groove_type: c_int, ttl: u32) c_int;
 extern fn gossamer_groove_disconnect_typed(target_id: u32) c_int;
 extern fn gossamer_groove_query_type(target_id: u32) c_int;
@@ -638,6 +640,37 @@ fn debugToggleHandler(_: [*:0]const u8, user_data: ?*anyopaque) callconv(.c) [*:
     return windowResultJson(gossamer_debug_toggle(handle));
 }
 
+//==============================================================================
+// Groove Docking IPC Handlers
+//==============================================================================
+
+/// IPC handler: dock a groove service panel.
+/// JS: gossamer.groove_dock({url: "http://localhost:6473/.well-known/groove", width: 350})
+fn grooveDockHandler(payload: [*:0]const u8, user_data: ?*anyopaque) callconv(.c) [*:0]const u8 {
+    const handle = @intFromPtr(user_data orelse return @ptrCast(@constCast("{\"ok\":false,\"error\":\"no handle\"}")));
+    const payload_slice = std.mem.span(payload);
+    const url = extractSimpleJsonField(payload_slice, "url") orelse return @ptrCast(@constCast("{\"ok\":false,\"error\":\"missing url\"}"));
+    const width_str = extractSimpleJsonField(payload_slice, "width");
+    var width: u32 = 300;
+    if (width_str) |ws| {
+        width = std.fmt.parseInt(u32, ws, 10) catch 300;
+    }
+
+    var url_buf: [512]u8 = undefined;
+    if (url.len >= url_buf.len) return @ptrCast(@constCast("{\"ok\":false,\"error\":\"url too long\"}"));
+    @memcpy(url_buf[0..url.len], url);
+    url_buf[url.len] = 0;
+
+    return windowResultJson(gossamer_groove_dock(handle, url_buf[0..url.len :0], width));
+}
+
+/// IPC handler: undock the groove panel.
+/// JS: gossamer.groove_undock()
+fn grooveUndockHandler(_: [*:0]const u8, user_data: ?*anyopaque) callconv(.c) [*:0]const u8 {
+    const handle = @intFromPtr(user_data orelse return @ptrCast(@constCast("{\"ok\":false,\"error\":\"no handle\"}")));
+    return windowResultJson(gossamer_groove_undock(handle));
+}
+
 /// Register all window control and management IPC handlers on the given channel.
 /// The handle_ptr is passed as user_data so handlers can dispatch FFI calls.
 fn bindWindowControlHandlers(channel: u64, handle_ptr: ?*anyopaque) void {
@@ -681,6 +714,10 @@ fn bindWindowControlHandlers(channel: u64, handle_ptr: ?*anyopaque) void {
     _ = gossamer_channel_bind(channel, "debug_open", &debugOpenHandler, handle_ptr);
     _ = gossamer_channel_bind(channel, "debug_close", &debugCloseHandler, handle_ptr);
     _ = gossamer_channel_bind(channel, "debug_toggle", &debugToggleHandler, handle_ptr);
+
+    // Groove docking (2 handlers)
+    _ = gossamer_channel_bind(channel, "groove_dock", &grooveDockHandler, handle_ptr);
+    _ = gossamer_channel_bind(channel, "groove_undock", &grooveUndockHandler, handle_ptr);
 }
 
 //==============================================================================
@@ -917,7 +954,7 @@ fn cmdDev(allocator: std.mem.Allocator, config: Config, config_data: []const u8)
 
         // Register window control + management IPC handlers (sync — all are fast GTK calls)
         bindWindowControlHandlers(channel, handle_ptr.?);
-        out("  \x1b[32m✓\x1b[0m Window management handlers bound (25 operations)\n", .{});
+        out("  \x1b[32m✓\x1b[0m Window management handlers bound (27 operations)\n", .{});
 
         // Register in the global window registry (multi-window foundation)
         const wid = gossamer_registry_add(handle);

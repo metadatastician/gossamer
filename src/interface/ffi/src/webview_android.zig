@@ -258,6 +258,13 @@ pub fn restore(_: *WebviewState) PlatformError!void {
     return PlatformError.OperationFailed;
 }
 
+/// Dock/undock not applicable on mobile.
+pub fn dock(_: *WebviewState, _: [*:0]const u8, _: u32) PlatformError!void {}
+pub fn undock(_: *WebviewState) void {}
+
+/// Query screen dimensions.
+pub fn getScreenSize(_: *WebviewState) [2]u32 { return .{ 1920, 1080 }; }
+
 /// Register a persistent user script.
 pub fn addUserScript(_: *WebviewState, _: [*:0]const u8) PlatformError!void {}
 

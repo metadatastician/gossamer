@@ -1234,9 +1234,11 @@ export fn gossamer_arrange(strategy: u32) Result {
 
     if (count == 0) return .ok;
 
-    // Use a reasonable default screen size (will be overridden by actual geometry if available)
-    const screen_w: u32 = 1920;
-    const screen_h: u32 = 1080;
+    // Query real screen geometry from the first handle's window.
+    // Falls back to 1920x1080 if detection fails.
+    const screen_dims = platform.getScreenSize(&handles[0].webview);
+    const screen_w: u32 = screen_dims[0];
+    const screen_h: u32 = screen_dims[1];
 
     switch (strategy) {
         0 => { // tile_horizontal
@@ -1358,35 +1360,84 @@ export fn gossamer_transmute(handle_ptr: u64, mode: c_int) Result {
 
     switch (new_mode) {
         .gui => {
-            // Restore webview if coming from terminal modes
-            if (old_mode == .tui or old_mode == .cli) {
-                // Re-show the webview widget
-                platform.show(&handle.webview) catch {};
+            // Restore webview from terminal modes using the backed-up HTML
+            if (old_mode == .tui or old_mode == .cli or old_mode == .terminal_export) {
+                const restore_js =
+                    \\(function(){
+                    \\  if(window.__gossamer_gui_backup){
+                    \\    document.body.innerHTML=window.__gossamer_gui_backup;
+                    \\    document.body.style.margin='';
+                    \\    delete window.__gossamer_gui_backup;
+                    \\  }
+                    \\  window.__gossamer_emit&&window.__gossamer_emit('transmuted',{mode:'gui'});
+                    \\})();
+                ;
+                platform.eval(&handle.webview, restore_js) catch {};
             }
         },
         .tui => {
-            // Inject ANSI-mode overlay: convert webview rendering to text-block display
+            // TUI mode: walk the DOM, extract structured text, render with
+            // ANSI-style colours using <span> tags. Preserves headings, links,
+            // lists, tables, and code blocks as coloured/formatted text.
+            // Saves the original HTML for transmute back to GUI mode.
             const tui_js =
                 \\(function(){
-                \\  document.body.style.fontFamily='monospace';
-                \\  document.body.style.fontSize='14px';
-                \\  document.body.style.background='#000';
-                \\  document.body.style.color='#0f0';
-                \\  document.body.style.whiteSpace='pre-wrap';
+                \\  if(!window.__gossamer_gui_backup) window.__gossamer_gui_backup=document.body.innerHTML;
+                \\  var C={h1:'\x1b[1;36m',h2:'\x1b[1;33m',h3:'\x1b[1;35m',h4:'\x1b[33m',
+                \\    a:'\x1b[4;34m',code:'\x1b[32m',strong:'\x1b[1m',em:'\x1b[3m',
+                \\    li:'\x1b[37m',th:'\x1b[1;37m',td:'\x1b[37m',R:'\x1b[0m'};
+                \\  function walk(el,depth){
+                \\    if(el.nodeType===3) return el.textContent;
+                \\    if(el.nodeType!==1) return '';
+                \\    var tag=el.tagName.toLowerCase(),out='',c=C[tag]||'',r=c?C.R:'';
+                \\    if(tag==='br') return '\n';
+                \\    if(tag==='hr') return '\n'+C.h1+'─'.repeat(60)+C.R+'\n';
+                \\    if(tag==='script'||tag==='style'||tag==='noscript') return '';
+                \\    var kids='';for(var i=0;i<el.childNodes.length;i++) kids+=walk(el.childNodes[i],depth+1);
+                \\    if(/^h[1-6]$/.test(tag)) return '\n'+c+kids+r+'\n';
+                \\    if(tag==='p'||tag==='div'||tag==='section'||tag==='article') return '\n'+kids+'\n';
+                \\    if(tag==='li') return '  • '+c+kids+r+'\n';
+                \\    if(tag==='ul'||tag==='ol') return '\n'+kids;
+                \\    if(tag==='pre') return '\n'+C.code+kids+C.R+'\n';
+                \\    if(tag==='table') return '\n'+kids+'\n';
+                \\    if(tag==='tr') return kids+'│\n';
+                \\    if(tag==='th'||tag==='td') return '│'+c+' '+kids.trim()+' '+r;
+                \\    if(tag==='a') return c+kids+r+' ['+((el.href||'').substring(0,40))+']';
+                \\    if(tag==='button') return '['+C.h2+kids+C.R+']';
+                \\    if(tag==='input') return '['+C.h3+(el.value||el.placeholder||'input')+C.R+']';
+                \\    if(c) return c+kids+r;
+                \\    return kids;
+                \\  }
+                \\  var ansi=walk(document.body,0).replace(/\n{3,}/g,'\n\n').trim();
+                \\  // Convert ANSI codes to HTML spans for in-webview display
+                \\  var html=ansi.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                \\    .replace(/\x1b\[0m/g,'</span>')
+                \\    .replace(/\x1b\[1;36m/g,'<span style="color:#0ff;font-weight:bold">')
+                \\    .replace(/\x1b\[1;33m/g,'<span style="color:#ff0;font-weight:bold">')
+                \\    .replace(/\x1b\[1;35m/g,'<span style="color:#f0f;font-weight:bold">')
+                \\    .replace(/\x1b\[33m/g,'<span style="color:#ff0">')
+                \\    .replace(/\x1b\[4;34m/g,'<span style="color:#48f;text-decoration:underline">')
+                \\    .replace(/\x1b\[32m/g,'<span style="color:#0f0">')
+                \\    .replace(/\x1b\[1m/g,'<span style="font-weight:bold">')
+                \\    .replace(/\x1b\[3m/g,'<span style="font-style:italic">')
+                \\    .replace(/\x1b\[37m/g,'<span style="color:#ddd">')
+                \\    .replace(/\x1b\[1;37m/g,'<span style="color:#fff;font-weight:bold">');
+                \\  document.body.innerHTML='<pre style="font:14px/1.5 monospace;background:#0d1117;color:#c9d1d9;padding:16px;margin:0;min-height:100vh;white-space:pre-wrap;word-wrap:break-word">'+html+'</pre>';
+                \\  document.body.style.margin='0';
                 \\  window.__gossamer_emit&&window.__gossamer_emit('transmuted',{mode:'tui'});
                 \\})();
             ;
             platform.eval(&handle.webview, tui_js) catch {};
         },
         .cli => {
-            // Inject CLI-mode: strip all styling, plain text only
+            // CLI mode: strip all markup, plain text only.
+            // Saves backup for transmute back to GUI.
             const cli_js =
                 \\(function(){
+                \\  if(!window.__gossamer_gui_backup) window.__gossamer_gui_backup=document.body.innerHTML;
                 \\  var text = document.body.innerText || document.body.textContent;
-                \\  document.body.innerHTML='<pre>'+text+'</pre>';
-                \\  document.body.style.fontFamily='monospace';
-                \\  document.body.style.background='#000';
-                \\  document.body.style.color='#ccc';
+                \\  document.body.innerHTML='<pre style="font:14px/1.5 monospace;background:#000;color:#ccc;padding:16px;margin:0;min-height:100vh;white-space:pre-wrap">'+text.replace(/</g,'&lt;')+'</pre>';
+                \\  document.body.style.margin='0';
                 \\  window.__gossamer_emit&&window.__gossamer_emit('transmuted',{mode:'cli'});
                 \\})();
             ;
@@ -1404,20 +1455,44 @@ export fn gossamer_transmute(handle_ptr: u64, mode: c_int) Result {
             platform.eval(&handle.webview, export_js) catch {};
         },
         .panll_attach => {
-            // Send a groove registration message to PanLL on port 8000
+            // Send a groove registration to PanLL (target 4, port 4040).
+            // Message: {"action":"attach","window_id":N,"title":"..."}
+            // PanLL responds with a panel slot assignment.
+            const PANLL_TARGET: u32 = 4;
+            var msg_buf: [256]u8 = undefined;
+            const wid = handle.window_id;
+            const msg = std.fmt.bufPrint(&msg_buf,
+                "{{\"action\":\"attach\",\"window_id\":{d},\"source\":\"gossamer\"}}", .{wid},
+            ) catch "";
+            if (msg.len > 0) {
+                msg_buf[msg.len] = 0;
+                const msg_z: [*:0]const u8 = msg_buf[0..msg.len :0];
+                _ = @import("groove.zig").gossamer_groove_send(PANLL_TARGET, msg_z);
+            }
+            // Also notify the local JS
             const attach_js =
                 \\(function(){
                 \\  window.__gossamer_emit&&window.__gossamer_emit('transmuted',{mode:'panll_attach'});
-                \\  window.__gossamer_emit&&window.__gossamer_emit('panll_request',{action:'attach',window_id:window.__gossamer_window_id||0});
                 \\})();
             ;
             platform.eval(&handle.webview, attach_js) catch {};
         },
         .panll_detach => {
+            // Tell PanLL to release this window's panel slot.
+            const PANLL_TARGET: u32 = 4;
+            var msg_buf: [256]u8 = undefined;
+            const wid = handle.window_id;
+            const msg = std.fmt.bufPrint(&msg_buf,
+                "{{\"action\":\"detach\",\"window_id\":{d},\"source\":\"gossamer\"}}", .{wid},
+            ) catch "";
+            if (msg.len > 0) {
+                msg_buf[msg.len] = 0;
+                const msg_z: [*:0]const u8 = msg_buf[0..msg.len :0];
+                _ = @import("groove.zig").gossamer_groove_send(PANLL_TARGET, msg_z);
+            }
             const detach_js =
                 \\(function(){
                 \\  window.__gossamer_emit&&window.__gossamer_emit('transmuted',{mode:'panll_detach'});
-                \\  window.__gossamer_emit&&window.__gossamer_emit('panll_request',{action:'detach',window_id:window.__gossamer_window_id||0});
                 \\})();
             ;
             platform.eval(&handle.webview, detach_js) catch {};
@@ -1741,6 +1816,62 @@ export fn gossamer_groove_query_type(target_id: u32) c_int {
         }
     }
     return -1;
+}
+
+//==============================================================================
+// Groove Side-Docking
+//==============================================================================
+//
+// Dock a groove service panel into the window frame using GTK's GtkPaned.
+// The main webview occupies the left pane; the docked service loads in a
+// secondary webview on the right. Undocking restores the full-width layout.
+//
+// Hard grooves (e.g. Burble) typically stay docked permanently.
+// Soft grooves (e.g. feedback-o-tron) dock only during a session.
+
+/// Dock a groove service into the window frame.
+/// url: the HTTP endpoint to load in the dock panel (e.g. "http://localhost:6473/.well-known/groove")
+/// width: width of the dock panel in pixels (0 = default 300)
+export fn gossamer_groove_dock(handle_ptr: u64, url: [*:0]const u8, width: u32) Result {
+    clearError();
+    const handle = ptrFromU64(handle_ptr) orelse {
+        setError("Null handle");
+        return .null_pointer;
+    };
+    if (requireOpen(handle)) |err| return err;
+
+    const dock_w = if (width == 0) @as(u32, 300) else width;
+    platform.dock(&handle.webview, url, dock_w) catch {
+        setError("Failed to dock groove panel");
+        return .@"error";
+    };
+
+    // Notify JS
+    platform.eval(&handle.webview,
+        \\window.__gossamer_emit&&window.__gossamer_emit('groove_docked',{});
+    ) catch {};
+
+    clearError();
+    return .ok;
+}
+
+/// Remove the docked groove panel.
+export fn gossamer_groove_undock(handle_ptr: u64) Result {
+    clearError();
+    const handle = ptrFromU64(handle_ptr) orelse {
+        setError("Null handle");
+        return .null_pointer;
+    };
+    if (requireOpen(handle)) |err| return err;
+
+    platform.undock(&handle.webview);
+
+    platform.eval(&handle.webview,
+        \\window.__gossamer_emit&&window.__gossamer_emit('groove_undocked',{});
+    ) catch {};
+
+    clearError();
+    return .ok;
 }
 
 //==============================================================================

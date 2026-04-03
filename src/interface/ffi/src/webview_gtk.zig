@@ -39,6 +39,12 @@ pub const WebviewState = struct {
     webview: *c.GtkWidget,
     /// Whether GTK has been initialised (process-global)
     gtk_initialized: bool,
+    /// Horizontal paned container (webview left, groove dock right).
+    /// Created on first dock; null until then.
+    paned: ?*c.GtkWidget = null,
+    /// Groove dock panel (right side of paned). WebKitGTK webview showing
+    /// the docked service's UI. Null when no service is docked.
+    dock_webview: ?*c.GtkWidget = null,
 };
 
 /// Error type for platform operations.
@@ -248,6 +254,94 @@ pub fn requestClose(state: *WebviewState) PlatformError!void {
 /// Run the GTK main event loop. Blocks until the window is closed.
 pub fn run(_: *WebviewState) void {
     c.gtk_main();
+}
+
+/// Query the screen/monitor dimensions for the window's current display.
+/// Returns [width, height]. Falls back to 1920x1080 if detection fails.
+pub fn getScreenSize(state: *WebviewState) [2]u32 {
+    const gdk_win = c.gtk_widget_get_window(state.window);
+    if (gdk_win != null) {
+        const display = c.gdk_window_get_display(gdk_win);
+        if (display != null) {
+            const monitor = c.gdk_display_get_monitor_at_window(display, gdk_win);
+            if (monitor != null) {
+                var geom: c.GdkRectangle = undefined;
+                c.gdk_monitor_get_workarea(monitor, &geom);
+                if (geom.width > 0 and geom.height > 0) {
+                    return .{ @intCast(geom.width), @intCast(geom.height) };
+                }
+            }
+        }
+    }
+    return .{ 1920, 1080 };
+}
+
+/// Dock a groove service panel on the right side of the window.
+/// Creates a GtkPaned (horizontal split) on first call, reparenting the
+/// webview into the left pane and creating a new WebKitGTK webview in
+/// the right pane that loads the groove service's UI URL.
+///
+/// side: 0=right, 1=left (right is default)
+pub fn dock(state: *WebviewState, url: [*:0]const u8, dock_width: u32) PlatformError!void {
+    if (state.dock_webview != null) {
+        // Already docked — just navigate the dock webview to the new URL
+        const dock_wk: *c.WebKitWebView = @ptrCast(state.dock_webview.?);
+        c.webkit_web_view_load_uri(dock_wk, url);
+        return;
+    }
+
+    // Create the dock webview
+    const dock_wv = c.webkit_web_view_new() orelse return PlatformError.WebviewCreateFailed;
+
+    if (state.paned == null) {
+        // First dock: reparent the main webview into a GtkPaned.
+        // 1. Remove webview from window
+        c.gtk_container_remove(@ptrCast(state.window), state.webview);
+        // 2. Create horizontal paned
+        const paned = c.gtk_paned_new(c.GTK_ORIENTATION_HORIZONTAL) orelse return PlatformError.OperationFailed;
+        // 3. Add main webview to left pane
+        c.gtk_paned_pack1(@ptrCast(paned), state.webview, 1, 0);
+        // 4. Add dock webview to right pane
+        c.gtk_paned_pack2(@ptrCast(paned), dock_wv, 0, 0);
+        // 5. Set the divider position (main webview gets most of the space)
+        const alloc_w = blk: {
+            var alloc: c.GtkAllocation = undefined;
+            c.gtk_widget_get_allocation(state.window, &alloc);
+            break :blk if (alloc.width > 0) @as(c_int, alloc.width) else 800;
+        };
+        const pos: c_int = alloc_w - @as(c_int, @intCast(@min(dock_width, @as(u32, @intCast(alloc_w)))));
+        c.gtk_paned_set_position(@ptrCast(paned), pos);
+        // 6. Add paned to window
+        c.gtk_container_add(@ptrCast(state.window), paned);
+        c.gtk_widget_show_all(paned);
+        state.paned = paned;
+    } else {
+        // Paned already exists (from a previous dock) — just add the new dock webview
+        c.gtk_paned_pack2(@ptrCast(state.paned.?), dock_wv, 0, 0);
+        c.gtk_widget_show_all(dock_wv);
+    }
+
+    // Load the groove service URL into the dock panel
+    const dock_wk: *c.WebKitWebView = @ptrCast(dock_wv);
+    c.webkit_web_view_load_uri(dock_wk, url);
+    state.dock_webview = dock_wv;
+}
+
+/// Remove the docked groove panel, restoring the webview to full width.
+pub fn undock(state: *WebviewState) void {
+    if (state.dock_webview) |dock_wv| {
+        c.gtk_widget_destroy(dock_wv);
+        state.dock_webview = null;
+    }
+
+    if (state.paned) |paned| {
+        // Reparent the main webview back to the window directly
+        c.gtk_container_remove(@ptrCast(paned), state.webview);
+        c.gtk_container_remove(@ptrCast(state.window), paned);
+        c.gtk_container_add(@ptrCast(state.window), state.webview);
+        c.gtk_widget_show_all(state.webview);
+        state.paned = null;
+    }
 }
 
 /// Register a JavaScript snippet as a persistent user script.
