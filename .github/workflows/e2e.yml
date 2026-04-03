@@ -54,7 +54,7 @@ jobs:
       - name: Install Zig
         uses: goto-bus-stop/setup-zig@abea47f85e598557f500fa1fd2ab7464fcb39406  # v2
         with:
-          version: 0.15.0
+          version: 0.15.2
 
       - name: Install GTK/WebKit dev headers
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
