@@ -711,7 +711,7 @@ fn cmdInit() !void {
             \\      "maxWidth": null,
             \\      "maxHeight": null,
             \\      "resizable": true,
-            \\      "decorations": true
+            \\      "decorations": true,
             \\      "visible": true
             \\    }],
             \\    "mode": "gui",

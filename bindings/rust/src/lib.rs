@@ -416,11 +416,16 @@ impl App {
     /// # Example
     ///
     /// ```rust,no_run
+    /// # use gossamer_rs::{App, Error};
+    /// # fn main() -> Result<(), Error> {
+    /// let mut app = App::new("Example", 800, 600)?;
     /// app.command("load_document", |payload| {
     ///     let path = payload["path"].as_str().ok_or("missing path")?;
     ///     let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
     ///     Ok(serde_json::json!({ "content": content }))
     /// });
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn command<F>(&mut self, name: &str, handler: F)
     where
@@ -462,12 +467,15 @@ impl App {
     /// # Example
     ///
     /// ```rust,no_run
+    /// # use gossamer_rs::{App, Error};
+    /// # fn main() -> Result<(), Error> {
+    /// let mut app = App::new("Example", 800, 600)?;
     /// app.command_async("fetch_data", |payload| {
     ///     let url = payload["url"].as_str().ok_or("missing url")?;
-    ///     let body = ureq::get(url).call().map_err(|e| e.to_string())?
-    ///         .into_string().map_err(|e| e.to_string())?;
-    ///     Ok(serde_json::json!({ "body": body }))
+    ///     Ok(serde_json::json!({ "requested": url, "status": "queued" }))
     /// });
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn command_async<F>(&mut self, name: &str, handler: F)
     where
@@ -580,7 +588,12 @@ impl App {
     /// # Example
     ///
     /// ```rust,no_run
+    /// # use gossamer_rs::{App, Error};
+    /// # fn main() -> Result<(), Error> {
+    /// let app = App::new("Example", 800, 600)?;
     /// app.set_csp("default-src 'self'; script-src 'self' 'unsafe-inline'")?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn set_csp(&self, csp: &str) -> Result<(), Error> {
         let csp_c = CString::new(csp).map_err(|e| Error::InvalidString(e.to_string()))?;
@@ -599,7 +612,12 @@ impl App {
     /// # Example
     ///
     /// ```rust,no_run
+    /// # use gossamer_rs::{App, Error};
+    /// # fn main() -> Result<(), Error> {
+    /// let app = App::new("Example", 800, 600)?;
     /// app.emit("file_changed", r#"{"path":"/tmp/foo.txt"}"#)?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn emit(&self, event_name: &str, payload_json: &str) -> Result<(), Error> {
         let event_c =
