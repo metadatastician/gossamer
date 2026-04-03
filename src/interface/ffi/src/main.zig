@@ -61,6 +61,12 @@ comptime {
     _ = @import("csp.zig");
 }
 
+// Clipboard FFI functions (gossamer_clipboard_read, gossamer_clipboard_write).
+// GTK clipboard implementation for system clipboard access.
+comptime {
+    _ = @import("clipboard.zig");
+}
+
 // Version information — bump on each release
 const VERSION = "0.3.0";
 const BUILD_INFO = "Gossamer " ++ VERSION ++ " built with Zig " ++ @import("builtin").zig_version_string;

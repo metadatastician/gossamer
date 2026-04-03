@@ -613,3 +613,145 @@ test "display: create non-resizable non-decorated webview" {
 
     gossamer_destroy(ptr);
 }
+
+//==============================================================================
+// Window Guard Tests
+//==============================================================================
+
+extern fn gossamer_guard_set(handle_ptr: u64, mode: c_int) Result;
+extern fn gossamer_guard_get(handle_ptr: u64) c_int;
+extern fn gossamer_registry_add(handle_ptr: u64) u32;
+extern fn gossamer_registry_count() u32;
+extern fn gossamer_transmute(handle_ptr: u64, mode: c_int) Result;
+extern fn gossamer_transmute_get(handle_ptr: u64) c_int;
+extern fn gossamer_activity_set(handle_ptr: u64, level: c_int) Result;
+extern fn gossamer_activity_get(handle_ptr: u64) c_int;
+extern fn gossamer_raise(handle_ptr: u64) Result;
+extern fn gossamer_lower(handle_ptr: u64) Result;
+
+test "display: guard set/get cycle — locked blocks close/resize/minimize" {
+    if (!displayAvailable()) {
+        std.debug.print("SKIP: no display server available\n", .{});
+        return;
+    }
+
+    const handle = gossamer_create("Guard Test", 400, 300, 1, 1, 0) orelse {
+        std.debug.print("SKIP: gossamer_create returned null\n", .{});
+        return;
+    };
+    const ptr = handleToU64(handle);
+    _ = gossamer_load_html(ptr, "<html><body>Guard</body></html>");
+
+    // Default is free (0)
+    try testing.expectEqual(@as(c_int, 0), gossamer_guard_get(ptr));
+
+    // Set to locked
+    try testing.expectEqual(Result.ok, gossamer_guard_set(ptr, 1));
+    try testing.expectEqual(@as(c_int, 1), gossamer_guard_get(ptr));
+
+    // Locked: resize should be rejected
+    try testing.expectEqual(Result.guard_locked, gossamer_resize(ptr, 500, 400));
+
+    // Locked: close should be rejected
+    try testing.expectEqual(Result.guard_locked, gossamer_request_close(ptr));
+
+    // Locked: minimize should be rejected
+    try testing.expectEqual(Result.guard_locked, gossamer_minimize(ptr));
+
+    // Unlock
+    try testing.expectEqual(Result.ok, gossamer_guard_set(ptr, 0));
+
+    // Now operations work again
+    try testing.expectEqual(Result.ok, gossamer_resize(ptr, 500, 400));
+
+    gossamer_destroy(ptr);
+}
+
+test "display: transmute gui -> tui -> gui round-trip" {
+    if (!displayAvailable()) {
+        std.debug.print("SKIP: no display server available\n", .{});
+        return;
+    }
+
+    const handle = gossamer_create("Transmute Test", 400, 300, 1, 1, 0) orelse {
+        std.debug.print("SKIP: gossamer_create returned null\n", .{});
+        return;
+    };
+    const ptr = handleToU64(handle);
+    _ = gossamer_load_html(ptr, "<html><body><h1>Content</h1><p>Test</p></body></html>");
+    _ = gossamer_registry_add(ptr);
+
+    try testing.expectEqual(@as(c_int, 0), gossamer_transmute_get(ptr));
+    try testing.expectEqual(Result.ok, gossamer_transmute(ptr, 1)); // tui
+    try testing.expectEqual(@as(c_int, 1), gossamer_transmute_get(ptr));
+    try testing.expectEqual(Result.ok, gossamer_transmute(ptr, 0)); // back to gui
+    try testing.expectEqual(@as(c_int, 0), gossamer_transmute_get(ptr));
+
+    gossamer_destroy(ptr);
+}
+
+test "display: activity set/get cycle" {
+    if (!displayAvailable()) {
+        std.debug.print("SKIP: no display server available\n", .{});
+        return;
+    }
+
+    const handle = gossamer_create("Activity Test", 400, 300, 1, 1, 0) orelse {
+        std.debug.print("SKIP: gossamer_create returned null\n", .{});
+        return;
+    };
+    const ptr = handleToU64(handle);
+    _ = gossamer_load_html(ptr, "<html><body>Activity</body></html>");
+    _ = gossamer_registry_add(ptr);
+
+    try testing.expectEqual(@as(c_int, 4), gossamer_activity_get(ptr)); // realtime default
+    try testing.expectEqual(Result.ok, gossamer_activity_set(ptr, 0)); // pause
+    try testing.expectEqual(@as(c_int, 0), gossamer_activity_get(ptr));
+    try testing.expectEqual(Result.ok, gossamer_activity_set(ptr, 4)); // back to realtime
+
+    gossamer_destroy(ptr);
+}
+
+test "display: raise and lower return ok" {
+    if (!displayAvailable()) {
+        std.debug.print("SKIP: no display server available\n", .{});
+        return;
+    }
+
+    const handle = gossamer_create("Z-Order Test", 400, 300, 1, 1, 0) orelse {
+        std.debug.print("SKIP: gossamer_create returned null\n", .{});
+        return;
+    };
+    const ptr = handleToU64(handle);
+
+    try testing.expectEqual(Result.ok, gossamer_raise(ptr));
+    try testing.expectEqual(Result.ok, gossamer_lower(ptr));
+
+    gossamer_destroy(ptr);
+}
+
+test "display: IPC bridge survives load_html (user script persistence)" {
+    if (!displayAvailable()) {
+        std.debug.print("SKIP: no display server available\n", .{});
+        return;
+    }
+
+    const handle = gossamer_create("Bridge Persist", 400, 300, 1, 1, 0) orelse {
+        std.debug.print("SKIP: gossamer_create returned null\n", .{});
+        return;
+    };
+    const ptr = handleToU64(handle);
+
+    const channel = gossamer_channel_open(ptr);
+    try testing.expect(channel != 0);
+
+    const bind_result = gossamer_channel_bind(channel, "test_after_load", &testIPCCallback, null);
+    try testing.expectEqual(Result.ok, bind_result);
+
+    // Load HTML after channel setup — bridge should persist via user script
+    const load_result = gossamer_load_html(ptr, "<html><body><h1>After Load</h1></body></html>");
+    try testing.expectEqual(Result.ok, load_result);
+
+    gossamer_channel_close(channel);
+    gossamer_destroy(ptr);
+}

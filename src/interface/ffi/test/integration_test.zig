@@ -255,3 +255,40 @@ test "dialog_save returns 0 (not yet implemented)" {
     const dialog = gossamer.gossamer_dialog_save("Save", "*");
     try testing.expectEqual(@as(u64, 0), dialog);
 }
+
+//==============================================================================
+// Clipboard API Tests
+//==============================================================================
+
+test "clipboard_write rejects null pointer" {
+    const result = gossamer.gossamer_clipboard_write(null);
+    try testing.expectEqual(@as(c_int, @intFromEnum(Result.invalid_param)), result);
+}
+
+test "clipboard_read rejects null buffer" {
+    const result = gossamer.gossamer_clipboard_read(null, 256);
+    try testing.expectEqual(@as(c_int, -1), result);
+}
+
+test "clipboard_read rejects zero length" {
+    var buf: [1]u8 = undefined;
+    const result = gossamer.gossamer_clipboard_read(&buf, 0);
+    try testing.expectEqual(@as(c_int, -1), result);
+}
+
+test "clipboard_read with valid buffer and no display returns -1 or 0+" {
+    // In headless CI, GTK init will fail so we get -1.
+    // With a display, we get 0 (empty clipboard) or >0 (clipboard has text).
+    // Either way it must not crash.
+    var buf: [256]u8 = undefined;
+    const result = gossamer.gossamer_clipboard_read(&buf, buf.len);
+    try testing.expect(result >= -1);
+}
+
+test "clipboard_write with valid text and no display returns error or ok" {
+    // In headless CI, GTK init will fail so we get error.
+    // With a display, we get ok.
+    // Either way it must not crash.
+    const result = gossamer.gossamer_clipboard_write("gossamer clipboard test");
+    try testing.expect(result == @intFromEnum(Result.ok) or result == @intFromEnum(Result.@"error"));
+}
