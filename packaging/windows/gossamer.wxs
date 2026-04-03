@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SPDX-License-Identifier: PMPL-1.0-or-later
+  Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+
+  gossamer.wxs — WiX 4 installer definition for the Gossamer webview shell framework.
+
+  Build with:
+    wix build gossamer.wxs -o gossamer-0.3.0-x64.msi
+
+  Or via the project helper script:
+    powershell -File packaging/windows/build-installer.ps1
+
+  This installer:
+    - Installs libgossamer.dll to %ProgramFiles%\Gossamer\
+    - Installs gossamer.exe to %ProgramFiles%\Gossamer\
+    - Installs gossamer.h  to %ProgramFiles%\Gossamer\include\
+    - Adds %ProgramFiles%\Gossamer\ to the system PATH
+    - Registers an Add/Remove Programs entry
+    - Supports clean uninstallation
+-->
+
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <Package
+    Name="Gossamer"
+    Manufacturer="Jonathan D.A. Jewell"
+    Version="0.3.0.0"
+    UpgradeCode="A1B2C3D4-E5F6-7890-ABCD-EF1234567890"
+    Language="1033"
+    Codepage="1252"
+    InstallerVersion="500"
+    Compressed="yes"
+    Scope="perMachine">
+
+    <SummaryInformation
+      Keywords="Gossamer, webview, shell, linear types, Zig, Ephapax"
+      Description="Gossamer webview shell framework v0.3.0 — linearly-typed, provably resource-safe"
+      Manufacturer="Jonathan D.A. Jewell" />
+
+    <!-- ── Upgrade logic ──────────────────────────────────────────────────── -->
+    <MajorUpgrade
+      DowngradeErrorMessage="A newer version of Gossamer is already installed. Please uninstall it first." />
+
+    <!-- ── Media / cabinet ───────────────────────────────────────────────── -->
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- ── Directory structure ───────────────────────────────────────────── -->
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLDIR" Name="Gossamer">
+        <Directory Id="INCLUDEDIR" Name="include" />
+      </Directory>
+    </StandardDirectory>
+
+    <!-- ── Path environment variable ─────────────────────────────────────── -->
+    <StandardDirectory Id="EnvironmentVariablesFolder" />
+
+    <!-- ── Components ────────────────────────────────────────────────────── -->
+
+    <!--
+      Component: DLL
+      Installs libgossamer.dll — the C-ABI shared library.
+    -->
+    <Component Id="Cmp_libgossamer_dll" Directory="INSTALLDIR" Guid="B2C3D4E5-F6A7-8901-BCDE-F12345678901">
+      <File
+        Id="File_libgossamer_dll"
+        Source="..\..\src\interface\ffi\zig-out\lib\libgossamer.dll"
+        Name="libgossamer.dll"
+        KeyPath="yes" />
+    </Component>
+
+    <!--
+      Component: CLI
+      Installs gossamer.exe — the command-line tool.
+    -->
+    <Component Id="Cmp_gossamer_exe" Directory="INSTALLDIR" Guid="C3D4E5F6-A7B8-9012-CDEF-123456789012">
+      <File
+        Id="File_gossamer_exe"
+        Source="..\..\cli\zig-out\bin\gossamer.exe"
+        Name="gossamer.exe"
+        KeyPath="yes" />
+    </Component>
+
+    <!--
+      Component: Import library
+      Installs libgossamer.lib — for linking from MSVC or Zig on Windows.
+    -->
+    <Component Id="Cmp_libgossamer_lib" Directory="INSTALLDIR" Guid="D4E5F6A7-B8C9-0123-DEF0-234567890123">
+      <File
+        Id="File_libgossamer_lib"
+        Source="..\..\src\interface\ffi\zig-out\lib\libgossamer.lib"
+        Name="libgossamer.lib"
+        KeyPath="yes" />
+    </Component>
+
+    <!--
+      Component: Header
+      Installs gossamer.h to the include\ subdirectory.
+    -->
+    <Component Id="Cmp_gossamer_h" Directory="INCLUDEDIR" Guid="E5F6A7B8-C9D0-1234-EF01-345678901234">
+      <File
+        Id="File_gossamer_h"
+        Source="..\..\generated\abi\gossamer.h"
+        Name="gossamer.h"
+        KeyPath="yes" />
+    </Component>
+
+    <!--
+      Component: PATH registration
+      Appends the install directory to the system PATH so `gossamer` can be
+      invoked from any command prompt without a full path.
+    -->
+    <Component Id="Cmp_PATH" Directory="INSTALLDIR" Guid="F6A7B8C9-D0E1-2345-F012-456789012345">
+      <KeyPath Id="Cmp_PATH_KeyPath" />
+      <Environment
+        Id="PATH_Env"
+        Name="PATH"
+        Value="[INSTALLDIR]"
+        Permanent="no"
+        Part="last"
+        Action="set"
+        System="yes" />
+    </Component>
+
+    <!-- ── Feature tree ───────────────────────────────────────────────────── -->
+    <Feature
+      Id="Feature_Core"
+      Title="Gossamer Core"
+      Description="Installs the Gossamer shared library (libgossamer.dll) and CLI tool (gossamer.exe)."
+      Level="1"
+      Display="expand"
+      ConfigurableDirectory="INSTALLDIR">
+
+      <ComponentRef Id="Cmp_libgossamer_dll" />
+      <ComponentRef Id="Cmp_gossamer_exe" />
+      <ComponentRef Id="Cmp_PATH" />
+    </Feature>
+
+    <Feature
+      Id="Feature_DevHeaders"
+      Title="Development Headers"
+      Description="Installs gossamer.h and libgossamer.lib for developing applications that embed Gossamer."
+      Level="1">
+
+      <ComponentRef Id="Cmp_libgossamer_lib" />
+      <ComponentRef Id="Cmp_gossamer_h" />
+    </Feature>
+
+    <!-- ── UI ─────────────────────────────────────────────────────────────── -->
+    <WixVariable Id="WixUILicenseRtf" Value="packaging\windows\LICENSE.rtf" />
+    <UIRef Id="WixUI_FeatureTree" />
+
+  </Package>
+</Wix>

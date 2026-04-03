@@ -1,0 +1,35 @@
+#!/usr/bin/make -f
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+#
+# Debian build rules for the Gossamer webview shell framework.
+# Invokes `just` to perform the actual Zig/FFI compilation, then
+# installs the resulting artefacts into the package staging tree.
+
+%:
+	dh $@
+
+# Override the build step to use the project's justfile rather than
+# the default dh_auto_build heuristic (which does not know about Zig).
+override_dh_auto_build:
+	just build-ffi-release
+	just build-cli-release
+
+# Override the install step to place files into the package staging tree.
+# dh_auto_install would look for a Makefile install target; we do it manually.
+override_dh_auto_install:
+	# Shared library — goes to /usr/lib/
+	install -Dm755 src/interface/ffi/zig-out/lib/libgossamer.so \
+		debian/gossamer/usr/lib/libgossamer.so
+
+	# CLI binary — goes to /usr/bin/
+	install -Dm755 cli/zig-out/bin/gossamer \
+		debian/gossamer/usr/bin/gossamer
+
+	# Public C header — goes to /usr/include/gossamer/
+	install -Dm644 generated/abi/gossamer.h \
+		debian/gossamer/usr/include/gossamer/gossamer.h
+
+# Skip the test step during packaging (tests require a live display).
+override_dh_auto_test:
+	@echo "Skipping tests during package build (requires display)"

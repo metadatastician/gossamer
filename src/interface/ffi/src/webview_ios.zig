@@ -55,6 +55,16 @@ fn nsString(str: [*:0]const u8) ?*anyopaque {
     return func(@ptrCast(cls), sel, str);
 }
 
+/// CGRect as returned by UIScreen.mainScreen.bounds on arm64 iOS.
+/// On arm64, structs ≤ 4 × 8 bytes are returned in registers via the
+/// standard C calling convention — no need for objc_msgSend_stret.
+const CGRect = extern struct {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+};
+
 /// Platform-specific webview state for iOS/WKWebView.
 /// Stored inside GossamerHandle.webview.
 pub const WebviewState = struct {
@@ -66,6 +76,9 @@ pub const WebviewState = struct {
     view_controller: ?*anyopaque,
     /// Whether UIKit has been initialised
     uikit_initialized: bool,
+    /// Physical screen size in points, cached from UIScreen.mainScreen.bounds
+    screen_width: u32,
+    screen_height: u32,
 };
 
 /// Error type for platform operations.
@@ -111,24 +124,25 @@ pub fn create(
     const alloc_sel = c.sel_registerName("alloc") orelse return PlatformError.UIKitInitFailed;
     const init_sel = c.sel_registerName("init") orelse return PlatformError.UIKitInitFailed;
 
-    // Get the main screen bounds
+    // Query the actual screen bounds from UIScreen.mainScreen.
+    // On arm64 iOS, CGRect is returned in registers — no stret needed.
     const screen_cls = c.objc_getClass("UIScreen") orelse return PlatformError.UIKitInitFailed;
     const main_sel = c.sel_registerName("mainScreen") orelse return PlatformError.UIKitInitFailed;
     const screen = msgSend(@ptrCast(screen_cls), main_sel) orelse return PlatformError.UIKitInitFailed;
-    _ = screen;
+    const bounds_sel = c.sel_registerName("bounds") orelse return PlatformError.UIKitInitFailed;
+    const bounds_func: *const fn (?*anyopaque, c.SEL) callconv(.c) CGRect = @ptrCast(&objc_msgSend);
+    const bounds = bounds_func(screen, bounds_sel);
+    // Use queried dimensions; fall back to common iPhone size if zero (simulator quirk)
+    const screen_w: f64 = if (bounds.width > 0) bounds.width else 390;
+    const screen_h: f64 = if (bounds.height > 0) bounds.height else 844;
 
-    // Create UIWindow with screen bounds
-    // [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds]
+    // Create UIWindow filling the full screen
     const window_cls = c.objc_getClass("UIWindow") orelse return PlatformError.WindowCreateFailed;
     const window_raw = msgSend(@ptrCast(window_cls), alloc_sel) orelse return PlatformError.WindowCreateFailed;
-    // initWithFrame: requires CGRect — use screen bounds
-    const bounds_sel = c.sel_registerName("bounds") orelse return PlatformError.WindowCreateFailed;
-    _ = bounds_sel;
     const init_frame_sel = c.sel_registerName("initWithFrame:") orelse return PlatformError.WindowCreateFailed;
-    // CGRect{0, 0, screenWidth, screenHeight} — on iOS we use full screen
     const init_func: *const fn (?*anyopaque, c.SEL, f64, f64, f64, f64) callconv(.c) ?*anyopaque =
         @ptrCast(&objc_msgSend);
-    const window = init_func(window_raw, init_frame_sel, 0, 0, 390, 844) // Default iPhone dimensions
+    const window = init_func(window_raw, init_frame_sel, 0, 0, screen_w, screen_h)
         orelse return PlatformError.WindowCreateFailed;
 
     // Create WKWebViewConfiguration
@@ -136,14 +150,14 @@ pub fn create(
     const config_raw = msgSend(@ptrCast(config_cls), alloc_sel) orelse return PlatformError.WebviewCreateFailed;
     const config = msgSend(config_raw, init_sel) orelse return PlatformError.WebviewCreateFailed;
 
-    // Create WKWebView
+    // Create WKWebView at full screen dimensions
     const wk_cls = c.objc_getClass("WKWebView") orelse return PlatformError.WebviewCreateFailed;
     const wk_raw = msgSend(@ptrCast(wk_cls), alloc_sel) orelse return PlatformError.WebviewCreateFailed;
     const wk_init_sel = c.sel_registerName("initWithFrame:configuration:") orelse
         return PlatformError.WebviewCreateFailed;
     const wk_init_func: *const fn (?*anyopaque, c.SEL, f64, f64, f64, f64, ?*anyopaque) callconv(.c) ?*anyopaque =
         @ptrCast(&objc_msgSend);
-    const webview = wk_init_func(wk_raw, wk_init_sel, 0, 0, 390, 844, config) orelse
+    const webview = wk_init_func(wk_raw, wk_init_sel, 0, 0, screen_w, screen_h, config) orelse
         return PlatformError.WebviewCreateFailed;
 
     // Create a UIViewController and set the webview as its view
@@ -170,6 +184,8 @@ pub fn create(
         .webview = webview,
         .view_controller = vc,
         .uikit_initialized = true,
+        .screen_width = @intFromFloat(screen_w),
+        .screen_height = @intFromFloat(screen_h),
     };
 }
 
@@ -250,8 +266,10 @@ pub fn restore(_: *WebviewState) PlatformError!void {
 pub fn dock(_: *WebviewState, _: [*:0]const u8, _: u32) PlatformError!void {}
 pub fn undock(_: *WebviewState) void {}
 
-/// Query screen dimensions.
-pub fn getScreenSize(_: *WebviewState) [2]u32 { return .{ 1920, 1080 }; }
+/// Query screen dimensions in points, as reported by UIScreen.mainScreen.bounds.
+pub fn getScreenSize(state: *WebviewState) [2]u32 {
+    return .{ state.screen_width, state.screen_height };
+}
 
 /// Register a persistent user script.
 pub fn addUserScript(_: *WebviewState, _: [*:0]const u8) PlatformError!void {}

@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+#
+# Debian .install file — maps build artefacts to package destinations.
+# Format: <source path>  <destination directory (relative to package root)>
+
+src/interface/ffi/zig-out/lib/libgossamer.so  usr/lib/
+cli/zig-out/bin/gossamer  usr/bin/
+generated/abi/gossamer.h  usr/include/gossamer/

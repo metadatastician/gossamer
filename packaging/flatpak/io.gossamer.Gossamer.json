@@ -1,0 +1,54 @@
+{
+  "_comment_license": "SPDX-License-Identifier: PMPL-1.0-or-later",
+  "_comment_copyright": "Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>",
+  "_comment": "Flatpak manifest for Gossamer — linearly-typed webview shell framework. Build with: flatpak-builder --repo=packaging/flatpak/repo packaging/flatpak/build packaging/flatpak/io.gossamer.Gossamer.json",
+
+  "app-id": "io.gossamer.Gossamer",
+  "runtime": "org.freedesktop.Platform",
+  "runtime-version": "23.08",
+  "sdk": "org.freedesktop.Sdk",
+  "command": "gossamer",
+
+  "finish-args": [
+    "--share=ipc",
+    "--socket=wayland",
+    "--socket=x11",
+    "--device=dri",
+    "--share=network",
+    "--filesystem=home"
+  ],
+
+  "modules": [
+    {
+      "name": "zig",
+      "buildsystem": "simple",
+      "build-commands": [
+        "install -Dm755 zig /app/bin/zig",
+        "cp -r lib /app/lib/zig"
+      ],
+      "sources": [
+        {
+          "type": "archive",
+          "url": "https://ziglang.org/download/0.14.0/zig-linux-x86_64-0.14.0.tar.xz",
+          "sha256": "placeholder-sha256-pin-before-release",
+          "strip-components": 1
+        }
+      ]
+    },
+    {
+      "name": "gossamer",
+      "buildsystem": "simple",
+      "build-commands": [
+        "cd src/interface/ffi && /app/bin/zig build -Doptimize=ReleaseSafe --prefix /app",
+        "cd cli && /app/bin/zig build -Doptimize=ReleaseSafe --prefix /app",
+        "install -Dm644 generated/abi/gossamer.h /app/include/gossamer/gossamer.h"
+      ],
+      "sources": [
+        {
+          "type": "dir",
+          "path": "../.."
+        }
+      ]
+    }
+  ]
+}

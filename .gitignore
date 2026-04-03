@@ -103,9 +103,9 @@ sync_report*.txt
 
 # Hypatia scan cache (local-only)
 .hypatia/
-# Zig build artifacts (all locations)
-.zig-cache/
-zig-out/
+# Zig build artifacts (all locations — matches nested dirs too)
+**/.zig-cache/
+**/zig-out/
 
 # SSG generated output
 site/dist/

@@ -37,7 +37,7 @@ extern fn jni_FindClass(env: *JNIEnv, name: [*:0]const u8) jclass;
 extern fn jni_GetMethodID(env: *JNIEnv, cls: jclass, name: [*:0]const u8, sig: [*:0]const u8) jmethodID;
 extern fn jni_NewStringUTF(env: *JNIEnv, str: [*:0]const u8) jstring;
 extern fn jni_CallVoidMethod(env: *JNIEnv, obj: jobject, method: jmethodID, ...) void;
-extern fn jni_CallObjectMethod(env: *JNIEnv, obj: jobject, method: jmethodID, ...) jobject;
+extern fn jni_NewObject(env: *JNIEnv, cls: jclass, method: jmethodID, ...) jobject;
 extern fn jni_DeleteGlobalRef(env: *JNIEnv, ref: jobject) void;
 extern fn jni_NewGlobalRef(env: *JNIEnv, ref: jobject) jobject;
 extern fn jni_GetStringUTFChars(env: *JNIEnv, str: jstring, isCopy: ?*u8) ?[*:0]const u8;
@@ -262,8 +262,10 @@ pub fn restore(_: *WebviewState) PlatformError!void {
 pub fn dock(_: *WebviewState, _: [*:0]const u8, _: u32) PlatformError!void {}
 pub fn undock(_: *WebviewState) void {}
 
-/// Query screen dimensions.
-pub fn getScreenSize(_: *WebviewState) [2]u32 { return .{ 1920, 1080 }; }
+/// Query screen dimensions — returns values cached from nativeInit().
+pub fn getScreenSize(_: *WebviewState) [2]u32 {
+    return .{ android_screen_width, android_screen_height };
+}
 
 /// Register a persistent user script.
 pub fn addUserScript(_: *WebviewState, _: [*:0]const u8) PlatformError!void {}
@@ -331,16 +333,16 @@ pub fn registerIPCHandler(state: *WebviewState, handle: *GossamerHandle) Platfor
     const bridge_cls = jni_FindClass(env, "io/gossamer/GossamerBridge");
     if (bridge_cls == null) return PlatformError.OperationFailed;
 
-    // Create a new GossamerBridge instance: new GossamerBridge(nativePtr)
+    // Locate constructor: GossamerBridge(long nativePtr)
     const bridge_init = jni_GetMethodID(env, bridge_cls, "<init>", "(J)V");
     if (bridge_init == null) return PlatformError.OperationFailed;
 
-    const alloc_sel = jni_GetMethodID(env, bridge_cls, "<init>", "(J)V");
-    _ = alloc_sel;
-
-    // Allocate bridge instance and pass native handle pointer
-    const bridge_cls_obj: jobject = @ptrCast(bridge_cls);
-    const bridge = jni_CallObjectMethod(env, bridge_cls_obj, bridge_init);
+    // Construct a new GossamerBridge instance via NewObject, passing the
+    // native handle pointer as the long constructor argument.
+    // jni_NewObject is the correct JNI call for constructing new objects;
+    // jni_CallObjectMethod would call an instance method, not a constructor.
+    const native_ptr: i64 = @intCast(@intFromPtr(handle));
+    const bridge = jni_NewObject(env, bridge_cls, bridge_init, native_ptr);
     if (bridge == null) return PlatformError.OperationFailed;
 
     // webView.addJavascriptInterface(bridge, "GossamerBridge")
@@ -463,21 +465,34 @@ fn escapeForJS(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
 var android_jni_env: ?*JNIEnv = null;
 var android_activity: jobject = null;
 var android_webview: jobject = null;
+/// Screen pixel dimensions cached from nativeInit — populated by Java before use.
+var android_screen_width: u32 = 1080;
+var android_screen_height: u32 = 1920;
 
-/// Called by Java via JNI to provide the Activity and WebView references.
-/// Java signature: native void nativeInit(Activity activity, WebView webview)
+/// Called by Java via JNI to provide the Activity, WebView, and screen dimensions.
+///
+/// Java signature:
+///   native void nativeInit(Activity activity, WebView webview,
+///                          int screenWidth, int screenHeight)
 ///
 /// The Java side must create global references before calling this:
-///   nativeInit(NewGlobalRef(activity), NewGlobalRef(webview))
+///   nativeInit(NewGlobalRef(activity), NewGlobalRef(webview),
+///              displayMetrics.widthPixels, displayMetrics.heightPixels)
 export fn Java_io_gossamer_GossamerActivity_nativeInit(
     env: ?*JNIEnv,
     _: jobject, // this (GossamerActivity)
     activity: jobject,
     webview: jobject,
+    screen_width: i32,
+    screen_height: i32,
 ) void {
     android_jni_env = env;
     android_activity = activity;
     android_webview = webview;
+    // Cache screen dimensions so getScreenSize() can return meaningful values
+    // without additional JNI calls on every query.
+    if (screen_width > 0) android_screen_width = @intCast(screen_width);
+    if (screen_height > 0) android_screen_height = @intCast(screen_height);
 }
 
 /// Called by Java when the Activity is destroyed.

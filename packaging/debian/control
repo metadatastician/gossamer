@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+
+Package: gossamer
+Version: 0.3.0
+Section: libs
+Priority: optional
+Architecture: amd64
+Depends: libwebkit2gtk-4.1-0 (>= 2.40), libgtk-3-0 (>= 3.22)
+Maintainer: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+Homepage: https://github.com/hyperpolymath/gossamer
+Description: Linearly-typed webview shell framework with provable resource safety
+ Gossamer is a webview shell framework that uses linear types to guarantee
+ no resource leaks at compile time. It provides a C-ABI shared library
+ (libgossamer.so), a command-line tool, and a public C header for embedding
+ into any language with a C FFI.
+ .
+ The ABI layer is formally specified in Idris2 with dependent-type proofs,
+ and the implementation is in Zig for zero-overhead C compatibility.
+ .
+ Key guarantees:
+  - WebviewHandle, Channel, and Cap are linear resources
+  - Every resource creation has a paired destruction
+  - No double-free or use-after-free possible in correctly-typed code

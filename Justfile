@@ -381,6 +381,34 @@ tour:
     echo ""
     echo "Run 'just' to see all available recipes."
 
+# ═══════════════════════════════════════════════════════════════
+# Packaging
+# ═══════════════════════════════════════════════════════════════
+
+# Build .deb package for Debian/Ubuntu
+package-deb: build-ffi-release build-cli-release
+    dpkg-buildpackage -b --no-sign --build-dir=packaging/debian
+
+# Build .rpm package for Fedora/RHEL
+package-rpm: build-ffi-release build-cli-release
+    rpmbuild -bb packaging/rpm/gossamer.spec
+
+# Build Flatpak bundle
+package-flatpak:
+    flatpak-builder --repo=packaging/flatpak/repo packaging/flatpak/build packaging/flatpak/io.gossamer.Gossamer.json
+    flatpak build-bundle packaging/flatpak/repo gossamer.flatpak io.gossamer.Gossamer
+
+# Build macOS DMG/pkg (requires macOS or cross-compilation sysroot)
+package-macos: build-macos-x64 build-macos-arm
+    bash packaging/macos/package.sh
+
+# Build Windows MSI installer (requires WiX 4 and zig cross-compilation)
+package-windows: build-windows
+    powershell -File packaging/windows/build-installer.ps1
+
+# Build all packages (Linux targets only — suitable for CI)
+package-all: package-deb package-rpm package-flatpak
+
 # What to do when things go wrong
 help-me:
     #!/usr/bin/env bash
