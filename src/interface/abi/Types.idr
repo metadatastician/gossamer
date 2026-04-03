@@ -79,6 +79,8 @@ data Result : Type where
   IPCProtocolError : Result
   ||| Capability check failed (operation not permitted)
   CapabilityDenied : Result
+  ||| Window guard is active — unlock before performing this operation
+  GuardLocked : Result
 
 ||| Convert Result to C integer for FFI boundary.
 public export
@@ -94,6 +96,7 @@ resultToInt DoubleFree = 7
 resultToInt WebviewUnavailable = 8
 resultToInt IPCProtocolError = 9
 resultToInt CapabilityDenied = 10
+resultToInt GuardLocked = 11
 
 ||| Reconstruct Result from C integer.
 ||| Returns Nothing for unknown codes.
@@ -110,6 +113,7 @@ resultFromInt 7 = Just DoubleFree
 resultFromInt 8 = Just WebviewUnavailable
 resultFromInt 9 = Just IPCProtocolError
 resultFromInt 10 = Just CapabilityDenied
+resultFromInt 11 = Just GuardLocked
 resultFromInt _ = Nothing
 
 ||| Results have decidable equality via Eq.
@@ -130,6 +134,7 @@ Eq Result where
   WebviewUnavailable == WebviewUnavailable = True
   IPCProtocolError == IPCProtocolError = True
   CapabilityDenied == CapabilityDenied = True
+  GuardLocked == GuardLocked = True
   _ == _ = False
 
 ||| Human-readable error descriptions.
@@ -289,6 +294,127 @@ defaultConfig = MkWindowConfig
   , fullscreen = False
   , visible = True
   }
+
+--------------------------------------------------------------------------------
+-- Window Guard Mode
+--------------------------------------------------------------------------------
+
+||| Guard mode controls what operations are permitted on a window.
+|||
+||| The guard prevents accidental closure of critical windows:
+|||   Free     — everything works normally (default)
+|||   Locked   — close/minimize/maximize/resize/restore rejected
+|||   ReadOnly — locked + content is non-interactive (overlay blocks input)
+|||
+||| Guard mode transitions are total — every mode can transition to any other.
+public export
+data GuardMode : Type where
+  ||| Normal operation — all controls enabled
+  Free : GuardMode
+  ||| Window controls disabled — prevents accidental close
+  Locked : GuardMode
+  ||| Locked + content is view-only (no pointer/keyboard interaction)
+  ReadOnly : GuardMode
+
+||| Convert GuardMode to C integer for FFI.
+public export
+guardModeToInt : GuardMode -> Bits32
+guardModeToInt Free = 0
+guardModeToInt Locked = 1
+guardModeToInt ReadOnly = 2
+
+||| Reconstruct GuardMode from C integer.
+public export
+guardModeFromInt : Bits32 -> Maybe GuardMode
+guardModeFromInt 0 = Just Free
+guardModeFromInt 1 = Just Locked
+guardModeFromInt 2 = Just ReadOnly
+guardModeFromInt _ = Nothing
+
+--------------------------------------------------------------------------------
+-- Transmute Mode
+--------------------------------------------------------------------------------
+
+||| Transmute allows a Gossamer frame to switch its rendering mode at runtime.
+|||
+||| The "killer feature": a window showing a game level editor can transmute
+||| into a terminal view of the same data, or fuse into PanLL's panel tree.
+public export
+data TransmuteMode : Type where
+  ||| Normal webview rendering (default)
+  TransmuteGui : TransmuteMode
+  ||| Terminal UI mode — content exported as ANSI
+  TransmuteTui : TransmuteMode
+  ||| Plain text mode — content as stdout
+  TransmuteCli : TransmuteMode
+  ||| Dump current webview content to a pty/pipe
+  TransmuteTerminalExport : TransmuteMode
+  ||| Integrate this window into a running PanLL instance
+  TransmutePanllAttach : TransmuteMode
+  ||| Disconnect from PanLL, become standalone again
+  TransmutePanllDetach : TransmuteMode
+
+||| Convert TransmuteMode to C integer for FFI.
+public export
+transmuteModeToInt : TransmuteMode -> Bits32
+transmuteModeToInt TransmuteGui = 0
+transmuteModeToInt TransmuteTui = 1
+transmuteModeToInt TransmuteCli = 2
+transmuteModeToInt TransmuteTerminalExport = 3
+transmuteModeToInt TransmutePanllAttach = 4
+transmuteModeToInt TransmutePanllDetach = 5
+
+--------------------------------------------------------------------------------
+-- Activity Level
+--------------------------------------------------------------------------------
+
+||| Controls the processing intensity of the webview.
+|||
+||| Useful for resource management when many Gossamer panels are open.
+public export
+data ActivityLevel : Type where
+  ||| Freeze JS execution and IPC delivery
+  Paused : ActivityLevel
+  ||| Throttled: ~1 fps, IPC batched
+  Low : ActivityLevel
+  ||| Moderate: ~15 fps
+  Mid : ActivityLevel
+  ||| Smooth: ~30 fps
+  High : ActivityLevel
+  ||| Unthrottled, full CPU (default)
+  Realtime : ActivityLevel
+
+||| Convert ActivityLevel to C integer for FFI.
+public export
+activityLevelToInt : ActivityLevel -> Bits32
+activityLevelToInt Paused = 0
+activityLevelToInt Low = 1
+activityLevelToInt Mid = 2
+activityLevelToInt High = 3
+activityLevelToInt Realtime = 4
+
+--------------------------------------------------------------------------------
+-- Groove Types (Hard vs Soft)
+--------------------------------------------------------------------------------
+
+||| Hard Groove: persistent, auto-reconnecting, deeply wired integration.
+|||   Example: Burble + Gossamer — voice is always available.
+|||
+||| Soft Groove: transient, on-demand, cleanly detachable.
+|||   Example: feedback-o-tron during debugging.
+|||   Privacy guarantee: soft groove disconnect is a hard wipe (zero state).
+public export
+data GrooveType : Type where
+  ||| Persistent integration — auto-reconnects, shared state persists
+  HardGroove : GrooveType
+  ||| Transient integration — disconnects cleanly, zero residual state
+  SoftGroove : GrooveType
+
+||| Convert GrooveType to C integer for FFI.
+public export
+grooveTypeToInt : GrooveType -> Bits32
+grooveTypeToInt HardGroove = 0
+grooveTypeToInt SoftGroove = 1
 
 --------------------------------------------------------------------------------
 -- IPC Channel (Linear Resource)

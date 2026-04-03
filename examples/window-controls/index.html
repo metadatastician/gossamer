@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: PMPL-1.0-or-later -->
+<!-- Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk> -->
+<!--
+  Gossamer Window Management Demo
+
+  Exercises all 18 window management IPC operations:
+  - Basic: minimize, maximize, restore, show, hide, resize, set_title, close
+  - Guard: set guard mode (free/locked/read_only), get guard mode
+  - Z-order: raise (pull to front), lower (push to back)
+  - Grouping: create group, join, leave, apply group operation
+  - Cross-comm: broadcast event to all windows
+  - Arrange: auto-arrange all windows (tile/cascade/grid)
+
+  Usage:
+    cd examples/window-controls && ../../cli/zig-out/bin/gossamer run
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Gossamer Window Management</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1.5em;
+      overflow-y: auto;
+    }
+    h1 {
+      font-size: 1.8em;
+      margin-bottom: 0.3em;
+      background: linear-gradient(to right, #e94560, #ff6b6b);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle { opacity: 0.6; margin-bottom: 1.5em; font-size: 0.9em; }
+    h2 { font-size: 1em; color: #e94560; margin: 0.8em 0 0.4em; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    .section {
+      max-width: 850px;
+      width: 100%;
+      margin-bottom: 0.5em;
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+      gap: 0.5em;
+    }
+    button {
+      padding: 0.6em 1em;
+      border: none;
+      border-radius: 5px;
+      font-size: 0.85em;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      color: #fff;
+    }
+    button:hover { transform: translateY(-1px); }
+    button:active { transform: translateY(0); }
+
+    /* Basic window controls */
+    .btn-min { background: #2d6a4f; } .btn-min:hover { background: #40916c; }
+    .btn-max { background: #1d3557; } .btn-max:hover { background: #457b9d; }
+    .btn-restore { background: #6930c3; } .btn-restore:hover { background: #7b2ff7; }
+    .btn-show { background: #0077b6; } .btn-show:hover { background: #0096c7; }
+    .btn-hide { background: #5a189a; } .btn-hide:hover { background: #7b2cbf; }
+    .btn-resize { background: #e76f51; } .btn-resize:hover { background: #f4845f; }
+    .btn-title { background: #264653; } .btn-title:hover { background: #2a9d8f; }
+    .btn-close { background: #d62828; } .btn-close:hover { background: #ef233c; }
+
+    /* Guard */
+    .btn-guard-free { background: #2d6a4f; } .btn-guard-free:hover { background: #40916c; }
+    .btn-guard-lock { background: #b5179e; } .btn-guard-lock:hover { background: #d63384; }
+    .btn-guard-ro { background: #7b2cbf; } .btn-guard-ro:hover { background: #9d4edd; }
+    .btn-guard-get { background: #264653; } .btn-guard-get:hover { background: #2a9d8f; }
+
+    /* Z-order */
+    .btn-raise { background: #0077b6; } .btn-raise:hover { background: #0096c7; }
+    .btn-lower { background: #023e8a; } .btn-lower:hover { background: #0466c8; }
+
+    /* Group */
+    .btn-group { background: #e76f51; } .btn-group:hover { background: #f4845f; }
+
+    /* Arrange */
+    .btn-arrange { background: #264653; } .btn-arrange:hover { background: #2a9d8f; }
+
+    .inline-row {
+      display: flex;
+      gap: 0.5em;
+      align-items: center;
+      grid-column: 1 / -1;
+    }
+    .inline-row input {
+      width: 80px;
+      padding: 0.45em;
+      border: 1px solid #333;
+      border-radius: 4px;
+      background: #16213e;
+      color: #e0e0e0;
+      font-size: 0.85em;
+      text-align: center;
+    }
+    .inline-row input[type="text"] { width: auto; flex: 1; text-align: left; }
+
+    #guard-indicator {
+      display: inline-block;
+      padding: 0.3em 0.8em;
+      border-radius: 12px;
+      font-size: 0.8em;
+      font-weight: 600;
+      margin-left: 0.5em;
+      vertical-align: middle;
+    }
+    .guard-free { background: #2d6a4f; color: #fff; }
+    .guard-locked { background: #d62828; color: #fff; }
+    .guard-read_only { background: #7b2cbf; color: #fff; }
+
+    #log {
+      max-width: 850px;
+      width: 100%;
+      padding: 0.8em;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 5px;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.78em;
+      line-height: 1.5;
+      max-height: 200px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      margin-top: 1em;
+    }
+    .ok { color: #40916c; }
+    .err { color: #ef233c; }
+    .info { color: #90e0ef; }
+    @keyframes flash {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.2; transform: scale(1.15); }
+    }
+  </style>
+</head>
+<body>
+  <h1>Window Management</h1>
+  <p class="subtitle">Gossamer v0.3.0 — 18 IPC operations</p>
+
+  <!-- Guard Status -->
+  <div class="section">
+    <h2>Guard <span id="guard-indicator" class="guard-free">FREE</span></h2>
+    <div class="controls">
+      <button class="btn-guard-free" onclick="guardSet('free')">Free</button>
+      <button class="btn-guard-lock" onclick="guardSet('locked')">Locked (anti-close)</button>
+      <button class="btn-guard-ro" onclick="guardSet('read_only')">Read-Only</button>
+      <button class="btn-guard-get" onclick="guardGet()">Get Mode</button>
+    </div>
+  </div>
+
+  <!-- Basic Controls -->
+  <div class="section">
+    <h2>Window Controls</h2>
+    <div class="controls">
+      <button class="btn-min" onclick="call('window_minimize')">Minimize</button>
+      <button class="btn-max" onclick="call('window_maximize')">Maximize</button>
+      <button class="btn-restore" onclick="call('window_restore')">Restore</button>
+      <button class="btn-show" onclick="call('window_show')">Show</button>
+      <button class="btn-hide" onclick="doHide()">Hide (3s)</button>
+      <button class="btn-close" onclick="doClose()">Close</button>
+      <div class="inline-row">
+        <input id="rw" type="number" value="1024" min="200" max="3840">
+        <span>x</span>
+        <input id="rh" type="number" value="768" min="200" max="2160">
+        <button class="btn-resize" onclick="doResize()">Resize</button>
+      </div>
+      <div class="inline-row">
+        <input id="new-title" type="text" value="Gossamer v0.3.0" placeholder="Window title">
+        <button class="btn-title" onclick="doSetTitle()">Set Title</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Z-Order -->
+  <div class="section">
+    <h2>Z-Order</h2>
+    <div class="controls">
+      <button class="btn-raise" onclick="call('window_raise')">Pull to Front</button>
+      <button class="btn-lower" onclick="call('window_lower')">Push to Back</button>
+    </div>
+  </div>
+
+  <!-- Grouping -->
+  <div class="section">
+    <h2>Grouping</h2>
+    <div class="controls">
+      <button class="btn-group" onclick="doGroupCreate()">Create Group</button>
+      <div class="inline-row">
+        <input id="gid" type="number" value="1" min="1" style="width:60px" placeholder="GID">
+        <input id="wid" type="number" value="1" min="1" style="width:60px" placeholder="WID">
+        <button class="btn-group" onclick="doGroupJoin()">Join</button>
+        <button class="btn-group" onclick="doGroupLeave()">Leave</button>
+      </div>
+      <div class="inline-row">
+        <input id="gid-op" type="number" value="1" min="1" style="width:60px" placeholder="GID">
+        <button class="btn-group" onclick="doGroupOp('minimize')">Min All</button>
+        <button class="btn-group" onclick="doGroupOp('restore')">Restore All</button>
+        <button class="btn-group" onclick="doGroupOp('close')">Close All</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Arrange + Broadcast -->
+  <div class="section">
+    <h2>Arrange + Broadcast</h2>
+    <div class="controls">
+      <button class="btn-arrange" onclick="doArrange('tile_horizontal')">Tile H</button>
+      <button class="btn-arrange" onclick="doArrange('tile_vertical')">Tile V</button>
+      <button class="btn-arrange" onclick="doArrange('cascade')">Cascade</button>
+      <button class="btn-arrange" onclick="doArrange('grid')">Grid</button>
+      <button class="btn-arrange" onclick="doBroadcast()">Broadcast Test</button>
+    </div>
+  </div>
+
+  <div id="log"><span class="info">Ready. 18 window management operations available.</span></div>
+
+  <script>
+    var logEl = document.getElementById('log');
+    var guardEl = document.getElementById('guard-indicator');
+
+    function log(msg, cls) {
+      var span = document.createElement('span');
+      span.className = cls || '';
+      span.textContent = '\n' + new Date().toLocaleTimeString() + ' ' + msg;
+      logEl.appendChild(span);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    async function call(name, payload) {
+      try {
+        var result = await gossamer[name](payload || {});
+        var parsed = typeof result === 'string' ? JSON.parse(result) : result;
+        if (parsed && parsed.ok) {
+          log(name + ' => OK' + (parsed.mode ? ' (' + parsed.mode + ')' : '') + (parsed.group_id ? ' (group ' + parsed.group_id + ')' : ''), 'ok');
+        } else {
+          log(name + ' => ' + (parsed.error || 'failed'), 'err');
+        }
+        return parsed;
+      } catch (e) {
+        log(name + ' => ERROR: ' + e.message, 'err');
+        return null;
+      }
+    }
+
+    // Guard
+    async function guardSet(mode) {
+      var r = await call('window_guard_set', { mode: mode });
+      if (r && r.ok) updateGuardUI(mode);
+    }
+    async function guardGet() {
+      var r = await call('window_guard_get');
+      if (r && r.ok && r.mode) updateGuardUI(r.mode);
+    }
+    function updateGuardUI(mode) {
+      guardEl.textContent = mode.toUpperCase();
+      guardEl.className = 'guard-' + mode;
+    }
+
+    // Listen for guard changes from native side
+    if (window.__gossamer_on) {
+      window.__gossamer_on('guard_changed', function(data) {
+        if (data && data.mode) updateGuardUI(data.mode);
+        log('Guard changed to: ' + data.mode, 'info');
+      });
+    }
+
+    // Basic controls
+    function doHide() {
+      call('window_hide');
+      setTimeout(function() { call('window_show'); log('Auto-restored', 'info'); }, 3000);
+    }
+    function doResize() {
+      call('window_resize', { width: document.getElementById('rw').value, height: document.getElementById('rh').value });
+    }
+    function doSetTitle() {
+      call('window_set_title', { title: document.getElementById('new-title').value });
+    }
+    function doClose() {
+      if (confirm('Close window?')) call('window_close');
+    }
+
+    // Grouping
+    function doGroupCreate() { call('group_create', { label: 'Demo Group' }); }
+    function doGroupJoin() {
+      call('group_join', { group_id: document.getElementById('gid').value, window_id: document.getElementById('wid').value });
+    }
+    function doGroupLeave() {
+      call('group_leave', { group_id: document.getElementById('gid').value, window_id: document.getElementById('wid').value });
+    }
+    function doGroupOp(op) {
+      call('group_apply', { group_id: document.getElementById('gid-op').value, op: op });
+    }
+
+    // Arrange + broadcast
+    function doArrange(strat) { call('arrange', { strategy: strat }); }
+    function doBroadcast() { call('broadcast', { event: 'test_ping', payload: '{"from":"window-controls-demo"}' }); }
+
+    // Listen for broadcast events
+    if (window.__gossamer_on) {
+      window.__gossamer_on('test_ping', function(data) {
+        log('Received broadcast: ' + JSON.stringify(data), 'info');
+      });
+      // Guard blocked event — fires when WM X button is clicked while guard is active
+      window.__gossamer_on('guard_blocked', function(data) {
+        log('GUARD BLOCKED: ' + data.action + ' (mode: ' + data.mode + ')', 'err');
+        // Flash the indicator
+        guardEl.style.animation = 'none';
+        guardEl.offsetHeight; // reflow
+        guardEl.style.animation = 'flash 0.3s ease 3';
+      });
+    }
+  </script>
+</body>
+</html>

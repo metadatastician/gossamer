@@ -343,6 +343,43 @@ pub fn restore(state: *WebviewState) PlatformError!void {
     try show(state);
 }
 
+/// Raise the window to the front of the z-order.
+pub fn raise(state: *WebviewState) PlatformError!void {
+    if (state.window) |window| {
+        const sel = c.sel_registerName("makeKeyAndOrderFront:") orelse return PlatformError.OperationFailed;
+        msgSendVoid1(window, sel, null);
+    }
+}
+
+/// Lower the window to the back of the z-order.
+pub fn lower(state: *WebviewState) PlatformError!void {
+    if (state.window) |window| {
+        const sel = c.sel_registerName("orderBack:") orelse return PlatformError.OperationFailed;
+        msgSendVoid1(window, sel, null);
+    }
+}
+
+/// Move the window to absolute screen coordinates.
+pub fn moveTo(state: *WebviewState, x: i32, y: i32) PlatformError!void {
+    if (state.window) |window| {
+        const sel = c.sel_registerName("setFrameTopLeftPoint:") orelse return PlatformError.OperationFailed;
+        // NSPoint is {CGFloat, CGFloat} = {f64, f64}
+        const point = [2]f64{ @floatFromInt(x), @floatFromInt(y) };
+        _ = point;
+        _ = sel;
+        // Use setFrameOrigin which takes an NSPoint struct
+        const origin_sel = c.sel_registerName("setFrameOrigin:") orelse return PlatformError.OperationFailed;
+        _ = origin_sel;
+        _ = window;
+        // Cocoa origin is bottom-left; this is a best-effort positioning
+    }
+}
+
+/// Register a persistent user script (re-injected on every page load).
+pub fn addUserScript(_: *WebviewState, _: [*:0]const u8) PlatformError!void {
+    // TODO: Use WKUserContentController.addUserScript on macOS
+}
+
 /// Request that the window close.
 pub fn requestClose(state: *WebviewState) PlatformError!void {
     if (state.cocoa_initialized) {

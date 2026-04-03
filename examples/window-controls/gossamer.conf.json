@@ -1,0 +1,50 @@
+{
+  "$schema": "https://gossamer.dev/schemas/config/v1",
+  "productName": "Window Controls Demo",
+  "version": "0.3.0",
+  "identifier": "dev.gossamer.window-controls-demo",
+  "build": {
+    "frontendDist": ".",
+    "devUrl": "",
+    "beforeDevCommand": "",
+    "beforeBuildCommand": ""
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Gossamer Window Controls",
+        "width": 900,
+        "height": 700,
+        "minWidth": 400,
+        "minHeight": 300,
+        "maxWidth": null,
+        "maxHeight": null,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true,
+        "transparent": false,
+        "center": true,
+        "alwaysOnTop": false,
+        "visible": true,
+        "url": "/"
+      }
+    ],
+    "security": {
+      "csp": null,
+      "capabilities": ["notification"],
+      "capabilityTokens": { "enabled": false },
+      "sandbox": { "enabled": true, "allowExec": false, "allowNetwork": false, "allowFilesystem": false }
+    },
+    "ipc": {
+      "protocol": "json",
+      "bridgeInjection": true,
+      "maxMessageSize": 1048576,
+      "timeout": 5000
+    },
+    "tray": { "enabled": false }
+  },
+  "plugins": {},
+  "bundle": { "active": false },
+  "ephapax": { "modules": [], "region": "app", "linearVerification": true }
+}

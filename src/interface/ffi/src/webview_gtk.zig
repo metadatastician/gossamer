@@ -214,6 +214,29 @@ pub fn restore(state: *WebviewState) PlatformError!void {
     c.gtk_widget_show_all(state.window);
 }
 
+/// Raise the window to the front of the z-order.
+pub fn raise(state: *WebviewState) PlatformError!void {
+    const gdk_win = c.gtk_widget_get_window(state.window);
+    if (gdk_win != null) {
+        c.gdk_window_raise(gdk_win);
+    }
+    // Also present to ensure focus
+    c.gtk_window_present(@ptrCast(state.window));
+}
+
+/// Lower the window to the back of the z-order.
+pub fn lower(state: *WebviewState) PlatformError!void {
+    const gdk_win = c.gtk_widget_get_window(state.window);
+    if (gdk_win != null) {
+        c.gdk_window_lower(gdk_win);
+    }
+}
+
+/// Move the window to absolute screen coordinates.
+pub fn moveTo(state: *WebviewState, x: i32, y: i32) PlatformError!void {
+    c.gtk_window_move(@ptrCast(state.window), x, y);
+}
+
 /// Request that the GTK window close.
 pub fn requestClose(state: *WebviewState) PlatformError!void {
     if (state.gtk_initialized) {
@@ -225,6 +248,26 @@ pub fn requestClose(state: *WebviewState) PlatformError!void {
 /// Run the GTK main event loop. Blocks until the window is closed.
 pub fn run(_: *WebviewState) void {
     c.gtk_main();
+}
+
+/// Register a JavaScript snippet as a persistent user script.
+/// Unlike eval(), this survives page navigation and load_html() calls.
+/// The script is injected at document-end on every page load.
+pub fn addUserScript(state: *WebviewState, js: [*:0]const u8) PlatformError!void {
+    const webview_wk: *c.WebKitWebView = @ptrCast(state.webview);
+    const manager = c.webkit_web_view_get_user_content_manager(webview_wk);
+    if (manager == null) return PlatformError.OperationFailed;
+
+    const script = c.webkit_user_script_new(
+        js,
+        c.WEBKIT_USER_CONTENT_INJECT_ALL_FRAMES,
+        c.WEBKIT_USER_SCRIPT_INJECT_AT_DOCUMENT_END,
+        null, // allow_list (all URIs)
+        null, // block_list (none)
+    ) orelse return PlatformError.OperationFailed;
+
+    c.webkit_user_content_manager_add_script(manager, script);
+    c.webkit_user_script_unref(script);
 }
 
 /// Destroy the webview and its window.
@@ -240,6 +283,50 @@ fn onWindowDestroy(_: ?*c.GtkWidget, _: ?*anyopaque) callconv(.c) void {
     if (c.gtk_main_level() > 0) {
         c.gtk_main_quit();
     }
+}
+
+/// "delete-event" signal handler — intercepts the window manager X button.
+///
+/// When the guard mode is `locked` or `read_only`, this returns TRUE (1)
+/// which tells GTK to suppress the close entirely. The window stays open.
+///
+/// When guard mode is `free`, returns FALSE (0) to allow normal close.
+///
+/// Also emits a JS event so the frontend can show visual feedback
+/// (e.g. flash the guard indicator, play a sound, show a toast).
+fn onDeleteEvent(_: ?*c.GtkWidget, _: ?*anyopaque, user_data: ?*anyopaque) callconv(.c) c_int {
+    const handle: *GossamerHandle = @ptrCast(@alignCast(user_data orelse return 0));
+
+    if (handle.guard == .free) {
+        return 0; // Allow close
+    }
+
+    // Guard is active — block the close and notify JS
+    const main = @import("main.zig");
+    main.setError("Window close blocked by guard (mode: locked or read_only)");
+
+    const notify_js = switch (handle.guard) {
+        .locked =>
+            \\(function(){
+            \\  window.__gossamer_emit&&window.__gossamer_emit('guard_blocked',{action:'close',mode:'locked'});
+            \\  var el=document.getElementById('guard-indicator');
+            \\  if(el){el.style.animation='none';el.offsetHeight;el.style.animation='flash 0.3s ease 3';}
+            \\})();
+        ,
+        .read_only =>
+            \\(function(){
+            \\  window.__gossamer_emit&&window.__gossamer_emit('guard_blocked',{action:'close',mode:'read_only'});
+            \\  var el=document.getElementById('guard-indicator');
+            \\  if(el){el.style.animation='none';el.offsetHeight;el.style.animation='flash 0.3s ease 3';}
+            \\})();
+        ,
+        .free => unreachable,
+    };
+
+    const webview_wk: *c.WebKitWebView = @ptrCast(handle.webview.webview);
+    c.webkit_web_view_run_javascript(webview_wk, notify_js, null, null, null);
+
+    return 1; // Block close
 }
 
 //==============================================================================
@@ -280,6 +367,19 @@ pub fn registerIPCHandler(state: *WebviewState, handle: *GossamerHandle) Platfor
         @ptrCast(manager),
         "script-message-received::gossamer_ipc",
         @ptrCast(&onIPCMessage),
+        @ptrCast(handle),
+        null,
+        0,
+    );
+
+    // Install the delete-event guard handler on the GTK window.
+    // This intercepts the window manager's X button click. When the guard
+    // mode is locked or read_only, the handler returns TRUE to block close.
+    // The GossamerHandle pointer is passed as userdata.
+    _ = c.g_signal_connect_data(
+        @ptrCast(state.window),
+        "delete-event",
+        @ptrCast(&onDeleteEvent),
         @ptrCast(handle),
         null,
         0,

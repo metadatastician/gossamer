@@ -246,6 +246,14 @@ pub fn restore(_: *WebviewState) PlatformError!void {
     return PlatformError.OperationFailed;
 }
 
+/// Register a persistent user script.
+pub fn addUserScript(_: *WebviewState, _: [*:0]const u8) PlatformError!void {}
+
+/// Z-order and move are not applicable on iOS (single-app fullscreen).
+pub fn raise(_: *WebviewState) PlatformError!void {}
+pub fn lower(_: *WebviewState) PlatformError!void {}
+pub fn moveTo(_: *WebviewState, _: i32, _: i32) PlatformError!void {}
+
 /// Requesting close is not supported on iOS from the native shell layer.
 pub fn requestClose(_: *WebviewState) PlatformError!void {
     return PlatformError.OperationFailed;

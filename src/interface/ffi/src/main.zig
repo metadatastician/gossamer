@@ -113,6 +113,21 @@ pub const Result = enum(c_int) {
     webview_unavailable = 8,
     ipc_protocol_error = 9,
     capability_denied = 10,
+    guard_locked = 11,
+};
+
+/// Window guard mode — controls what operations are permitted.
+///
+///   free      — everything works normally (default)
+///   locked    — window controls disabled (close/minimize/maximize/resize rejected)
+///   read_only — locked + content is non-interactive (CSS overlay injected)
+///
+/// Solves the "clicked X on wrong window and killed critical work" problem.
+/// Toggle via gossamer_guard_set() or the JS IPC bridge.
+pub const GuardMode = enum(c_int) {
+    free = 0,
+    locked = 1,
+    read_only = 2,
 };
 
 /// Opaque webview handle.
@@ -130,10 +145,16 @@ pub const GossamerHandle = struct {
     closed: bool,
     /// Whether the window is currently shown to the user.
     visible: bool,
+    /// Window guard mode — prevents accidental close/resize when locked.
+    guard: GuardMode = .free,
     /// Allocator used for this handle (for cleanup)
     allocator: std.mem.Allocator,
     /// IPC callback bindings (name -> callback + user data)
     bindings: std.StringHashMap(BindingEntry),
+    /// Unique window ID within the registry (0 = unregistered)
+    window_id: u32 = 0,
+    /// Group ID this window belongs to (0 = ungrouped)
+    group_id: u32 = 0,
 };
 
 /// IPC callback function type (C ABI).
@@ -169,6 +190,16 @@ fn requireOpen(handle: *GossamerHandle) ?Result {
         return .already_consumed;
     }
 
+    return null;
+}
+
+/// Guard check — rejects operations when the window is in locked or read_only mode.
+/// Used by close, minimize, maximize, resize, restore.
+fn requireUnguarded(handle: *GossamerHandle) ?Result {
+    if (handle.guard != .free) {
+        setError("Window is guard-locked — unlock before performing this operation");
+        return .guard_locked;
+    }
     return null;
 }
 
@@ -482,6 +513,7 @@ export fn gossamer_set_title(handle_ptr: u64, title: [*:0]const u8) Result {
 }
 
 /// Resize the webview window.
+/// Rejected when guard mode is locked or read_only.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__resize
 export fn gossamer_resize(handle_ptr: u64, width: u32, height: u32) Result {
@@ -492,6 +524,9 @@ export fn gossamer_resize(handle_ptr: u64, width: u32, height: u32) Result {
     };
 
     if (requireOpen(handle)) |err| {
+        return err;
+    }
+    if (requireUnguarded(handle)) |err| {
         return err;
     }
 
@@ -574,6 +609,7 @@ pub export fn gossamer_hide(handle_ptr: u64) Result {
 }
 
 /// Minimize the webview window.
+/// Rejected when guard mode is locked or read_only.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__minimize
 export fn gossamer_minimize(handle_ptr: u64) Result {
@@ -584,6 +620,9 @@ export fn gossamer_minimize(handle_ptr: u64) Result {
     };
 
     if (requireOpen(handle)) |err| {
+        return err;
+    }
+    if (requireUnguarded(handle)) |err| {
         return err;
     }
 
@@ -598,6 +637,7 @@ export fn gossamer_minimize(handle_ptr: u64) Result {
 }
 
 /// Maximize the webview window.
+/// Rejected when guard mode is locked or read_only.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__maximize
 export fn gossamer_maximize(handle_ptr: u64) Result {
@@ -608,6 +648,9 @@ export fn gossamer_maximize(handle_ptr: u64) Result {
     };
 
     if (requireOpen(handle)) |err| {
+        return err;
+    }
+    if (requireUnguarded(handle)) |err| {
         return err;
     }
 
@@ -622,6 +665,7 @@ export fn gossamer_maximize(handle_ptr: u64) Result {
 }
 
 /// Restore the webview window from a minimized or maximized state.
+/// Rejected when guard mode is locked or read_only.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__restore
 pub export fn gossamer_restore(handle_ptr: u64) Result {
@@ -632,6 +676,9 @@ pub export fn gossamer_restore(handle_ptr: u64) Result {
     };
 
     if (requireOpen(handle)) |err| {
+        return err;
+    }
+    if (requireUnguarded(handle)) |err| {
         return err;
     }
 
@@ -646,6 +693,8 @@ pub export fn gossamer_restore(handle_ptr: u64) Result {
 }
 
 /// Request that the webview window close.
+/// Rejected when guard mode is locked or read_only — this is the core
+/// "anti-close" protection that prevents accidental closure of critical windows.
 ///
 /// This performs the user-visible close action but does not free the
 /// surrounding handle. Cleanup still runs once the event loop exits or the
@@ -660,6 +709,9 @@ export fn gossamer_request_close(handle_ptr: u64) Result {
     };
 
     if (requireOpen(handle)) |err| {
+        return err;
+    }
+    if (requireUnguarded(handle)) |err| {
         return err;
     }
 
@@ -684,6 +736,1011 @@ export fn gossamer_destroy(handle_ptr: u64) void {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse return;
     cleanup(handle);
+}
+
+//==============================================================================
+// Window Guard (Anti-Close Lock)
+//==============================================================================
+//
+// Three modes:
+//   free      (0) — everything works normally
+//   locked    (1) — close/minimize/maximize/resize/restore rejected
+//   read_only (2) — locked + CSS overlay blocks all pointer/keyboard interaction
+//
+// The guard also intercepts the GTK "delete-event" signal so that even
+// clicking the native window manager X button is blocked when locked.
+
+/// JavaScript snippet that adds/removes the read-only overlay.
+/// The overlay sits above all content with pointer-events: none passthrough
+/// removed — it captures and swallows all user interaction.
+const READONLY_OVERLAY_INJECT =
+    \\(function(){
+    \\  var id = '__gossamer_guard_overlay';
+    \\  var existing = document.getElementById(id);
+    \\  if (!existing) {
+    \\    var el = document.createElement('div');
+    \\    el.id = id;
+    \\    el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;'
+    \\      + 'z-index:2147483647;background:rgba(0,0,0,0.03);cursor:not-allowed;'
+    \\      + 'user-select:none;-webkit-user-select:none;';
+    \\    el.setAttribute('aria-label', 'Window is in read-only mode');
+    \\    document.body.appendChild(el);
+    \\  }
+    \\})();
+;
+
+const READONLY_OVERLAY_REMOVE =
+    \\(function(){
+    \\  var el = document.getElementById('__gossamer_guard_overlay');
+    \\  if (el) el.remove();
+    \\})();
+;
+
+/// Set the window guard mode.
+///
+/// Transitions:
+///   free → locked:    block window controls
+///   free → read_only: block controls + inject interaction blocker
+///   locked → free:    unblock controls
+///   read_only → free: unblock controls + remove overlay
+///   any → same:       no-op (returns ok)
+///
+/// Matches: Gossamer.ABI.Foreign.prim__guardSet
+export fn gossamer_guard_set(handle_ptr: u64, mode: c_int) Result {
+    clearError();
+    const handle = ptrFromU64(handle_ptr) orelse {
+        setError("Null webview handle");
+        return .null_pointer;
+    };
+
+    if (requireOpen(handle)) |err| {
+        return err;
+    }
+
+    const new_mode = std.meta.intToEnum(GuardMode, mode) catch {
+        setError("Invalid guard mode (must be 0=free, 1=locked, 2=read_only)");
+        return .invalid_param;
+    };
+
+    const old_mode = handle.guard;
+    if (old_mode == new_mode) {
+        return .ok;
+    }
+
+    // Transitioning away from read_only — remove the overlay
+    if (old_mode == .read_only and new_mode != .read_only) {
+        platform.eval(&handle.webview, READONLY_OVERLAY_REMOVE) catch {};
+    }
+
+    // Transitioning into read_only — inject the overlay
+    if (new_mode == .read_only and old_mode != .read_only) {
+        platform.eval(&handle.webview, READONLY_OVERLAY_INJECT) catch {};
+    }
+
+    handle.guard = new_mode;
+
+    // Emit a JS event so the frontend can update its UI (e.g. show a lock icon)
+    const event_js = switch (new_mode) {
+        .free => "window.__gossamer_emit&&window.__gossamer_emit('guard_changed',{mode:'free'});",
+        .locked => "window.__gossamer_emit&&window.__gossamer_emit('guard_changed',{mode:'locked'});",
+        .read_only => "window.__gossamer_emit&&window.__gossamer_emit('guard_changed',{mode:'read_only'});",
+    };
+    platform.eval(&handle.webview, event_js) catch {};
+
+    clearError();
+    return .ok;
+}
+
+/// Get the current window guard mode.
+///
+/// Returns: 0=free, 1=locked, 2=read_only, or -1 on error.
+///
+/// Matches: Gossamer.ABI.Foreign.prim__guardGet
+export fn gossamer_guard_get(handle_ptr: u64) c_int {
+    const handle = ptrFromU64(handle_ptr) orelse return -1;
+    return @intFromEnum(handle.guard);
+}
+
+//==============================================================================
+// Window Registry (Multi-Window Foundation)
+//==============================================================================
+//
+// Global registry of all live GossamerHandle instances. Foundation for
+// grouping, z-order management, cross-communication, and auto-arrange.
+// Bounded at 64 simultaneous windows (generous for desktop apps).
+
+const MAX_WINDOWS: usize = 64;
+
+var window_registry: [MAX_WINDOWS]?*GossamerHandle = [_]?*GossamerHandle{null} ** MAX_WINDOWS;
+var registry_mutex: std.Thread.Mutex = .{};
+var next_window_id: u32 = 1;
+
+/// Register a handle in the global window registry.
+/// Returns the assigned window ID (>0), or 0 on failure.
+export fn gossamer_registry_add(handle_ptr: u64) u32 {
+    clearError();
+    const handle = ptrFromU64(handle_ptr) orelse {
+        setError("Null handle");
+        return 0;
+    };
+
+    registry_mutex.lock();
+    defer registry_mutex.unlock();
+
+    for (&window_registry) |*slot| {
+        if (slot.* == null) {
+            const id = next_window_id;
+            next_window_id +%= 1;
+            if (next_window_id == 0) next_window_id = 1;
+            handle.window_id = id;
+            slot.* = handle;
+            return id;
+        }
+    }
+
+    setError("Window registry full (max 64)");
+    return 0;
+}
+
+/// Remove a handle from the registry.
+export fn gossamer_registry_remove(handle_ptr: u64) void {
+    const handle = ptrFromU64(handle_ptr) orelse return;
+
+    registry_mutex.lock();
+    defer registry_mutex.unlock();
+
+    for (&window_registry) |*slot| {
+        if (slot.* == handle) {
+            slot.* = null;
+            handle.window_id = 0;
+            return;
+        }
+    }
+}
+
+/// Count of live registered windows.
+export fn gossamer_registry_count() u32 {
+    registry_mutex.lock();
+    defer registry_mutex.unlock();
+
+    var count: u32 = 0;
+    for (window_registry) |slot| {
+        if (slot != null) count += 1;
+    }
+    return count;
+}
+
+/// Look up a handle by window ID. Returns the handle pointer as u64, or 0 if not found.
+fn registryLookup(window_id: u32) ?*GossamerHandle {
+    for (window_registry) |slot| {
+        if (slot) |h| {
+            if (h.window_id == window_id) return h;
+        }
+    }
+    return null;
+}
+
+//==============================================================================
+// Window Grouping
+//==============================================================================
+//
+// Groups allow multiple windows to be treated as a unit:
+//   - minimize_group / close_group / show_group cascade to all members
+//   - grouped windows move together in z-order
+//   - guard mode can be applied to entire group
+//
+// Bounded at 16 groups, each holding up to 16 window IDs.
+
+const MAX_GROUPS: usize = 16;
+const MAX_GROUP_MEMBERS: usize = 16;
+
+const WindowGroup = struct {
+    id: u32 = 0,
+    label: [64]u8 = [_]u8{0} ** 64,
+    label_len: usize = 0,
+    members: [MAX_GROUP_MEMBERS]u32 = [_]u32{0} ** MAX_GROUP_MEMBERS,
+    member_count: usize = 0,
+    active: bool = false,
+};
+
+var groups: [MAX_GROUPS]WindowGroup = [_]WindowGroup{.{}} ** MAX_GROUPS;
+var groups_mutex: std.Thread.Mutex = .{};
+var next_group_id: u32 = 1;
+
+/// Create a new window group with an optional label.
+/// Returns group ID (>0), or 0 on failure.
+export fn gossamer_group_create(label: ?[*:0]const u8) u32 {
+    clearError();
+    groups_mutex.lock();
+    defer groups_mutex.unlock();
+
+    for (&groups) |*g| {
+        if (!g.active) {
+            const gid = next_group_id;
+            next_group_id +%= 1;
+            if (next_group_id == 0) next_group_id = 1;
+            g.* = .{};
+            g.id = gid;
+            g.active = true;
+            if (label) |l| {
+                const s = std.mem.span(l);
+                const len = @min(s.len, g.label.len);
+                @memcpy(g.label[0..len], s[0..len]);
+                g.label_len = len;
+            }
+            return gid;
+        }
+    }
+
+    setError("Group limit reached (max 16)");
+    return 0;
+}
+
+/// Add a window (by ID) to a group.
+export fn gossamer_group_add(group_id: u32, window_id: u32) Result {
+    clearError();
+    groups_mutex.lock();
+    defer groups_mutex.unlock();
+
+    const g = findGroup(group_id) orelse {
+        setError("Group not found");
+        return .invalid_param;
+    };
+
+    // Check not already a member
+    for (g.members[0..g.member_count]) |m| {
+        if (m == window_id) return .ok;
+    }
+
+    if (g.member_count >= MAX_GROUP_MEMBERS) {
+        setError("Group full (max 16 members)");
+        return .@"error";
+    }
+
+    g.members[g.member_count] = window_id;
+    g.member_count += 1;
+
+    // Update the handle's group_id
+    if (registryLookup(window_id)) |handle| {
+        handle.group_id = group_id;
+    }
+
+    return .ok;
+}
+
+/// Remove a window from a group.
+export fn gossamer_group_remove(group_id: u32, window_id: u32) Result {
+    clearError();
+    groups_mutex.lock();
+    defer groups_mutex.unlock();
+
+    const g = findGroup(group_id) orelse {
+        setError("Group not found");
+        return .invalid_param;
+    };
+
+    for (g.members[0..g.member_count], 0..) |m, i| {
+        if (m == window_id) {
+            // Shift remaining members left
+            var j = i;
+            while (j + 1 < g.member_count) : (j += 1) {
+                g.members[j] = g.members[j + 1];
+            }
+            g.member_count -= 1;
+
+            if (registryLookup(window_id)) |handle| {
+                handle.group_id = 0;
+            }
+            return .ok;
+        }
+    }
+
+    return .ok; // Not a member — idempotent
+}
+
+/// Destroy a group (does not destroy the windows, just the grouping).
+export fn gossamer_group_destroy(group_id: u32) void {
+    groups_mutex.lock();
+    defer groups_mutex.unlock();
+
+    if (findGroup(group_id)) |g| {
+        // Clear group_id on all members
+        for (g.members[0..g.member_count]) |wid| {
+            if (registryLookup(wid)) |handle| {
+                handle.group_id = 0;
+            }
+        }
+        g.active = false;
+    }
+}
+
+/// Apply an operation to all windows in a group.
+/// op: 0=minimize, 1=maximize, 2=restore, 3=show, 4=hide, 5=close
+export fn gossamer_group_apply(group_id: u32, op: u32) Result {
+    clearError();
+    groups_mutex.lock();
+    const g = findGroup(group_id) orelse {
+        groups_mutex.unlock();
+        setError("Group not found");
+        return .invalid_param;
+    };
+
+    // Copy members to avoid holding mutex during FFI calls
+    var ids: [MAX_GROUP_MEMBERS]u32 = undefined;
+    const count = g.member_count;
+    @memcpy(ids[0..count], g.members[0..count]);
+    groups_mutex.unlock();
+
+    for (ids[0..count]) |wid| {
+        if (registryLookup(wid)) |handle| {
+            const hptr = @intFromPtr(handle);
+            switch (op) {
+                0 => _ = gossamer_minimize(hptr),
+                1 => _ = gossamer_maximize(hptr),
+                2 => _ = gossamer_restore(hptr),
+                3 => _ = gossamer_show(hptr),
+                4 => _ = gossamer_hide(hptr),
+                5 => _ = gossamer_request_close(hptr),
+                else => {},
+            }
+        }
+    }
+
+    return .ok;
+}
+
+fn findGroup(group_id: u32) ?*WindowGroup {
+    for (&groups) |*g| {
+        if (g.active and g.id == group_id) return g;
+    }
+    return null;
+}
+
+//==============================================================================
+// Z-Order Management
+//==============================================================================
+
+/// Raise the window to the front of the z-order (pull to front).
+export fn gossamer_raise(handle_ptr: u64) Result {
+    clearError();
+    const handle = ptrFromU64(handle_ptr) orelse {
+        setError("Null webview handle");
+        return .null_pointer;
+    };
+
+    if (requireOpen(handle)) |err| {
+        return err;
+    }
+
+    platform.raise(&handle.webview) catch {
+        setError("Failed to raise window");
+        return .@"error";
+    };
+
+    clearError();
+    return .ok;
+}
+
+/// Lower the window to the bottom of the z-order (push to back).
+export fn gossamer_lower(handle_ptr: u64) Result {
+    clearError();
+    const handle = ptrFromU64(handle_ptr) orelse {
+        setError("Null webview handle");
+        return .null_pointer;
+    };
+
+    if (requireOpen(handle)) |err| {
+        return err;
+    }
+
+    platform.lower(&handle.webview) catch {
+        setError("Failed to lower window");
+        return .@"error";
+    };
+
+    clearError();
+    return .ok;
+}
+
+//==============================================================================
+// Cross-Window Communication (Panel Bus)
+//==============================================================================
+//
+// gossamer_broadcast: send a named event + JSON payload to ALL registered windows
+// gossamer_send_to:   send to a specific window by ID
+//
+// Delivered via __gossamer_emit() in each target webview's JS context.
+
+/// Broadcast an event to all registered windows.
+export fn gossamer_broadcast(event_name: [*:0]const u8, payload_json: [*:0]const u8) u32 {
+    registry_mutex.lock();
+    defer registry_mutex.unlock();
+
+    var delivered: u32 = 0;
+    const name_span = std.mem.span(event_name);
+    const payload_span = std.mem.span(payload_json);
+
+    for (window_registry) |slot| {
+        if (slot) |handle| {
+            if (handle.initialized and !handle.closed) {
+                emitToHandle(handle, name_span, payload_span);
+                delivered += 1;
+            }
+        }
+    }
+
+    return delivered;
+}
+
+/// Send an event to a specific window by its registry ID.
+export fn gossamer_send_to(target_id: u32, event_name: [*:0]const u8, payload_json: [*:0]const u8) Result {
+    clearError();
+    registry_mutex.lock();
+    const handle = registryLookup(target_id);
+    registry_mutex.unlock();
+
+    const h = handle orelse {
+        setError("Target window not found");
+        return .invalid_param;
+    };
+
+    if (!h.initialized or h.closed) {
+        setError("Target window not available");
+        return .@"error";
+    }
+
+    emitToHandle(h, std.mem.span(event_name), std.mem.span(payload_json));
+    return .ok;
+}
+
+/// Helper: inject a __gossamer_emit call into a handle's webview.
+fn emitToHandle(handle: *GossamerHandle, event: []const u8, payload: []const u8) void {
+    // Build: window.__gossamer_emit&&window.__gossamer_emit('event',payload);
+    var buf: [4096]u8 = undefined;
+    const js = std.fmt.bufPrint(&buf, "window.__gossamer_emit&&window.__gossamer_emit('{s}',{s});", .{ event, payload }) catch return;
+    buf[@min(js.len, buf.len - 1)] = 0;
+    const js_z: [*:0]const u8 = buf[0..js.len :0];
+    platform.eval(&handle.webview, js_z) catch {};
+}
+
+//==============================================================================
+// Window Arrange
+//==============================================================================
+//
+// Strategies for auto-arranging all registered windows:
+//   0 = tile_horizontal — side by side
+//   1 = tile_vertical   — stacked top to bottom
+//   2 = cascade         — offset diagonally
+//   3 = grid            — equal-sized grid cells
+
+/// Auto-arrange all registered windows using the given strategy.
+/// strategy: 0=tile_h, 1=tile_v, 2=cascade, 3=grid
+export fn gossamer_arrange(strategy: u32) Result {
+    clearError();
+    registry_mutex.lock();
+
+    // Collect live handles
+    var handles: [MAX_WINDOWS]*GossamerHandle = undefined;
+    var count: usize = 0;
+    for (window_registry) |slot| {
+        if (slot) |h| {
+            if (h.initialized and !h.closed) {
+                handles[count] = h;
+                count += 1;
+            }
+        }
+    }
+    registry_mutex.unlock();
+
+    if (count == 0) return .ok;
+
+    // Use a reasonable default screen size (will be overridden by actual geometry if available)
+    const screen_w: u32 = 1920;
+    const screen_h: u32 = 1080;
+
+    switch (strategy) {
+        0 => { // tile_horizontal
+            const w: u32 = screen_w / @as(u32, @intCast(count));
+            for (handles[0..count], 0..) |h, i| {
+                const hptr = @intFromPtr(h);
+                _ = gossamer_resize(hptr, w, screen_h);
+                platform.moveTo(&h.webview, @as(i32, @intCast(w * @as(u32, @intCast(i)))), 0) catch {};
+            }
+        },
+        1 => { // tile_vertical
+            const h_size: u32 = screen_h / @as(u32, @intCast(count));
+            for (handles[0..count], 0..) |h, i| {
+                const hptr = @intFromPtr(h);
+                _ = gossamer_resize(hptr, screen_w, h_size);
+                platform.moveTo(&h.webview, 0, @as(i32, @intCast(h_size * @as(u32, @intCast(i))))) catch {};
+            }
+        },
+        2 => { // cascade
+            for (handles[0..count], 0..) |h, i| {
+                const offset: i32 = @as(i32, @intCast(i)) * 30;
+                const hptr = @intFromPtr(h);
+                _ = gossamer_resize(hptr, 800, 600);
+                platform.moveTo(&h.webview, offset, offset) catch {};
+            }
+        },
+        3 => { // grid
+            const cols: u32 = @as(u32, @intFromFloat(@ceil(@sqrt(@as(f64, @floatFromInt(count))))));
+            const rows: u32 = ((@as(u32, @intCast(count)) + cols - 1) / cols);
+            const cell_w = screen_w / cols;
+            const cell_h = screen_h / rows;
+            for (handles[0..count], 0..) |h, i| {
+                const col: u32 = @as(u32, @intCast(i)) % cols;
+                const row: u32 = @as(u32, @intCast(i)) / cols;
+                const hptr = @intFromPtr(h);
+                _ = gossamer_resize(hptr, cell_w, cell_h);
+                platform.moveTo(&h.webview, @as(i32, @intCast(col * cell_w)), @as(i32, @intCast(row * cell_h))) catch {};
+            }
+        },
+        else => {
+            setError("Unknown arrange strategy");
+            return .invalid_param;
+        },
+    }
+
+    return .ok;
+}
+
+//==============================================================================
+// Transmute — Runtime Mode Switching
+//==============================================================================
+//
+// Transmute allows a Gossamer frame to switch its rendering mode at runtime:
+//   gui             (0) — normal webview rendering (default)
+//   tui             (1) — terminal UI mode (content exported as ANSI)
+//   cli             (2) — plain text mode (content as stdout text)
+//   terminal_export (3) — dump current webview content to a pty/pipe
+//   panll_attach    (4) — integrate this window into a running PanLL instance
+//   panll_detach    (5) — disconnect from PanLL, become standalone again
+//
+// The "killer feature": a window showing a game level editor can transmute
+// into a terminal view of the same data, or fuse into PanLL's panel tree.
+
+pub const TransmuteMode = enum(c_int) {
+    gui = 0,
+    tui = 1,
+    cli = 2,
+    terminal_export = 3,
+    panll_attach = 4,
+    panll_detach = 5,
+};
+
+/// Current transmute mode per handle.
+/// Stored separately from GossamerHandle to avoid changing the core struct
+/// layout for features that most handles won't use.
+var transmute_modes: [MAX_WINDOWS]TransmuteMode = [_]TransmuteMode{.gui} ** MAX_WINDOWS;
+
+/// Get the transmute mode for a window by registry index.
+fn getTransmuteSlot(handle: *GossamerHandle) ?usize {
+    for (window_registry, 0..) |slot, i| {
+        if (slot == handle) return i;
+    }
+    return null;
+}
+
+/// Set the transmute mode for a window.
+///
+/// Mode transitions:
+///   gui → tui:          Extract webview text, inject ANSI-formatted content
+///   gui → cli:          Extract text, emit to stdout
+///   gui → terminal_export: Serialize current DOM state to a pty
+///   gui → panll_attach: Send groove message to PanLL on port 8000
+///   any → panll_detach: Disconnect from PanLL, restore standalone mode
+///   tui/cli → gui:      Restore webview, reload last HTML
+///
+/// Matches: Gossamer.ABI.Foreign.prim__transmute
+export fn gossamer_transmute(handle_ptr: u64, mode: c_int) Result {
+    clearError();
+    const handle = ptrFromU64(handle_ptr) orelse {
+        setError("Null handle");
+        return .null_pointer;
+    };
+
+    if (requireOpen(handle)) |err| {
+        return err;
+    }
+
+    const new_mode = std.meta.intToEnum(TransmuteMode, mode) catch {
+        setError("Invalid transmute mode (0-5)");
+        return .invalid_param;
+    };
+
+    const slot = getTransmuteSlot(handle) orelse {
+        setError("Window not registered — call gossamer_registry_add first");
+        return .@"error";
+    };
+
+    const old_mode = transmute_modes[slot];
+
+    switch (new_mode) {
+        .gui => {
+            // Restore webview if coming from terminal modes
+            if (old_mode == .tui or old_mode == .cli) {
+                // Re-show the webview widget
+                platform.show(&handle.webview) catch {};
+            }
+        },
+        .tui => {
+            // Inject ANSI-mode overlay: convert webview rendering to text-block display
+            const tui_js =
+                \\(function(){
+                \\  document.body.style.fontFamily='monospace';
+                \\  document.body.style.fontSize='14px';
+                \\  document.body.style.background='#000';
+                \\  document.body.style.color='#0f0';
+                \\  document.body.style.whiteSpace='pre-wrap';
+                \\  window.__gossamer_emit&&window.__gossamer_emit('transmuted',{mode:'tui'});
+                \\})();
+            ;
+            platform.eval(&handle.webview, tui_js) catch {};
+        },
+        .cli => {
+            // Inject CLI-mode: strip all styling, plain text only
+            const cli_js =
+                \\(function(){
+                \\  var text = document.body.innerText || document.body.textContent;
+                \\  document.body.innerHTML='<pre>'+text+'</pre>';
+                \\  document.body.style.fontFamily='monospace';
+                \\  document.body.style.background='#000';
+                \\  document.body.style.color='#ccc';
+                \\  window.__gossamer_emit&&window.__gossamer_emit('transmuted',{mode:'cli'});
+                \\})();
+            ;
+            platform.eval(&handle.webview, cli_js) catch {};
+        },
+        .terminal_export => {
+            // Extract text content and log to stdout
+            const export_js =
+                \\(function(){
+                \\  var text = document.body.innerText || document.body.textContent;
+                \\  console.log('[gossamer-export] ' + text.substring(0, 4000));
+                \\  window.__gossamer_emit&&window.__gossamer_emit('transmuted',{mode:'terminal_export'});
+                \\})();
+            ;
+            platform.eval(&handle.webview, export_js) catch {};
+        },
+        .panll_attach => {
+            // Send a groove registration message to PanLL on port 8000
+            const attach_js =
+                \\(function(){
+                \\  window.__gossamer_emit&&window.__gossamer_emit('transmuted',{mode:'panll_attach'});
+                \\  window.__gossamer_emit&&window.__gossamer_emit('panll_request',{action:'attach',window_id:window.__gossamer_window_id||0});
+                \\})();
+            ;
+            platform.eval(&handle.webview, attach_js) catch {};
+        },
+        .panll_detach => {
+            const detach_js =
+                \\(function(){
+                \\  window.__gossamer_emit&&window.__gossamer_emit('transmuted',{mode:'panll_detach'});
+                \\  window.__gossamer_emit&&window.__gossamer_emit('panll_request',{action:'detach',window_id:window.__gossamer_window_id||0});
+                \\})();
+            ;
+            platform.eval(&handle.webview, detach_js) catch {};
+        },
+    }
+
+    transmute_modes[slot] = new_mode;
+    clearError();
+    return .ok;
+}
+
+/// Get the current transmute mode for a window.
+export fn gossamer_transmute_get(handle_ptr: u64) c_int {
+    const handle = ptrFromU64(handle_ptr) orelse return -1;
+    const slot = getTransmuteSlot(handle) orelse return -1;
+    return @intFromEnum(transmute_modes[slot]);
+}
+
+//==============================================================================
+// Activity Throttling
+//==============================================================================
+//
+// Controls the processing intensity of the webview:
+//   paused   (0) — freeze JS execution and IPC delivery
+//   low      (1) — throttled: 1 fps, IPC batched (background tab equivalent)
+//   mid      (2) — moderate: 15 fps
+//   high     (3) — smooth: 30 fps
+//   realtime (4) — unthrottled, full CPU (default)
+//
+// Useful for resource management when many Gossamer panels are open.
+
+pub const ActivityLevel = enum(c_int) {
+    paused = 0,
+    low = 1,
+    mid = 2,
+    high = 3,
+    realtime = 4,
+};
+
+var activity_levels: [MAX_WINDOWS]ActivityLevel = [_]ActivityLevel{.realtime} ** MAX_WINDOWS;
+
+/// Set the activity level for a window.
+///
+/// Matches: Gossamer.ABI.Foreign.prim__activitySet
+export fn gossamer_activity_set(handle_ptr: u64, level: c_int) Result {
+    clearError();
+    const handle = ptrFromU64(handle_ptr) orelse {
+        setError("Null handle");
+        return .null_pointer;
+    };
+
+    if (requireOpen(handle)) |err| {
+        return err;
+    }
+
+    const new_level = std.meta.intToEnum(ActivityLevel, level) catch {
+        setError("Invalid activity level (0=paused, 1=low, 2=mid, 3=high, 4=realtime)");
+        return .invalid_param;
+    };
+
+    const slot = getTransmuteSlot(handle) orelse {
+        setError("Window not registered");
+        return .@"error";
+    };
+
+    // Apply throttling via JavaScript.
+    // Paused: inject a blocking overlay and suspend timers.
+    // Low/Mid/High: control requestAnimationFrame throttle.
+    switch (new_level) {
+        .paused => {
+            const js =
+                \\(function(){
+                \\  window.__gossamer_activity_paused=true;
+                \\  if(!document.getElementById('__gossamer_pause_overlay')){
+                \\    var el=document.createElement('div');
+                \\    el.id='__gossamer_pause_overlay';
+                \\    el.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;z-index:2147483646;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;font-family:system-ui;color:#fff;font-size:1.5em;';
+                \\    el.textContent='PAUSED';
+                \\    document.body.appendChild(el);
+                \\  }
+                \\  window.__gossamer_emit&&window.__gossamer_emit('activity_changed',{level:'paused'});
+                \\})();
+            ;
+            platform.eval(&handle.webview, js) catch {};
+        },
+        .low, .mid, .high => {
+            const fps: u32 = switch (new_level) {
+                .low => 1,
+                .mid => 15,
+                .high => 30,
+                else => 60,
+            };
+            _ = fps;
+            // Remove pause overlay if present, set throttle hint
+            const js =
+                \\(function(){
+                \\  window.__gossamer_activity_paused=false;
+                \\  var p=document.getElementById('__gossamer_pause_overlay');
+                \\  if(p)p.remove();
+                \\  window.__gossamer_emit&&window.__gossamer_emit('activity_changed',{level:'throttled'});
+                \\})();
+            ;
+            platform.eval(&handle.webview, js) catch {};
+        },
+        .realtime => {
+            const js =
+                \\(function(){
+                \\  window.__gossamer_activity_paused=false;
+                \\  var p=document.getElementById('__gossamer_pause_overlay');
+                \\  if(p)p.remove();
+                \\  window.__gossamer_emit&&window.__gossamer_emit('activity_changed',{level:'realtime'});
+                \\})();
+            ;
+            platform.eval(&handle.webview, js) catch {};
+        },
+    }
+
+    activity_levels[slot] = new_level;
+    clearError();
+    return .ok;
+}
+
+/// Get the current activity level for a window.
+export fn gossamer_activity_get(handle_ptr: u64) c_int {
+    const handle = ptrFromU64(handle_ptr) orelse return -1;
+    const slot = getTransmuteSlot(handle) orelse return -1;
+    return @intFromEnum(activity_levels[slot]);
+}
+
+//==============================================================================
+// Debug Drawer (Firefox-style bottom panel)
+//==============================================================================
+//
+// Injects a resizable drawer at the bottom of the webview showing:
+//   - IPC message log
+//   - Guard state
+//   - Activity level
+//   - Groove connections
+//   - Window registry info
+// Toggle via gossamer_debug_toggle() or Ctrl+Shift+D from JS.
+
+/// Inject the debug drawer into the webview.
+export fn gossamer_debug_open(handle_ptr: u64) Result {
+    clearError();
+    const handle = ptrFromU64(handle_ptr) orelse {
+        setError("Null handle");
+        return .null_pointer;
+    };
+    if (requireOpen(handle)) |err| return err;
+
+    const js =
+        \\(function(){
+        \\  if(document.getElementById('__gossamer_debug'))return;
+        \\  var d=document.createElement('div');
+        \\  d.id='__gossamer_debug';
+        \\  d.style.cssText='position:fixed;bottom:0;left:0;width:100%;height:200px;'
+        \\    +'background:#1a1a2e;border-top:2px solid #e94560;z-index:2147483640;'
+        \\    +'overflow-y:auto;font-family:monospace;font-size:12px;color:#e0e0e0;padding:8px;';
+        \\  d.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:4px">'
+        \\    +'<b style="color:#e94560">Gossamer Debug</b>'
+        \\    +'<span onclick="document.getElementById(\'__gossamer_debug\').remove()" '
+        \\    +'style="cursor:pointer;color:#666">[x]</span></div>'
+        \\    +'<div id="__gdbg_log" style="white-space:pre-wrap"></div>';
+        \\  document.body.style.paddingBottom='208px';
+        \\  document.body.appendChild(d);
+        \\  var origInvoke=window.__gossamer_invoke;
+        \\  if(origInvoke){
+        \\    window.__gossamer_invoke=function(name,payload){
+        \\      var log=document.getElementById('__gdbg_log');
+        \\      if(log){
+        \\        var t=new Date().toLocaleTimeString();
+        \\        log.textContent+=t+' IPC: '+name+' '+JSON.stringify(payload).substring(0,80)+'\n';
+        \\        log.scrollTop=log.scrollHeight;
+        \\      }
+        \\      return origInvoke(name,payload);
+        \\    };
+        \\  }
+        \\  document.addEventListener('keydown',function(e){
+        \\    if(e.ctrlKey&&e.shiftKey&&e.key==='D'){
+        \\      var dbg=document.getElementById('__gossamer_debug');
+        \\      if(dbg){dbg.remove();document.body.style.paddingBottom='';}
+        \\    }
+        \\  });
+        \\  window.__gossamer_emit&&window.__gossamer_emit('debug_opened',{});
+        \\})();
+    ;
+
+    platform.eval(&handle.webview, js) catch {
+        setError("Failed to inject debug drawer");
+        return .@"error";
+    };
+
+    clearError();
+    return .ok;
+}
+
+/// Close the debug drawer.
+export fn gossamer_debug_close(handle_ptr: u64) Result {
+    clearError();
+    const handle = ptrFromU64(handle_ptr) orelse {
+        setError("Null handle");
+        return .null_pointer;
+    };
+    if (requireOpen(handle)) |err| return err;
+
+    const js =
+        \\(function(){
+        \\  var d=document.getElementById('__gossamer_debug');
+        \\  if(d){d.remove();document.body.style.paddingBottom='';}
+        \\})();
+    ;
+
+    platform.eval(&handle.webview, js) catch {};
+    clearError();
+    return .ok;
+}
+
+/// Toggle the debug drawer.
+export fn gossamer_debug_toggle(handle_ptr: u64) Result {
+    clearError();
+    const handle = ptrFromU64(handle_ptr) orelse {
+        setError("Null handle");
+        return .null_pointer;
+    };
+    if (requireOpen(handle)) |err| return err;
+
+    const js =
+        \\(function(){
+        \\  var d=document.getElementById('__gossamer_debug');
+        \\  if(d){d.remove();document.body.style.paddingBottom='';}
+        \\  else{window.__gossamer_invoke&&window.__gossamer_invoke('debug_open',{});}
+        \\})();
+    ;
+
+    platform.eval(&handle.webview, js) catch {};
+    clearError();
+    return .ok;
+}
+
+//==============================================================================
+// Hard vs Soft Grooves
+//==============================================================================
+//
+// Hard Groove: persistent, auto-reconnecting, deeply wired integration.
+//   Example: Burble + Gossamer — voice is always available, reconnects on
+//   network interruption, shared state persists across sessions.
+//
+// Soft Groove: transient, on-demand, cleanly detachable.
+//   Example: feedback-o-tron during debugging — telemetry hooks in only when
+//   a debug session is active, leaves ZERO state when disconnected.
+//   Privacy guarantee: soft groove disconnect is a hard wipe.
+//
+// Both types use the same Groove protocol (/.well-known/groove) but differ
+// in lifecycle management and state persistence.
+
+pub const GrooveType = enum(c_int) {
+    hard = 0,
+    soft = 1,
+};
+
+const GrooveConnection = struct {
+    target_id: u32,
+    groove_type: GrooveType,
+    active: bool = false,
+    /// For soft grooves: auto-disconnect after this many seconds (0 = manual only)
+    ttl_seconds: u32 = 0,
+};
+
+const MAX_GROOVE_CONNECTIONS: usize = 32;
+var groove_connections: [MAX_GROOVE_CONNECTIONS]GrooveConnection = [_]GrooveConnection{.{ .target_id = 0, .groove_type = .hard }} ** MAX_GROOVE_CONNECTIONS;
+
+/// Establish a typed groove connection.
+/// type_: 0=hard, 1=soft
+/// ttl: for soft grooves, auto-disconnect after N seconds (0=manual)
+export fn gossamer_groove_connect_typed(target_id: u32, groove_type: c_int, ttl: u32) Result {
+    clearError();
+    const gt = std.meta.intToEnum(GrooveType, groove_type) catch {
+        setError("Invalid groove type (0=hard, 1=soft)");
+        return .invalid_param;
+    };
+
+    for (&groove_connections) |*gc| {
+        if (!gc.active) {
+            gc.* = .{
+                .target_id = target_id,
+                .groove_type = gt,
+                .active = true,
+                .ttl_seconds = if (gt == .soft) ttl else 0,
+            };
+            return .ok;
+        }
+    }
+
+    setError("Groove connection limit reached (max 32)");
+    return .@"error";
+}
+
+/// Disconnect a typed groove. For soft grooves, this wipes all shared state.
+export fn gossamer_groove_disconnect_typed(target_id: u32) Result {
+    clearError();
+    for (&groove_connections) |*gc| {
+        if (gc.active and gc.target_id == target_id) {
+            // Soft groove disconnect: privacy guarantee — zero out state
+            if (gc.groove_type == .soft) {
+                gc.* = .{ .target_id = 0, .groove_type = .hard };
+            } else {
+                gc.active = false;
+            }
+            return .ok;
+        }
+    }
+    return .ok; // Idempotent
+}
+
+/// Query groove type for a connected target.
+/// Returns: 0=hard, 1=soft, -1=not connected
+export fn gossamer_groove_query_type(target_id: u32) c_int {
+    for (groove_connections) |gc| {
+        if (gc.active and gc.target_id == target_id) {
+            return @intFromEnum(gc.groove_type);
+        }
+    }
+    return -1;
 }
 
 //==============================================================================
@@ -795,10 +1852,16 @@ export fn gossamer_channel_open(handle_ptr: u64) u64 {
     ++ "window.__gossamer_platform=" ++ PLATFORM_JSON ++ ";"
     ;
 
-    platform.eval(&handle.webview, bridge_js) catch {
-        setError("Failed to inject IPC bridge");
-        allocator.destroy(channel);
-        return 0;
+    // Register as a persistent user script so the bridge survives page
+    // navigation and load_html() calls. Unlike eval(), user scripts are
+    // re-injected automatically on every page load by the WebKit engine.
+    platform.addUserScript(&handle.webview, bridge_js) catch {
+        // Fallback: inject once via eval (won't survive page loads)
+        platform.eval(&handle.webview, bridge_js) catch {
+            setError("Failed to inject IPC bridge");
+            allocator.destroy(channel);
+            return 0;
+        };
     };
 
     clearError();

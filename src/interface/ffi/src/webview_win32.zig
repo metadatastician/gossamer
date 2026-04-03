@@ -69,6 +69,15 @@ extern "user32" fn RegisterClassExW(lpwcx: *const WNDCLASSEXW) callconv(.c) u16;
 extern "user32" fn PostQuitMessage(nExitCode: i32) callconv(.c) void;
 extern "user32" fn MoveWindow(hWnd: HWND, x: i32, y: i32, nWidth: i32, nHeight: i32, bRepaint: BOOL) callconv(.c) BOOL;
 extern "user32" fn GetClientRect(hWnd: HWND, lpRect: *RECT) callconv(.c) BOOL;
+extern "user32" fn SetForegroundWindow(hWnd: HWND) callconv(.c) BOOL;
+extern "user32" fn BringWindowToTop(hWnd: HWND) callconv(.c) BOOL;
+extern "user32" fn SetWindowPos(hWnd: HWND, hWndInsertAfter: ?HWND, x: i32, y: i32, cx: i32, cy: i32, uFlags: u32) callconv(.c) BOOL;
+
+const HWND_BOTTOM: ?HWND = @ptrFromInt(1);
+const SWP_NOMOVE: u32 = 0x0002;
+const SWP_NOSIZE: u32 = 0x0001;
+const SWP_NOACTIVATE: u32 = 0x0010;
+const SWP_NOZORDER: u32 = 0x0004;
 
 extern "ole32" fn CoInitializeEx(pvReserved: ?*anyopaque, dwCoInit: u32) callconv(.c) HRESULT;
 extern "ole32" fn CoUninitialize() callconv(.c) void;
@@ -615,6 +624,30 @@ pub fn maximize(state: *WebviewState) PlatformError!void {
 pub fn restore(state: *WebviewState) PlatformError!void {
     const hwnd = state.hwnd orelse return PlatformError.OperationFailed;
     _ = ShowWindow(hwnd, SW_RESTORE);
+}
+
+/// Register a persistent user script (re-injected on every page load).
+pub fn addUserScript(_: *WebviewState, _: [*:0]const u8) PlatformError!void {
+    // TODO: Use ICoreWebView2.AddScriptToExecuteOnDocumentCreated on Windows
+}
+
+/// Raise the window to the front of the z-order.
+pub fn raise(state: *WebviewState) PlatformError!void {
+    const hwnd = state.hwnd orelse return PlatformError.OperationFailed;
+    _ = SetForegroundWindow(hwnd);
+    _ = BringWindowToTop(hwnd);
+}
+
+/// Lower the window to the back of the z-order.
+pub fn lower(state: *WebviewState) PlatformError!void {
+    const hwnd = state.hwnd orelse return PlatformError.OperationFailed;
+    _ = SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+}
+
+/// Move the window to absolute screen coordinates.
+pub fn moveTo(state: *WebviewState, x: i32, y: i32) PlatformError!void {
+    const hwnd = state.hwnd orelse return PlatformError.OperationFailed;
+    _ = SetWindowPos(hwnd, null, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
 }
 
 /// Request that the window close.
