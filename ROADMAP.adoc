@@ -7,10 +7,11 @@ typed IPC protocol, and linear capability tokens.
 
 == Current Status
 
-**v0.3.0 released** — Cross-platform desktop support. Linux (WebKitGTK) fully
-operational. macOS (WKWebView/Cocoa) implemented with full IPC. Windows
-(WebView2/COM) implemented with async COM callback chain and IPC handler.
-Platform detection query API for runtime platform introspection.
+**v0.3.1 released** (2026-04-03) — Mobile bug fixes, 173 integration tests, package distribution.
+
+**v0.3.0 released** (2026-03-29) — Cross-platform desktop. Linux (WebKitGTK) fully
+operational. macOS (WKWebView/Cocoa) with full IPC. Windows (WebView2/COM) with
+async COM callback chain. Platform detection query API.
 
 == Phase 1 — Foundation (v0.1.x) ✓
 
@@ -105,16 +106,19 @@ Mobile platforms using platform-native webviews.
 * [x] UIKit / WKWebView bindings via Objective-C runtime
 * [x] UIWindow / UIViewController lifecycle
 * [x] WKScriptMessageHandler for IPC
-* [x] Screen-filling layout
+* [x] Dynamic screen size: UIScreen.mainScreen.bounds via objc_msgSend→CGRect (2026-04-03)
+* [x] Screen dimensions stored in WebviewState.screen_width/height
 * [ ] App Store packaging and signing
 * [ ] Push notification integration
 * [ ] Safe area insets handling
 
-=== Android (webview_android.zig) — Scaffolded
+=== Android (webview_android.zig) — Partially Implemented
 
 * [x] JNI type definitions and entry points
 * [x] GossamerActivity native init/destroy via JNI_OnLoad
 * [x] WebviewState with JNI references
+* [x] jni_NewObject for GossamerBridge constructor (fixed from CallObjectMethod, 2026-04-03)
+* [x] nativeInit accepts and caches screen_width/screen_height params
 * [ ] JNI FindClass / GetMethodID / CallVoidMethod for WebView operations
 * [ ] loadData / loadUrl / evaluateJavascript via JNI
 * [ ] addJavascriptInterface for IPC bridge

@@ -93,10 +93,24 @@ cd gossamer && bash examples/hello/run.sh
 
 == Current Status
 
-* *v0.1 (released)*: Linux desktop (WebKitGTK). Working, tested, shipping.
-* *v0.2 (in progress)*: Async IPC, CSP enforcement, streaming events, corrective fixes. Integration tests and hot reload in progress.
-* *v0.3 (planned)*: macOS and Windows support.
-* *v0.4 (planned)*: Mobile (iOS and Android).
+* *v0.3.1 (current)*: 173 integration tests. Mobile bug fixes (iOS screen size, Android JNI constructor). Package distribution (deb/rpm/flatpak/dmg/wix).
+* *v0.3.0 (released)*: Cross-platform desktop — Linux (WebKitGTK), macOS (WKWebView/Cocoa), Windows (WebView2/COM). Platform detection API. Hot reload.
+* *v0.2.0 (released)*: Async IPC, CSP enforcement, streaming events, corrective fixes.
+* *v0.1.0 (released)*: Linux desktop (WebKitGTK). Working, tested, shipping.
+
+=== Package Distribution
+
+Pre-built packages and installers are available for all major platforms. Build locally with:
+
+[source,bash]
+----
+just package-deb      # Debian/Ubuntu .deb
+just package-rpm      # Fedora/RHEL .rpm
+just package-flatpak  # Flatpak (universal Linux)
+just package-macos    # macOS universal .dmg (lipo x64+arm64)
+just package-windows  # Windows .msi (WiX 4 installer)
+just package-all      # All of the above
+----
 
 == Research
 

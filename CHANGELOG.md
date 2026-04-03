@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-04-03
+
+### Added
+- **Integration test suite expanded**: 39 → 173 tests (+134 new), covering guard mode, window registry, window groups lifecycle, z-order management, broadcast/send_to, arrange strategies, transmute, activity tracking, debug drawer, typed Groove, async IPC, platform queries, CSP module, filesystem (cap-gating + round-trip), SSG (md_to_html, template substitution, front matter/body extraction), Groove module, and cross-cutting invariants
+- **Package distribution recipes**: Debian `.deb` (dpkg-buildpackage + dh), RPM `.spec` (rpmbuild), Flatpak JSON manifest, macOS universal binary + DMG (lipo + hdiutil), Windows WiX 4 installer with PATH registration
+- **Justfile packaging recipes**: `package-deb`, `package-rpm`, `package-flatpak`, `package-macos`, `package-windows`, `package-all`
+
+### Fixed
+- **iOS screen dimensions**: `webview_ios.zig` now queries `UIScreen.mainScreen.bounds` via `objc_msgSend` cast to `*const fn → CGRect`; hardcoded 390×844 replaced with real device dimensions stored in `WebviewState.screen_width/height`
+- **Android JNI constructor**: `registerIPCHandler` was calling `jni_CallObjectMethod` (instance method) on a class reference with `<init>` — fundamentally wrong. Replaced with `jni_NewObject(env, bridge_cls, bridge_init, native_ptr)` with correct `jni_NewObject` extern declaration. `nativeInit` now accepts and caches `screen_width`/`screen_height` params
+- **`.zig-cache/` gitignore too narrow**: Changed `.zig-cache/` (root-only) and `zig-out/` to `**/.zig-cache/` and `**/zig-out/` to catch nested build artifact directories (`cli/.zig-cache/`, `src/interface/ffi/.zig-cache/`, etc.)
+
 ## [0.3.0] — 2026-03-29
 
 ### Added

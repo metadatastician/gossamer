@@ -27,6 +27,8 @@
 
 ### P0 — Wire IPC (make buttons work) [DONE 2026-03-29]
 
+> All subsequent phases (P1–P3 platforms, integration tests, packaging) completed 2026-04-03. See CHANGELOG.md for details.
+
 All 18 IPC commands wired through gossamer_channel_bind in main.eph:
 - 6 disk/system commands (load_level, save_level, validate_level_abi,
   list_levels, export_level_config, get_system_info)
@@ -45,7 +47,7 @@ scripts/md-to-html.awk + template-sub.awk. Site sources committed.
 Remaining: rewrite SSG in Ephapax (the full dogfooding goal — Gossamer's
 website built by Gossamer's language, not AWK).
 
-### P2 — arXiv submission
+### P2 — arXiv submission [BLOCKED — user login required]
 
 Upload `docs/whitepapers/gossamer-arxiv-paper.tex` to arxiv.org.
 Category: cs.PL (Programming Languages) or cs.SE (Software Engineering).
@@ -69,12 +71,12 @@ Version bumped to 0.3.0.
 - Post to lobste.rs / Hacker News
 - OpenSSF Scorecard badge
 
-### P5 — IDApTIK full migration
+### P5 — IDApTIK full migration [PARTIALLY DONE — staging decision required]
 
 - [x] Wire all 12 UMS FFI functions through IPC (done in P0, 2026-03-29)
-- Migrate UMS from Tauri to Gossamer for desktop
-- Keep Tauri for mobile (until Phase 3)
-- Test with real level editing workflow
+- [ ] Migrate UMS from Tauri to Gossamer for desktop (requires staging vs live decision)
+- [x] Mobile platform support: iOS screen size fixed, Android JNI constructor fixed (2026-04-03)
+- [ ] Test with real level editing workflow
 
 ### P6 — Ephapax compiler improvements
 

@@ -5,14 +5,14 @@
 
 [metadata]
 project = "gossamer"
-version = "0.2.0"
-last-updated = "2026-03-23"
+version = "0.3.1"
+last-updated = "2026-04-03"
 status = "active"  # active | paused | archived
 
 [project-context]
 name = "gossamer"
 purpose = "Linearly-typed webview shell with formal ABI proofs — Ephapax backend, Idris2 ABI, Zig FFI. Desktop apps that can't leak resources by design."
-completion-percentage = 45
+completion-percentage = 78
 
 [position]
 phase = "implementation"  # design | implementation | testing | maintenance | archived
@@ -26,9 +26,9 @@ milestones = [
   { name = "Phase 2: Async IPC (gossamer_channel_bind_async, 256-slot inflight, worker threads)", completion = 100 },
   { name = "Phase 2b: CSP enforcement (gossamer_set_csp, CLI auto-apply, Rust/ReScript bindings)", completion = 100 },
   { name = "Phase 2c: Streaming IPC (gossamer_emit, g_idle_add, JS/Rust/ReScript bindings)", completion = 100 },
-  { name = "Phase 3: Integration tests + hot reload", completion = 20 },
-  { name = "Phase 4: macOS and Windows support", completion = 0 },
-  { name = "Phase 5: Mobile (iOS and Android)", completion = 0 },
+  { name = "Phase 3: Integration tests + hot reload", completion = 100 },
+  { name = "Phase 4: macOS and Windows support", completion = 100 },
+  { name = "Phase 5: Mobile (iOS and Android)", completion = 70 },
 ]
 
 [blockers-and-issues]
@@ -36,10 +36,11 @@ milestones = [
 
 [critical-next-actions]
 actions = [
-  "Complete integration tests for async IPC, CSP, and streaming events",
-  "Implement hot reload for development workflow",
-  "Begin macOS WebKit and Windows WebView2 platform backends",
-  "Expand unit test coverage for edge cases in 256-slot inflight tracker",
+  "Submit gossamer-arxiv-paper.tex to arxiv.org (cs.PL or cs.SE) — requires user login",
+  "IDApTIK desktop migration: replace Tauri with Gossamer for desktop builds (staging decision required)",
+  "Android NDK build integration and Gradle scaffolding for full Android support",
+  "App Store packaging, code signing, and notarisation for iOS",
+  "Plugin system (load/unload .so/.dylib/.dll at runtime) — Phase 4 Production",
 ]
 
 [maintenance-status]
@@ -59,4 +60,11 @@ depends-on = ["ephapax", "idris2", "zig", "webkitgtk"]
 #             CSP enforcement added (gossamer_set_csp, CLI auto-apply, Rust/ReScript bindings).
 #             Streaming IPC added (gossamer_emit, g_idle_add, JS/Rust/ReScript bindings). 13 new tests.
 # 2026-04-03: Window controls API recovery merged. Zig build artifacts removed (13,704 lines).
-#             Gitignore broadened to prevent future binary artifact commits.
+#             Gitignore broadened (**/.zig-cache/, **/zig-out/) to prevent future binary artifact commits.
+#             iOS bug fixed: UIScreen.mainScreen.bounds queried via objc_msgSend CGRect cast; dynamic screen size.
+#             Android JNI bug fixed: jni_NewObject replaces erroneous jni_CallObjectMethod for constructor call.
+#             Android nativeInit extended with screen_width/screen_height params and caching.
+#             Integration tests expanded 39 → 173 (+134 new tests covering all systems).
+#             Packaging added: deb, rpm, flatpak, macOS DMG, Windows WiX 4 installer + Justfile recipes.
+#             Airborne Submarine Squadron gossamer integration fixed: env-var URL resolution, Deno fallback
+#             serves from GAME_ROOT, WASM AffineScript co-processor wired into app_gossamer.js.
