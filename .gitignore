@@ -113,3 +113,10 @@ site/dist/
 # asdf version manager
 .tool-versions
 generated/
+# Exception: wokelangiser artifacts (consent gates and reports committed, i18n excluded)
+!generated/wokelangiser/
+!generated/wokelangiser/consent/
+!generated/wokelangiser/consent/**
+!generated/wokelangiser/compliance-report.txt
+# wokelangiser generated i18n locale files (too large for GitHub, 192MB-2.2GB each)
+generated/wokelangiser/i18n/
