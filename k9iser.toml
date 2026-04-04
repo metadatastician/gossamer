@@ -1,0 +1,111 @@
+# k9iser manifest — wrap configs into self-validating K9 contracts
+# SPDX-License-Identifier: PMPL-1.0-or-later
+#
+# gossamer: linearly-typed webview shell (Zig + WebKitGTK).
+# Safety-tier "yard" — application runtime, moderate scrutiny.
+
+[project]
+name = "gossamer"
+safety-tier = "yard"  # application runtime
+
+# ── gossamer.conf.json — main application config ──────────────────────────────
+
+[[configs]]
+name = "app-config"
+source = "gossamer.conf.json"
+format = "json"
+must = [
+  "app.windows[0] is set",                              # at least one window defined
+  "app.windows[0].width >= 800",                        # window width in usable range
+  "app.windows[0].height >= 600",                       # window height in usable range
+  "app.windows[0].minWidth >= 400",                     # minimum width sensible
+  "app.windows[0].minHeight >= 300",                    # minimum height sensible
+  "app.security.sandbox.enabled == true",               # sandbox must be on
+  "app.ipc.maxMessageSize > 0",                         # IPC message size positive
+  "app.ipc.maxMessageSize <= 67108864",                 # IPC message size <= 64MB (sanity)
+  "app.ipc.timeout > 0",                                # IPC timeout positive (ms)
+  "app.ipc.timeout <= 120000",                          # IPC timeout <= 2 min
+  "bundle.license == 'PMPL-1.0-or-later'",
+  "bundle.copyright is non-empty",
+  "bundle.linux.desktopEntry == true",                  # Linux desktop entry required
+  "ephapax.linearVerification == true",                 # Ephapax linear types active
+  "ephapax.regionBoundary == 'strict'",
+  "build.devUrl starts-with 'http://localhost:'",       # dev URL must be local
+]
+trust = ["signed-by: ci-pipeline"]
+dust = ["remove: null icon entries", "remove: empty frameworks arrays"]
+intend = ["production-ready", "ephapax-verified"]
+
+# ── container/manifest.toml — Cerro Torre .ctp bundle manifest ───────────────
+
+[[configs]]
+name = "ctp-bundle-manifest"
+source = "container/manifest.toml"
+format = "toml"
+must = [
+  "metadata.license == 'PMPL-1.0-or-later'",
+  "metadata.homepage is non-empty",
+  "metadata.maintainer is non-empty",
+  "provenance.upstream starts-with 'https://'",         # HTTPS provenance only
+  "attestations.require contains 'source-signature'",
+  "attestations.require contains 'sbom-complete'",
+  "security.no_new_privileges == true",
+  "security.capabilities.drop contains 'ALL'",
+]
+trust = ["signed-by: cerro-torre"]
+dust = []
+intend = ["supply-chain-verified"]
+
+# ── stapeln.toml — container layer build ─────────────────────────────────────
+
+[[configs]]
+name = "container-build"
+source = "stapeln.toml"
+format = "toml"
+must = [
+  "metadata.license == 'PMPL-1.0-or-later'",
+  "metadata.registry == 'ghcr.io/hyperpolymath'",
+  "build.runtime == 'podman'",
+  "layers.base.from starts-with 'cgr.dev/chainguard/'",
+  "layers.base.verify == true",
+  "layers.runtime.user == 'nonroot'",
+  "security.non-root == true",
+  "security.no-new-privileges == true",
+  "security.cap-drop contains 'ALL'",
+  "security.signing.algorithm == 'ML-DSA-87'",
+  "security.signing.provider == 'cerro-torre'",
+  "security.sbom.format == 'spdx-json'",
+  "verify.vordr == true",
+  "verify.svalinn == true",
+  "verify.scan-on-build == true",
+  "verify.fail-on contains 'critical'",
+  "verify.fail-on contains 'high'",
+]
+trust = ["signed-by: ci-pipeline"]
+dust = []
+intend = ["production-ready", "supply-chain-verified"]
+
+# ── selur-compose.toml — service orchestration ───────────────────────────────
+
+[[configs]]
+name = "compose"
+source = "selur-compose.toml"
+format = "toml"
+must = [
+  "version is set",
+  "services.svalinn is set",                            # Svalinn gateway always present
+  "services.svalinn.ports contains '443:443'",          # TLS port mandatory
+  "services.svalinn.restart == 'always'",
+  "services.gossamer.restart == 'always'",
+  "services.gossamer.healthcheck is set",               # healthcheck mandatory
+  "services.svalinn.healthcheck is set",
+  "networks.default.driver == 'selur'",                 # selur IPC driver required
+]
+trust = ["signed-by: ci-pipeline"]
+dust = []
+intend = ["production-ready"]
+
+[validation]
+strict = true
+auto-fix = false
+report-format = "text"

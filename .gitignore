@@ -112,3 +112,4 @@ site/dist/
 
 # asdf version manager
 .tool-versions
+generated/
