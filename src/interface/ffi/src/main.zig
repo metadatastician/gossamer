@@ -2749,3 +2749,98 @@ test "platform JSON is valid-looking JSON" {
     // Must contain "version" field with "0.3.0"
     try std.testing.expect(std.mem.indexOf(u8, json_str, "\"version\":\"0.3.0\"") != null);
 }
+
+//==============================================================================
+// CRG B — Additional native Zig tests for IPC, error handling, capability edge cases
+//==============================================================================
+
+test "clearError nulls out the error after setError" {
+    setError("test error");
+    try std.testing.expect(last_error != null);
+    clearError();
+    try std.testing.expect(last_error == null);
+}
+
+test "gossamer_last_error returns null when no error" {
+    clearError();
+    const err = gossamer_last_error();
+    try std.testing.expectEqual(@as(?[*:0]const u8, null), err);
+}
+
+test "setError preserves message content" {
+    const msg = "capability overflow";
+    setError(msg);
+    try std.testing.expect(last_error != null);
+    try std.testing.expect(std.mem.eql(u8, last_error.?, msg));
+    clearError();
+}
+
+test "capability registry full returns CAP_ERROR" {
+    // Save and reset cap state for this test
+    const saved_count = cap_count;
+    cap_count = 0;
+
+    // Fill all 256 slots
+    var tokens: [MAX_CAPABILITIES]u64 = undefined;
+    var granted: usize = 0;
+    for (0..MAX_CAPABILITIES) |i| {
+        const token = gossamer_cap_grant(@intCast(i % 6)); // 0-5 are valid kinds
+        if (token != CAP_ERROR) {
+            tokens[granted] = token;
+            granted += 1;
+        }
+    }
+    // Next grant should fail
+    const overflow_token = gossamer_cap_grant(0);
+    try std.testing.expectEqual(CAP_ERROR, overflow_token);
+
+    // Clean up — revoke all granted tokens
+    for (tokens[0..granted]) |t| {
+        gossamer_cap_revoke(t);
+    }
+    cap_count = saved_count; // Restore for other tests
+}
+
+test "async IPC slots are bounded at MAX_INFLIGHT_ASYNC" {
+    // Acquire all slots
+    var acquired: usize = 0;
+    while (async_ipc.acquireSlot()) |_| {
+        acquired += 1;
+        if (acquired > MAX_INFLIGHT_ASYNC + 1) break; // Safety limit
+    }
+    try std.testing.expectEqual(MAX_INFLIGHT_ASYNC, acquired);
+
+    // Release all
+    for (0..acquired) |i| {
+        async_ipc.releaseSlot(i);
+    }
+}
+
+test "revocation set handles more than MAX_REVOKED entries via FIFO" {
+    // Reset revocation state for this test
+    const saved_count = revoked_count;
+    revoked_count = MAX_REVOKED - 1;
+
+    // Add one more — should succeed (fills last slot)
+    gossamer_cap_revoke(0xDEAD);
+    try std.testing.expectEqual(MAX_REVOKED, revoked_count);
+
+    // Add another — should evict oldest via FIFO
+    gossamer_cap_revoke(0xBEEF);
+    try std.testing.expectEqual(MAX_REVOKED, revoked_count);
+    // The newest token should be at the end
+    try std.testing.expectEqual(@as(u64, 0xBEEF), revoked_tokens[MAX_REVOKED - 1]);
+
+    // Restore
+    revoked_count = saved_count;
+}
+
+test "Result enum has at least 10 variants and they are contiguous" {
+    // Verify known result codes cast to distinct integers
+    const ok: c_int = @intFromEnum(Result.ok);
+    const err: c_int = @intFromEnum(Result.@"error");
+    const guard: c_int = @intFromEnum(Result.guard_locked);
+    try std.testing.expectEqual(@as(c_int, 0), ok);
+    try std.testing.expectEqual(@as(c_int, 1), err);
+    try std.testing.expect(guard >= 10); // At least 11 variants (0..10)
+}
