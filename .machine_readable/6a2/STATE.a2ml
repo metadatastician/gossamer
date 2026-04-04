@@ -6,16 +6,22 @@
 [metadata]
 project = "gossamer"
 version = "0.3.1"
-last-updated = "2026-04-03"
+last-updated = "2026-04-04"
 status = "active"  # active | paused | archived
 
 [project-context]
 name = "gossamer"
 purpose = "Linearly-typed webview shell with formal ABI proofs — Ephapax backend, Idris2 ABI, Zig FFI. Desktop apps that can't leak resources by design."
-completion-percentage = 78
+completion-percentage = 82
+
+[crg]
+grade = "C"           # D | C | B | A
+achieved-on = "2026-04-04"
+next-target = "B"
+notes = "CRG C: 106 Deno tests (unit+property+e2e+aspect+bench). Native Zig test coverage needed for B."
 
 [position]
-phase = "implementation"  # design | implementation | testing | maintenance | archived
+phase = "testing"  # design | implementation | testing | maintenance | archived
 maturity = "alpha"        # experimental | alpha | beta | production | lts
 
 [route-to-mvp]
@@ -68,3 +74,7 @@ depends-on = ["ephapax", "idris2", "zig", "webkitgtk"]
 #             Packaging added: deb, rpm, flatpak, macOS DMG, Windows WiX 4 installer + Justfile recipes.
 #             Airborne Submarine Squadron gossamer integration fixed: env-var URL resolution, Deno fallback
 #             serves from GAME_ROOT, WASM AffineScript co-processor wired into app_gossamer.js.
+# 2026-04-04: CRG blitz D→C. Added 106 Deno tests (unit: 52, property: 15, e2e: 15, aspect: 25).
+#             22 benchmarks baselined across IPC/capability/path/dialog/result groups.
+#             tests/fuzz/placeholder.txt deleted (fake fuzz scorecard placeholder removed).
+#             deno.json added with test task definitions. TEST-NEEDS.md updated to CRG C.
