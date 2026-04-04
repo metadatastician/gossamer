@@ -1,25 +1,256 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 = Gossamer — Show Me The Receipts
 :toc:
+:toclevels: 3
 :icons: font
+:author: Jonathan D.A. Jewell
 
-The README makes claims. This file backs them up.
+The README makes claims. This file backs them up with code paths, honest
+caveats, and enough structural detail for an external reviewer to know where
+to look when something goes wrong.
+
+== Claim 1: "Leaked handles, dangling references, and permission bypasses become compile errors"
 
 [quote, README]
 ____
-Gossamer wraps your web frontend in a native window — like Tauri or Electron — but the compiler proves your app handles every resource correctly. Leaked handles, dangling references, and permission bypasses become compile errors instead of production incidents.
+Gossamer wraps your web frontend in a native window — like Tauri or Electron
+— but the compiler proves your app handles every resource correctly. Leaked
+handles, dangling references, and permission bypasses become compile errors
+instead of production incidents.
 ____
+
+=== How it works
+
+The backend language is Ephapax, which has two binding modes:
+
+* `let x = ...` — affine, use at most once; implicit cleanup is fine
+* `let! x = ...` — linear, use exactly once; the compiler enforces consumption
+
+Window handles, IPC channels, file handles, and connections are typed as
+linear resources. A program that drops a linear binding without consuming it
+fails to compile. A program that tries to use a handle after passing it to
+`gossamer_run` fails because the binding has already been moved.
+
+=== Code path
+
+The IPC channel linearity contract lives in `src/core/Bridge.eph`:
+
+[source]
+----
+fn open(webviewHandle: I64): I64 =
+  __ffi("gossamer_channel_open", webviewHandle)
+
+fn close(channelHandle: I64): () =
+  __ffi("gossamer_channel_close", channelHandle)
+----
+
+`open` returns a linear I64 handle. `close` consumes it. Calling `open`
+without eventually reaching `close` on every path is a compile-time error
+in Ephapax.
+
+The Idris2 ABI layer (`src/interface/abi/HandleLinearity.idr`) provides
+machine-checked proofs that the FFI boundary preserves linearity: a handle
+that enters the Zig layer cannot be silently duplicated or dropped.
+
+The Zig FFI entry (`src/interface/ffi/src/main.zig`) dispatches at compile
+time to a platform-specific webview module:
+
+[source,zig]
+----
+const platform = switch (builtin.os.tag) {
+    .linux, .freebsd => @import("webview_gtk.zig"),
+    .macos           => @import("webview_cocoa.zig"),
+    .windows         => @import("webview_win32.zig"),
+    .ios             => @import("webview_ios.zig"),
+};
+----
+
+There is no runtime dispatch overhead.
+
+=== Honest caveat
+
+The linearity guarantee applies to code written in Ephapax. If a consumer
+calls the raw C FFI directly (from C, Rust, or ReScript), the Ephapax
+compiler cannot enforce linearity across that boundary. The Idris2 proofs
+cover the ABI contract, not arbitrary callers. The `bindings/` tree provides
+typed wrappers for Rust and ReScript that partially restore safety, but those
+wrappers are not machine-checked at the same level as the Ephapax layer.
+
+== Claim 2: "IPC messages can't mismatch — frontend and backend agree at compile time"
+
+[quote, README]
+____
+IPC messages can't mismatch. Frontend and backend agree on message shapes at
+compile time, not at runtime when your user hits the bug.
+____
+
+=== How it works
+
+The capability registry is declared in `src/interface/abi/IPCIntegrity.idr`.
+Idris2 types describe the allowed command names, their argument types, and
+return types. The Zig layer must match the declared ABI or the build fails.
+
+`CapabilityAuthenticity.idr` in the same directory goes further: it proves
+that every declared capability has a corresponding handler implementation,
+that phantom capabilities cannot be invoked, and that delegated capabilities
+cannot exceed the scope of the original grant. All proofs are constructive
+(zero `believe_me`).
+
+The CLI reads `gossamer.conf.json` at startup, applies CSP via
+`gossamer_set_csp()` before any webview content loads, and registers
+capabilities into the 256-slot FIFO registry. A frontend call to an
+unregistered capability hits overflow diagnostics rather than a silent
+permission bypass.
+
+`src/core/Groove.eph` wires service discovery: the frontend learns at startup
+which backend services are reachable (Burble, VeriSimDB, Hypatia, PanLL) and
+what capabilities they export, preventing IPC calls to absent services.
+
+=== Honest caveat
+
+The IPC type-safety holds between Ephapax-typed backend handlers and the
+capability registry. The frontend JavaScript payload is validated at the
+boundary but JavaScript itself is not statically typed by Gossamer — the
+ReScript or JS calling code carries its own type discipline. The comparison
+table in the README ("Yes (compile-time)") is accurate for the Ephapax
+backend but should be read as applying at the backend boundary, not across
+the entire frontend JS heap.
+
+== Dogfooded Across The Account
+
+[cols="1,2,2"]
+|===
+| Technology | Role in Gossamer | Also Used In
+
+| *Ephapax* (`nextgen-languages/ephapax`)
+| Backend language; `let!` enforces resource linearity
+| All Ephapax-backed apps; gossamer is the primary consumer
+
+| *Idris2 ABI* (per ABI/FFI Universal Standard)
+| `src/interface/abi/` — machine-checked interface proofs
+| Groove, Stapeln, Burble, VeriSimDB, any repo with ABI layer
+
+| *Zig FFI* (per ABI/FFI Universal Standard)
+| `src/interface/ffi/` — C-compatible native webview layer
+| game-server-admin, protocol-squisher, Stapeln, Groove
+
+| *Groove protocol*
+| `src/interface/abi/Groove.idr`, `src/core/Groove.eph`,
+  `src/interface/ffi/src/groove.zig`
+| Every inter-service boundary in the account
+
+| *ReScript bindings*
+| `bindings/rescript/` — typed frontend IPC API
+| idaptik, panll, gossamer-powered SPAs
+
+| *Stapeln containers*
+| `stapeln.toml` + `Containerfile` (Chainguard base)
+| All containerised services in the account
+
+| *Hypatia scanning*
+| `.hypatia/` + `hypatia-scan.yml` CI
+| Every RSR repo in the account
+
+| *panic-attacker*
+| Pre-commit and CI gate for dangerous patterns
+| Ecosystem-wide pre-commit enforcement
+
+| *Justfile*
+| 18K-line `Justfile` covering build, package, verify, lint, deploy
+| Universal build tool across hyperpolymath repos
+|===
 
 == File Map
 
-[cols="1,2"]
+[cols="1,3"]
 |===
-| Path | What's There
+| Path | What It Proves
 
-| `src/` | Source code
-| `test(s)/` | Test suite
+| `src/core/`
+| Ephapax application logic. `Bridge.eph` is the linear IPC contract.
+`Capabilities.eph` maps registered capabilities. `Shell.eph` wraps subprocess
+execution. `Filesystem.eph` is capability-gated file I/O. `Tray.eph` drives
+system tray integration. `Groove.eph` handles service discovery. `Platform.eph`
+abstracts OS differences for Ephapax code. Critical path starts here.
+
+| `src/interface/abi/`
+| Idris2 ABI definitions and proofs. `Types.idr` defines `Cap`,
+`CapabilityType`, handle types, and result codes. `HandleLinearity.idr` proves
+handles cannot be duplicated across the FFI. `IPCIntegrity.idr` proves message
+type correspondence. `CapabilityAuthenticity.idr` proves declared capabilities
+have implementations (zero `believe_me`). `Groove.idr` specifies the service
+discovery protocol. `Foreign.idr` is the FFI declaration surface.
+`PanelIsolation.idr` proves panel sandboxing invariants.
+
+| `src/interface/ffi/src/`
+| Zig implementation of every exported C symbol. `main.zig` is the root;
+`comptime` blocks link `bridge_game_server.zig`, `tray.zig`, `dialog.zig`,
+`filesystem.zig`, `groove.zig`, `csp.zig`, `clipboard.zig`, `ssg.zig`.
+Platform dispatch is compile-time. The Zig files are the single source of
+truth for what the native layer actually does.
+
+| `ffi/zig/`
+| Standalone Zig FFI build for testing the C ABI without the full Ephapax
+toolchain. `build.zig` produces a shared library.
+
+| `verification/`
+| Machine-verification artefacts: `proofs/` (Idris2 proof objects),
+`benchmarks/`, `fuzzing/`, `safety_case/`, `traceability/`, `coverage/`,
+`simulations/`. This is where external auditors verify the claims.
+
+| `bindings/`
+| Language bindings for Rust and ReScript — typed wrappers around the C ABI.
+`bindings/rescript/` is the recommended frontend integration path.
+
+| `tests/`
+| 173 integration tests (v0.3.1). CI executes against real WebKitGTK on
+Linux. `just test` is the entry point.
+
+| `packaging/`
+| `deb/`, `rpm/`, `flatpak/`, `macos/`, `windows/` packaging scripts.
+`just package-all` produces distributable artefacts for all five platforms.
+
+| `cli/`
+| The `gossamer` CLI binary. Reads `gossamer.conf.json`, applies CSP, and
+launches the webview. Production deployment entry point.
+
+| `api/`
+| HTTP API surface exposed to the web frontend (distinct from native IPC).
+
+| `schema/`
+| JSON Schema definitions for `gossamer.conf.json` and related config files.
+
+| `examples/`
+| Runnable demos including `hello/` (minimal window), CSP demo, tray demo,
+and platform-specific launchers.
+
+| `docs/`
+| Whitepapers and architecture notes, including the arXiv paper source at
+`docs/whitepapers/gossamer-arxiv-paper.tex`.
+
+| `android/`
+| Android-specific build artefacts and JNI bridge stubs for mobile targets.
+
+| `contractiles/`
+| Contractile.just ecosystem integration — shared build recipes.
+
+| `.machine_readable/`
+| A2ML checkpoint files (`STATE.a2ml`, `META.a2ml`, `ECOSYSTEM.a2ml`).
+Canonical AI session state. Never root-level SCM files.
+
+| `.hypatia/`
+| Hypatia rule overrides and scan configuration specific to this repo.
+
+| `features/`
+| Behaviour-driven feature specifications (Gherkin-style).
+
+| `site/`
+| Static site content for the project homepage.
 |===
 
 == Questions?
 
-Open an issue or reach out directly — happy to explain anything in more detail.
+Open an issue or reach out directly. For the formal proofs, start with
+`src/interface/abi/README.adoc`. For the native layer, start with
+`src/interface/ffi/src/main.zig`.
