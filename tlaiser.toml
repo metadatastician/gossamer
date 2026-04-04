@@ -1,0 +1,155 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# tlaiser manifest for gossamer
+
+[project]
+name = "gossamer"
+version = "0.1.0"
+description = "State machines for the Gossamer webview desktop shell"
+
+# ── Window guard/visibility state ─────────────────────────────────────────────
+# Source: src/interface/ffi/src/main.zig
+# GossamerHandle fields: initialized, running, closed, visible, guard: GuardMode
+# GuardMode = enum { free, locked, read_only }
+
+[[state-machines]]
+name = "WindowLifecycle"
+states = ["Uninitialized", "Hidden", "Visible", "Running", "Closed"]
+initial-state = "Uninitialized"
+description = "Gossamer webview window lifecycle from creation to destruction. Controls show/hide/run/destroy transitions."
+
+  [[state-machines.variables]]
+  name = "guard_mode"
+  init = "0"
+  type = "INTEGER"
+
+  [[state-machines.transitions]]
+  from = "Uninitialized"
+  to = "Hidden"
+  label = "gossamer_create"
+  guard = "TRUE"
+  action = "guard_mode := 0"
+
+  [[state-machines.transitions]]
+  from = "Hidden"
+  to = "Visible"
+  label = "gossamer_show"
+
+  [[state-machines.transitions]]
+  from = "Visible"
+  to = "Hidden"
+  label = "gossamer_hide"
+  guard = "guard_mode = 0"
+
+  [[state-machines.transitions]]
+  from = "Visible"
+  to = "Running"
+  label = "gossamer_run"
+
+  [[state-machines.transitions]]
+  from = "Hidden"
+  to = "Running"
+  label = "gossamer_run"
+
+  [[state-machines.transitions]]
+  from = "Running"
+  to = "Closed"
+  label = "window_closed"
+
+  [[state-machines.transitions]]
+  from = "Visible"
+  to = "Closed"
+  label = "gossamer_request_close"
+  guard = "guard_mode = 0"
+
+  [[state-machines.transitions]]
+  from = "Closed"
+  to = "Uninitialized"
+  label = "gossamer_destroy"
+
+# ── Window guard mode ─────────────────────────────────────────────────────────
+# Source: src/interface/ffi/src/main.zig
+# GuardMode: free(0), locked(1), read_only(2)
+# When locked or read_only, close/minimize/maximize/resize are rejected.
+
+[[state-machines]]
+name = "WindowGuard"
+states = ["Free", "Locked", "ReadOnly"]
+initial-state = "Free"
+description = "Window guard mode — prevents accidental close or resize when a critical operation is in progress."
+
+  [[state-machines.transitions]]
+  from = "Free"
+  to = "Locked"
+  label = "guard_lock"
+
+  [[state-machines.transitions]]
+  from = "Free"
+  to = "ReadOnly"
+  label = "guard_read_only"
+
+  [[state-machines.transitions]]
+  from = "Locked"
+  to = "Free"
+  label = "guard_unlock"
+
+  [[state-machines.transitions]]
+  from = "ReadOnly"
+  to = "Free"
+  label = "guard_unlock"
+
+  [[state-machines.transitions]]
+  from = "ReadOnly"
+  to = "Locked"
+  label = "guard_lock"
+
+# ── IPC capability token lifecycle ───────────────────────────────────────────
+# Source: src/core/Capabilities.eph, bindings/rust/src/lib.rs
+# Linear resource: grant -> (check)* -> revoke
+
+[[state-machines]]
+name = "CapabilityToken"
+states = ["Ungranted", "Active", "Revoked"]
+initial-state = "Ungranted"
+description = "Capability token lifecycle. Tokens are linear resources — granted once, checked N times, revoked exactly once."
+
+  [[state-machines.variables]]
+  name = "resource_kind"
+  init = "0"
+  type = "INTEGER"
+
+  [[state-machines.transitions]]
+  from = "Ungranted"
+  to = "Active"
+  label = "cap_grant"
+
+  [[state-machines.transitions]]
+  from = "Active"
+  to = "Active"
+  label = "cap_check"
+
+  [[state-machines.transitions]]
+  from = "Active"
+  to = "Revoked"
+  label = "cap_revoke"
+
+# ── Safety properties ─────────────────────────────────────────────────────────
+
+[[properties]]
+name = "GuardedWindowCannotClose"
+kind = "safety"
+formula = "[][WindowGuard # Free => WindowLifecycle # Closed]_WindowLifecycle"
+
+[[properties]]
+name = "RevokedTokenNeverChecked"
+kind = "safety"
+formula = "[][CapabilityToken = Revoked => UNCHANGED CapabilityToken]_CapabilityToken"
+
+[[properties]]
+name = "WindowEventuallyRuns"
+kind = "liveness"
+formula = "<>(WindowLifecycle = Running)"
+
+[tlc]
+workers = 4
+max-states = 100000
+symmetry = false
