@@ -12,13 +12,13 @@ status = "active"  # active | paused | archived
 [project-context]
 name = "gossamer"
 purpose = "Linearly-typed webview shell with formal ABI proofs — Ephapax backend, Idris2 ABI, Zig FFI. Desktop apps that can't leak resources by design."
-completion-percentage = 82
+completion-percentage = 85
 
 [crg]
 grade = "C"           # D | C | B | A
 achieved-on = "2026-04-04"
 next-target = "B"
-notes = "CRG C: 106 Deno tests (unit+property+e2e+aspect+bench). Native Zig test coverage needed for B."
+notes = "CRG C: 106 Deno tests + 27 native Zig tests. Binary IPC support added. Approaching B (needs multi-platform CI)."
 
 [position]
 phase = "testing"  # design | implementation | testing | maintenance | archived
@@ -77,4 +77,8 @@ depends-on = ["ephapax", "idris2", "zig", "webkitgtk"]
 # 2026-04-04: CRG blitz D→C. Added 106 Deno tests (unit: 52, property: 15, e2e: 15, aspect: 25).
 #             22 benchmarks baselined across IPC/capability/path/dialog/result groups.
 #             tests/fuzz/placeholder.txt deleted (fake fuzz scorecard placeholder removed).
+# 2026-04-04: Maintenance session: Binary IPC payload support (base64 transport, JS ArrayBuffer detect,
+#             Zig base64 decode). 8 new native Zig tests for CRG B (error handling, cap overflow,
+#             async IPC exhaustion, revocation FIFO, result enum integrity). Hot reload watcher already
+#             implemented. All corrective backlog items now closed.
 #             deno.json added with test task definitions. TEST-NEEDS.md updated to CRG C.
