@@ -222,7 +222,7 @@ public export
 burbleManifest : GrooveManifest
   [Voice, Text, Presence, SpatialAudio, Recording, TTS, STT]
   [Integrity, OctadStorage, Scanning]
-burbleManifest = MkManifest "burble" "0.1.0" 4020 "/health"
+burbleManifest = MkManifest "burble" "0.1.0" 6473 "/health"
 
 ||| Vext: verifiable communications protocol.
 public export
@@ -236,7 +236,7 @@ public export
 verisimdbManifest : GrooveManifest
   [OctadStorage, DriftDetection, TemporalVer]
   [Scanning]
-verisimdbManifest = MkManifest "verisimdb" "0.1.0" 8093 "/health"
+verisimdbManifest = MkManifest "verisimdb" "0.1.0" 8080 "/health"
 
 ||| Hypatia: neurosymbolic CI/CD intelligence.
 public export
@@ -250,14 +250,14 @@ public export
 panllManifest : GrooveManifest
   [PanelUI]
   [Voice, Text, Presence, Integrity, OctadStorage, Scanning]
-panllManifest = MkManifest "panll" "0.1.0" 4040 "/health"
+panllManifest = MkManifest "panll" "0.1.0" 8000 "/health"
 
 ||| ECHIDNA: neurosymbolic theorem prover.
 public export
 echidnaManifest : GrooveManifest
   [TheoremProve]
   [OctadStorage, Scanning]
-echidnaManifest = MkManifest "echidna" "0.1.0" 8081 "/health"
+echidnaManifest = MkManifest "echidna" "0.1.0" 9000 "/health"
 
 ||| RPA Elysium: robotic process automation.
 public export
@@ -278,14 +278,14 @@ public export
 panicManifest : GrooveManifest
   [StaticAnalysis]
   [OctadStorage, Workflow]
-panicManifest = MkManifest "panic-attacker" "0.1.0" 7600 "/health"
+panicManifest = MkManifest "panic-attack" "0.1.0" 7600 "/health"
 
 ||| Gitbot-fleet: automated bot coordination.
 public export
 gitbotManifest : GrooveManifest
   [BotOrch]
   [Scanning, Workflow, OctadStorage]
-gitbotManifest = MkManifest "gitbot-fleet" "0.1.0" 7500 "/health"
+gitbotManifest = MkManifest "gitbot-fleet" "0.1.0" 8080 "/health"
 
 --------------------------------------------------------------------------------
 -- Groove Handle (Linear Resource)

@@ -38,14 +38,14 @@ const MAX_CAP_NAME: usize = 64;
 const targets = [TARGET_COUNT]struct { port: u16, name: []const u8 }{
     .{ .port = 6473, .name = "burble" },
     .{ .port = 6480, .name = "vext" },
-    .{ .port = 8093, .name = "verisimdb" },
+    .{ .port = 8080, .name = "verisimdb" },
     .{ .port = 9090, .name = "hypatia" },
-    .{ .port = 4040, .name = "panll" },
+    .{ .port = 8000, .name = "panll" },
     .{ .port = 9000, .name = "echidna" },
     .{ .port = 7800, .name = "rpa-elysium" },
     .{ .port = 7700, .name = "conflow" },
-    .{ .port = 7600, .name = "panic-attacker" },
-    .{ .port = 7500, .name = "gitbot-fleet" },
+    .{ .port = 7600, .name = "panic-attack" },
+    .{ .port = 8080, .name = "gitbot-fleet" },
 };
 
 /// Groove connection status.

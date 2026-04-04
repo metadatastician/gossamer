@@ -22,12 +22,12 @@
 // Well-known groove targets (port → service → primary capability):
 //   6473 → Burble     → voice, text, presence, spatial-audio, TTS, STT
 //   6480 → Vext       → integrity, feed-verification, hash-chain, attestation
-//   7500 → gitbot     → bot-orchestration
 //   7600 → panic      → static-analysis
 //   7700 → conflow    → config-orchestration
 //   7800 → rpa        → workflow
-//   4040 → PanLL      → panel-ui
+//   8000 → PanLL      → panel-ui
 //   8080 → VeriSimDB  → octad-storage, drift-detection, temporal-versioning
+//   8080 → gitbot     → bot-orchestration (shares VeriSimDB port — TODO: assign unique)
 //   9000 → ECHIDNA    → theorem-proving
 //   9090 → Hypatia    → scanning, static-analysis
 

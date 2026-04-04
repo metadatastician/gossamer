@@ -120,40 +120,39 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Setup Deno
-        uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
-
-      - name: Clone and run empty-linter
+      - name: Scan for invisible characters
         id: lint
         run: |
-          git clone --depth 1 https://github.com/hyperpolymath/empty-linter.git "$HOME/empty-linter" 2>/dev/null || true
-          if [ -f "$HOME/empty-linter/deno.json" ]; then
-            cd "$HOME/empty-linter"
-            # Build ReScript output if needed
-            if [ -f "rescript.json" ]; then
-              deno task build 2>/dev/null || true
-            fi
-            set +e
-            deno run --allow-read src/cli/Main.res.js "$GITHUB_WORKSPACE" > /tmp/empty-lint-results.txt 2>&1
-            EL_EXIT=$?
-            set -e
-            FINDINGS=$(wc -l < /tmp/empty-lint-results.txt)
-            echo "findings=$FINDINGS" >> "$GITHUB_OUTPUT"
-            echo "exit_code=$EL_EXIT" >> "$GITHUB_OUTPUT"
-            echo "ready=true" >> "$GITHUB_OUTPUT"
+          # Inline invisible character detection (from empty-linter's core patterns).
+          # Checks for: zero-width spaces, zero-width joiners, BOM, soft hyphens,
+          # non-breaking spaces, null bytes, and other invisible Unicode in source files.
+          set +e
+          PATTERNS='\xc2\xa0|\xe2\x80\x8b|\xe2\x80\x8c|\xe2\x80\x8d|\xef\xbb\xbf|\xc2\xad|\xe2\x80\x8e|\xe2\x80\x8f|\xe2\x80\xaa|\xe2\x80\xab|\xe2\x80\xac|\xe2\x80\xad|\xe2\x80\xae|\x00'
+          find "$GITHUB_WORKSPACE" \
+            -not -path '*/.git/*' -not -path '*/node_modules/*' \
+            -not -path '*/.deno/*' -not -path '*/target/*' \
+            -not -path '*/_build/*' -not -path '*/deps/*' \
+            -not -path '*/external_corpora/*' -not -path '*/.lake/*' \
+            -type f \( -name '*.rs' -o -name '*.ex' -o -name '*.exs' -o -name '*.res' \
+              -o -name '*.js' -o -name '*.ts' -o -name '*.json' -o -name '*.toml' \
+              -o -name '*.yml' -o -name '*.yaml' -o -name '*.md' -o -name '*.adoc' \
+              -o -name '*.idr' -o -name '*.zig' -o -name '*.v' -o -name '*.jl' \
+              -o -name '*.gleam' -o -name '*.hs' -o -name '*.ml' -o -name '*.sh' \) \
+            -exec grep -Prl "$PATTERNS" {} \; > /tmp/empty-lint-results.txt 2>/dev/null
+          EL_EXIT=$?
+          set -e
 
-            # Emit annotations
-            while IFS= read -r line; do
-              if echo "$line" | grep -q ':'; then
-                echo "::warning::$line"
-              fi
-            done < /tmp/empty-lint-results.txt
-          else
-            echo "::notice::empty-linter not available — skipping"
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-          fi
+          FINDINGS=$(wc -l < /tmp/empty-lint-results.txt 2>/dev/null || echo 0)
+          echo "findings=$FINDINGS" >> "$GITHUB_OUTPUT"
+          echo "exit_code=$EL_EXIT" >> "$GITHUB_OUTPUT"
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+          # Emit annotations for each file with invisible chars
+          while IFS= read -r filepath; do
+            [ -z "$filepath" ] && continue
+            REL_PATH="${filepath#$GITHUB_WORKSPACE/}"
+            echo "::warning file=${REL_PATH}::Invisible Unicode characters detected (zero-width space, BOM, NBSP, etc.)"
+          done < /tmp/empty-lint-results.txt
 
       - name: Write summary
         run: |
