@@ -1938,8 +1938,17 @@ export fn gossamer_channel_open(handle_ptr: u64) u64 {
         \\  return new Promise(function(resolve, reject) {
         \\    var id = Date.now().toString(36) + Math.random().toString(36);
         \\    window.__gossamer_callbacks[id] = { resolve: resolve, reject: reject };
+        \\    var isBinary = payload instanceof ArrayBuffer || ArrayBuffer.isView(payload);
+        \\    var encodedPayload;
+        \\    if (isBinary) {
+        \\      var bytes = new Uint8Array(payload instanceof ArrayBuffer ? payload : payload.buffer);
+        \\      var binary = ''; for (var i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+        \\      encodedPayload = btoa(binary);
+        \\    } else {
+        \\      encodedPayload = JSON.stringify(payload || {});
+        \\    }
         \\    var msg = JSON.stringify({
-        \\      id: id, name: name, payload: JSON.stringify(payload || {})
+        \\      id: id, name: name, payload: encodedPayload, binary: isBinary ? 1 : 0
         \\    });
         \\    if (window.webkit && window.webkit.messageHandlers &&
         \\        window.webkit.messageHandlers.gossamer_ipc) {
@@ -1952,6 +1961,9 @@ export fn gossamer_channel_open(handle_ptr: u64) u64 {
         \\      reject(new Error("Gossamer IPC transport not available"));
         \\    }
         \\  });
+        \\};
+        \\window.__gossamer_invoke_binary = function(name, arrayBuffer) {
+        \\  return window.__gossamer_invoke(name, arrayBuffer);
         \\};
         \\window.__gossamer_listeners = {};
         \\window.__gossamer_on = function(eventName, callback) {

@@ -540,15 +540,43 @@ fn onIPCMessage(
         sendIPCError(handle, id, "Missing 'name' field in IPC message");
         return;
     };
-    const payload = extractJsonField(msg_slice, "payload") orelse "";
+    const payload_raw = extractJsonField(msg_slice, "payload") orelse "";
+    const binary_flag = extractJsonField(msg_slice, "binary") orelse "0";
+    const is_binary = binary_flag.len > 0 and binary_flag[0] == '1';
+
+    const allocator = std.heap.c_allocator;
+
+    // If binary flag is set, payload is base64-encoded.
+    // Decode it before passing to the handler.
+    var decoded_buf: ?[]u8 = null;
+    defer if (decoded_buf) |buf| allocator.free(buf);
+
+    const payload = blk: {
+        if (is_binary and payload_raw.len > 0) {
+            const decoded = std.base64.standard.Decoder.calcSizeForSlice(payload_raw) catch {
+                sendIPCError(handle, id, "Invalid base64 in binary IPC payload");
+                return;
+            };
+            const buf = allocator.alloc(u8, decoded) catch {
+                sendIPCError(handle, id, "Out of memory decoding binary payload");
+                return;
+            };
+            std.base64.standard.Decoder.decode(buf, payload_raw) catch {
+                allocator.free(buf);
+                sendIPCError(handle, id, "Base64 decode error in binary payload");
+                return;
+            };
+            decoded_buf = buf;
+            break :blk buf;
+        }
+        break :blk payload_raw;
+    };
 
     // Look up the binding by name
     const entry: BindingEntry = handle.bindings.get(name) orelse {
         sendIPCError(handle, id, "No handler bound for command");
         return;
     };
-
-    const allocator = std.heap.c_allocator;
 
     // ─── Async dispatch path ───
     // If the binding is marked async, spawn a worker thread so the
