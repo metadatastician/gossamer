@@ -1,0 +1,100 @@
+= Gossamer Framework Comparison Benchmarks
+:author: Jonathan D.A. Jewell (hyperpolymath)
+:revdate: 2026-04-10
+:toc:
+
+== Overview
+
+Gossamer is a linearly-typed webview shell framework. This document compares
+it against other desktop application frameworks on binary size, startup time,
+memory usage, and IPC latency.
+
+== Binary Size Comparison
+
+[cols="1,1,1", options="header"]
+|===
+| Framework | Typical Binary Size | Notes
+
+| *Gossamer*
+| *~1 MB*
+| Zig + platform webview, no bundled engine
+
+| Tauri
+| ~3 MB
+| Rust + platform webview, no bundled engine
+
+| Neutralinojs
+| ~2 MB
+| C++ + platform webview, lightweight runtime
+
+| Electron
+| ~150 MB
+| Bundles entire Chromium + Node.js
+
+| Wails
+| ~8 MB
+| Go + platform webview
+|===
+
+Gossamer achieves the smallest binary size because Zig produces compact native
+code with no runtime, and the webview is provided by the operating system
+(WebKitGTK on Linux, WKWebView on macOS, WebView2 on Windows).
+
+== Startup Time Methodology
+
+Measure time-to-first-paint (TTFP): the interval from process launch to the
+first frame rendered in the webview.
+
+=== Measurement Approach
+
+1. Create a minimal "Hello World" app for each framework
+2. The app loads a single HTML page with a `<script>` that posts a timestamp
+   back to the native layer via IPC
+3. Launch the process with `perf_counter` / `clock_gettime` wrapping
+4. Measure: `T_firstPaint = T_ipc_received - T_process_start`
+5. Run 100 iterations, discard first 10 (warm-up), report median and p95
+
+Use `benchmarks/startup-bench.sh` for the Gossamer measurement.
+
+== Memory Usage Methodology
+
+Measure Resident Set Size (RSS) after the application has loaded and is idle.
+
+1. Launch the app with a standard "Hello World" page
+2. Wait 3 seconds for stabilization
+3. Read `/proc/<pid>/status` VmRSS (Linux) or `ps -o rss` (macOS)
+4. Report median RSS across 10 runs
+
+Expected ranges:
+
+- Gossamer: 15-25 MB (webview process + shell)
+- Tauri: 20-35 MB (similar architecture)
+- Electron: 80-150 MB (Chromium + Node.js)
+
+== IPC Latency Methodology
+
+Measure round-trip time for an echo message: JS sends a message, native
+echoes it back, JS receives the response.
+
+1. Register a native handler that returns its input unchanged
+2. In JS, send 10,000 echo messages sequentially
+3. Measure total time and divide by count for average RTT
+4. Also measure p50, p95, p99 latencies
+
+Gossamer's IPC uses direct function dispatch (no serialization layer beyond
+JSON), which should give sub-millisecond median latency.
+
+== Unique Differentiators
+
+Gossamer is the *only* desktop framework with:
+
+- **Compile-time handle linearity**: WebviewHandle must be consumed exactly
+  once. Leaks and double-frees are compilation errors.
+- **Typed IPC channels**: Message shape is verified at compile time, not
+  runtime. A "file_read" payload cannot be sent on a "file_write" command.
+- **Capability-gated permissions**: File system, network, shell, and clipboard
+  access require linear capability tokens that cannot be forged or duplicated.
+- **Formal proofs in Idris2**: ABI correctness, handle linearity, IPC
+  integrity, and panel isolation are machine-checked.
+- **Region-based memory**: No garbage collector, no reference counting. All
+  allocations are freed deterministically when the owning scope exits.

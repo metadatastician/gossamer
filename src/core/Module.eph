@@ -1,0 +1,54 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+//
+// Gossamer.Module — Multi-file compilation and module system bootstrap.
+//
+// This module provides the FFI bindings for Ephapax's module resolution
+// and multi-file compilation. It enables the `import Gossamer.Shell` syntax
+// and allows the compiler to resolve and compile dependent modules.
+//
+// Module resolution strategy:
+//   1. Module name (e.g. "Gossamer.Shell") maps to a file path
+//      (e.g. "src/core/Shell.eph") via dotted-name-to-path conversion.
+//   2. The resolver searches the module path list (configurable via
+//      gossamer.conf.json "ephapax.modulePaths").
+//   3. Circular imports are detected via a compilation stack.
+//   4. Each module is compiled exactly once (cached by module name).
+//
+// This is a bootstrap module: it is loaded implicitly by the compiler
+// before any user module. User modules should not import this directly.
+
+// Resolve a module name to its file system path.
+// Returns the absolute path to the .eph file, or empty string if not found.
+// FFI: ephapax_module_resolve(module_name) -> path
+fn resolveModule(moduleName: String): String =
+  __ffi("ephapax_module_resolve", moduleName)
+
+// Compile a module from its file path.
+// Returns 0 on success, non-zero on error.
+// The compiled module is cached by name for subsequent imports.
+// FFI: ephapax_compile_module(path) -> result
+fn compileModule(path: String): I32 =
+  __ffi("ephapax_compile_module", path)
+
+// Check if a module has already been compiled (cached).
+// Returns 1 if cached, 0 if not.
+// FFI: ephapax_module_cached(module_name) -> bool
+fn isModuleCached(moduleName: String): I32 =
+  __ffi("ephapax_module_cached", moduleName)
+
+// Get the list of symbols exported by a compiled module.
+// Returns a newline-separated list of symbol names.
+// FFI: ephapax_module_exports(module_name) -> symbol_list
+fn moduleExports(moduleName: String): String =
+  __ffi("ephapax_module_exports", moduleName)
+
+// Import a module by name. This is the implementation behind
+// the `import Gossamer.Shell` syntax:
+//   1. Check if already cached
+//   2. Resolve path
+//   3. Compile if needed
+//   4. Register exports in the current scope
+// Returns 0 on success.
+fn importModule(moduleName: String): I32 =
+  __ffi("ephapax_import_module", moduleName)

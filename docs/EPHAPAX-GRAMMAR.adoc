@@ -1,0 +1,139 @@
+= Ephapax Language Grammar Specification
+:author: Jonathan D.A. Jewell (hyperpolymath)
+:revdate: 2026-04-10
+:toc:
+
+== Overview
+
+Ephapax is a linearly-typed language designed for the Gossamer webview shell.
+This document provides the formal EBNF grammar for `.eph` source files.
+
+== Notation
+
+* `|` — alternative
+* `[ ... ]` — optional
+* `{ ... }` — zero or more repetitions
+* `'...'` — terminal literal
+* `(* ... *)` — comment
+
+== Grammar
+
+=== Program Structure
+
+[source,ebnf]
+----
+program         = { comment | function_def } ;
+
+comment         = '//' { any_char } newline ;
+----
+
+=== Module System (Future)
+
+[source,ebnf]
+----
+module_decl     = 'module' qualified_name ;
+
+import_decl     = 'import' qualified_name ;
+
+qualified_name  = identifier { '.' identifier } ;
+----
+
+=== Function Definitions
+
+[source,ebnf]
+----
+function_def    = 'fn' identifier '(' [ param_list ] ')' ':' type '='
+                  expression ;
+
+param_list      = param { ',' param } ;
+
+param           = identifier ':' type ;
+----
+
+=== Types
+
+[source,ebnf]
+----
+type            = primitive_type
+               | unit_type
+               | function_type ;
+
+primitive_type  = 'String' | 'I32' | 'I64' | 'Bool' ;
+
+unit_type       = '(' ')' ;
+
+function_type   = '(' type ')' '->' type ;
+----
+
+=== Expressions
+
+[source,ebnf]
+----
+expression      = ffi_call
+               | function_call
+               | literal
+               | identifier
+               | let_binding ;
+
+ffi_call        = '__ffi' '(' string_literal { ',' expression } ')' ;
+
+function_call   = identifier '(' [ arg_list ] ')' ;
+
+arg_list        = expression { ',' expression } ;
+
+let_binding     = 'let' identifier [ ':' type ] '=' expression 'in' expression ;
+----
+
+=== Literals
+
+[source,ebnf]
+----
+literal         = integer_literal
+               | string_literal
+               | bool_literal ;
+
+integer_literal = [ '-' ] digit { digit } ;
+
+string_literal  = '"' { string_char } '"' ;
+
+string_char     = any_char_except_quote | '\"' | '\\' | '\n' | '\t' ;
+
+bool_literal    = 'true' | 'false' ;
+----
+
+=== Identifiers
+
+[source,ebnf]
+----
+identifier      = letter { letter | digit | '_' } ;
+
+letter          = 'a'..'z' | 'A'..'Z' ;
+
+digit           = '0'..'9' ;
+----
+
+== FFI Convention
+
+FFI calls use the `\\__ffi` intrinsic to invoke C ABI functions from the Zig
+FFI layer (`libgossamer.so`).
+
+[source,ephapax]
+----
+fn create(title: String, width: I32, height: I32): I64 =
+  __ffi("gossamer_create", title, width, height, 1, 1, 0)
+----
+
+The first argument is the C symbol name (string literal). Subsequent arguments
+are passed positionally. Return type is inferred from the function signature.
+
+== Linear Type Annotations (Future)
+
+[source,ebnf]
+----
+linear_type     = '!' type ;          (* consumed exactly once *)
+borrow_type     = '&' type ;          (* borrowed, returned *)
+----
+
+When the linear type system is fully implemented, resource handles will be
+annotated with `!` to enforce single-use semantics at the Ephapax level
+(currently enforced at the Idris2 ABI level).

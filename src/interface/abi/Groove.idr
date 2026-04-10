@@ -433,3 +433,89 @@ data Applicability : Type where
 public export
 ApplicabilitySet : Type
 ApplicabilitySet = List Applicability
+
+--------------------------------------------------------------------------------
+-- Groove Handshake Termination
+--------------------------------------------------------------------------------
+
+||| States in the groove handshake protocol.
+|||
+||| The handshake goes:
+|||   Idle -> Probing -> ManifestReceived -> CapabilityCheck -> Connected
+|||                   -> Rejected (terminal)
+|||                                        -> Rejected (terminal)
+|||
+||| The protocol must terminate: every state either transitions forward
+||| or reaches a terminal state. No cycles are possible.
+public export
+data HandshakeState : Type where
+  ||| Initial state — no connection attempted.
+  HSIdle             : HandshakeState
+  ||| TCP connection established, HTTP GET sent.
+  HSProbing          : HandshakeState
+  ||| Manifest JSON received and parsed.
+  HSManifestReceived : HandshakeState
+  ||| Capability subset check in progress.
+  HSCapabilityCheck  : HandshakeState
+  ||| Handshake completed successfully.
+  HSConnected        : HandshakeState
+  ||| Handshake failed (terminal state).
+  HSRejected         : HandshakeState
+
+||| Valid transitions in the handshake protocol.
+||| The transitions form a DAG (no cycles), guaranteeing termination.
+public export
+data HandshakeTransition : HandshakeState -> HandshakeState -> Type where
+  ||| Begin probing from idle.
+  BeginProbe     : HandshakeTransition HSIdle HSProbing
+  ||| Receive manifest from probe.
+  ReceiveManifest : HandshakeTransition HSProbing HSManifestReceived
+  ||| Probe failed (network error, no manifest).
+  ProbeFailed    : HandshakeTransition HSProbing HSRejected
+  ||| Begin capability check after receiving manifest.
+  BeginCapCheck  : HandshakeTransition HSManifestReceived HSCapabilityCheck
+  ||| Manifest is malformed.
+  ManifestBad    : HandshakeTransition HSManifestReceived HSRejected
+  ||| Capability check passed — connect.
+  CapCheckOk     : HandshakeTransition HSCapabilityCheck HSConnected
+  ||| Capability check failed — reject.
+  CapCheckFail   : HandshakeTransition HSCapabilityCheck HSRejected
+
+||| Proof: HSConnected is terminal (no outgoing transitions).
+||| There are no HandshakeTransition constructors with source HSConnected.
+public export
+connectedIsTerminal : HandshakeTransition HSConnected s -> Void
+connectedIsTerminal _ impossible
+
+||| Proof: HSRejected is terminal (no outgoing transitions).
+||| There are no HandshakeTransition constructors with source HSRejected.
+public export
+rejectedIsTerminal : HandshakeTransition HSRejected s -> Void
+rejectedIsTerminal _ impossible
+
+||| Proof: the handshake strictly decreases a ranking function.
+|||
+||| We assign ranks: Idle=5, Probing=4, ManifestReceived=3,
+||| CapabilityCheck=2, Connected=0, Rejected=0.
+||| Every valid transition moves to a strictly lower rank.
+||| Since ranks are bounded natural numbers, the handshake terminates.
+public export
+handshakeRank : HandshakeState -> Nat
+handshakeRank HSIdle             = 5
+handshakeRank HSProbing          = 4
+handshakeRank HSManifestReceived = 3
+handshakeRank HSCapabilityCheck  = 2
+handshakeRank HSConnected        = 0
+handshakeRank HSRejected         = 0
+
+||| Every handshake transition strictly decreases the rank.
+public export
+transitionDecreases : (t : HandshakeTransition from to)
+                   -> LTE (S (handshakeRank to)) (handshakeRank from)
+transitionDecreases BeginProbe      = lteRefl           -- S 4 <= 5
+transitionDecreases ReceiveManifest = lteRefl           -- S 3 <= 4
+transitionDecreases ProbeFailed     = LTESucc (LTESucc (LTESucc (LTESucc LTEZero))) -- S 0 <= 4
+transitionDecreases BeginCapCheck   = lteRefl           -- S 2 <= 3
+transitionDecreases ManifestBad     = LTESucc (LTESucc (LTESucc LTEZero)) -- S 0 <= 3
+transitionDecreases CapCheckOk      = LTESucc (LTESucc LTEZero) -- S 0 <= 2
+transitionDecreases CapCheckFail    = LTESucc (LTESucc LTEZero) -- S 0 <= 2

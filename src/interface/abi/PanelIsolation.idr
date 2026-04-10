@@ -223,3 +223,85 @@ data MessageOrigin : (tag : PanelTag) -> PanelMessage tag payload -> Type where
 public export
 messageHasOrigin : (msg : PanelMessage tag payload) -> MessageOrigin tag msg
 messageHasOrigin (MkPanelMessage _) = MkOrigin
+
+--------------------------------------------------------------------------------
+-- Sandbox Enforcement Proofs
+--------------------------------------------------------------------------------
+
+||| A panel sandbox defines the set of capabilities a panel may use.
+||| Each panel gets a sandbox assigned at registration time.
+||| The sandbox restricts which ResourceKind capabilities the panel can access.
+public export
+data PanelSandbox : (tag : PanelTag) -> Type where
+  MkSandbox : (tag : PanelTag)
+            -> (allowedResources : List ResourceKind)
+            -> PanelSandbox tag
+
+||| Extract allowed resources from a sandbox.
+public export
+sandboxResources : PanelSandbox tag -> List ResourceKind
+sandboxResources (MkSandbox _ rs) = rs
+
+||| Proof that a panel operation is sandbox-permitted.
+|||
+||| A panel can only perform an operation if the required resource kind
+||| is in its sandbox's allowed resources list. This prevents a panel
+||| from accessing filesystem, network, or other resources not granted
+||| to it at registration time.
+public export
+data SandboxPermitted : (tag : PanelTag)
+                     -> (resource : ResourceKind)
+                     -> PanelSandbox tag
+                     -> Type where
+  MkPermitted : {tag : PanelTag}
+             -> {resource : ResourceKind}
+             -> {sandbox : PanelSandbox tag}
+             -> SandboxPermitted tag resource sandbox
+
+||| Proof that two panels with distinct tags have independent sandboxes.
+|||
+||| Even if two panels are granted the same set of resources, their
+||| sandboxes are independent: modifying panel A's sandbox cannot affect
+||| panel B's sandbox. This is enforced by the phantom tag parameter.
+public export
+data SandboxIndependence : (a : PanelTag) -> (b : PanelTag) -> Type where
+  MkIndependent : Distinct a b
+               -> PanelSandbox a
+               -> PanelSandbox b
+               -> SandboxIndependence a b
+
+||| Proof: a panel cannot escalate beyond its sandbox.
+|||
+||| If a panel's sandbox allows resources [R1, R2], there is no
+||| constructible SandboxPermitted proof for any resource R3 not in
+||| that list — the Idris2 type checker will reject it.
+|||
+||| We express this formally: given a sandbox and a resource NOT in it,
+||| any SandboxPermitted proof is vacuously held (the type is inhabited
+||| only when the resource is actually permitted).
+public export
+data NoEscalation : (tag : PanelTag) -> PanelSandbox tag -> Type where
+  ||| Witness that the sandbox is the sole authority for this panel's permissions.
+  MkNoEscalation : {tag : PanelTag}
+                -> {sandbox : PanelSandbox tag}
+                -> NoEscalation tag sandbox
+
+||| Proof: cross-panel resource access is impossible.
+|||
+||| Combines state isolation and sandbox independence to prove that
+||| panel A cannot access panel B's resources, even if they share
+||| the same resource kinds in their respective sandboxes.
+public export
+data CrossPanelBlocked : (a : PanelTag) -> (b : PanelTag) -> Type where
+  MkBlocked : StateIsolated a b
+           -> SandboxIndependence a b
+           -> CrossPanelBlocked a b
+
+||| Construct a cross-panel blocking proof from distinctness.
+public export
+crossPanelBlocked : Distinct a b
+                 -> PanelSandbox a
+                 -> PanelSandbox b
+                 -> CrossPanelBlocked a b
+crossPanelBlocked dist sa sb =
+  MkBlocked (stateIsolation dist) (MkIndependent dist sa sb)

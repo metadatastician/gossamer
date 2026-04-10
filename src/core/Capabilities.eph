@@ -42,3 +42,27 @@ fn resourceKind(token: I64): I32 =
 // FFI: gossamer_cap_revoke(token) -> void
 fn revoke(token: I64): () =
   __ffi("gossamer_cap_revoke", token)
+
+// Set the maximum number of active capability tokens.
+// Default is 256. Increase for multi-panel apps with per-panel sandboxes.
+// Maximum is 4096. Returns the actual limit after clamping.
+// FFI: gossamer_cap_set_max(max) -> actual_max
+fn setCapMax(max: I32): I32 =
+  __ffi("gossamer_cap_set_max", max)
+
+// Query the current maximum capability registry size.
+// FFI: gossamer_cap_get_max() -> max
+fn getCapMax(): I32 =
+  __ffi("gossamer_cap_get_max")
+
+// Set the maximum number of concurrent async IPC calls.
+// Default is 256. Increase for high-concurrency apps. Maximum is 16384.
+// Returns the actual limit after clamping.
+// FFI: gossamer_set_max_inflight(max) -> actual_max
+fn setMaxInflight(max: I32): I32 =
+  __ffi("gossamer_set_max_inflight", max)
+
+// Query the current maximum inflight async IPC limit.
+// FFI: gossamer_get_max_inflight() -> max
+fn getMaxInflight(): I32 =
+  __ffi("gossamer_get_max_inflight")

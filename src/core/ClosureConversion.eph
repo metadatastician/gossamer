@@ -1,0 +1,75 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+//
+// Gossamer.ClosureConversion — Closure representation and operations.
+//
+// Closure conversion transforms functions with free variables into
+// functions that take an explicit environment parameter. This is
+// necessary for first-class functions in Ephapax since the Zig FFI
+// layer uses C ABI calling conventions (no implicit captures).
+//
+// A closure is represented as a pair:
+//   (function_pointer: I64, environment_pointer: I64)
+//
+// The environment is a heap-allocated struct containing the captured
+// variables. The function pointer points to a "lifted" version of the
+// original function that takes the environment as its first argument.
+//
+// Example transformation:
+//
+//   let x = 42
+//   let f = fn(y: I32): I32 = x + y    // captures x
+//
+// Becomes:
+//
+//   struct Env_f { x: I32 }
+//   fn f_lifted(env: *Env_f, y: I32): I32 = env.x + y
+//   let env = allocEnv({ x = 42 })
+//   let f = makeClosure(f_lifted, env)
+//
+// Linear type interaction:
+//   Closures that capture linear resources must themselves be linear.
+//   The closure conversion pass tracks linearity of captured variables
+//   and marks the resulting closure as linear if any capture is linear.
+//   Linear closures must be applied exactly once (enforced by the type
+//   checker after conversion).
+
+// Create a closure from a function pointer and environment pointer.
+// The environment must have been allocated via allocClosureEnv.
+// Returns an opaque closure handle.
+// FFI: ephapax_closure_make(fn_ptr, env_ptr) -> closure
+fn makeClosure(fnPtr: I64, envPtr: I64): I64 =
+  __ffi("ephapax_closure_make", fnPtr, envPtr)
+
+// Apply a closure to an argument.
+// Invokes the function pointer with (environment, argument).
+// Returns the result of the function call.
+// FFI: ephapax_closure_apply(closure, arg) -> result
+fn applyClosure(closure: I64, arg: I64): I64 =
+  __ffi("ephapax_closure_apply", closure, arg)
+
+// Free a closure and its environment.
+// Must be called exactly once for each closure created.
+// For linear closures, the type system enforces this.
+// FFI: ephapax_closure_free(closure) -> void
+fn freeClosure(closure: I64): () =
+  __ffi("ephapax_closure_free", closure)
+
+// Allocate an environment struct for closure capture.
+// size_bytes is the total size of the captured variables.
+// Returns a pointer to the allocated environment.
+// FFI: ephapax_closure_alloc_env(size_bytes) -> env_ptr
+fn allocClosureEnv(sizeBytes: I32): I64 =
+  __ffi("ephapax_closure_alloc_env", sizeBytes)
+
+// Store a value into a closure environment at a given offset.
+// Used during closure construction to populate captured variables.
+// FFI: ephapax_closure_env_store(env_ptr, offset, value) -> void
+fn envStore(envPtr: I64, offset: I32, value: I64): () =
+  __ffi("ephapax_closure_env_store", envPtr, offset, value)
+
+// Load a value from a closure environment at a given offset.
+// Used inside lifted functions to access captured variables.
+// FFI: ephapax_closure_env_load(env_ptr, offset) -> value
+fn envLoad(envPtr: I64, offset: I32): I64 =
+  __ffi("ephapax_closure_env_load", envPtr, offset)

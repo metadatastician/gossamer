@@ -228,25 +228,32 @@ fn validateWindowConstraints(
 // Async IPC Inflight Tracking
 //==============================================================================
 
-/// Maximum number of concurrent async IPC calls.
-/// Prevents unbounded thread spawning from rapid-fire JS invocations.
-const MAX_INFLIGHT_ASYNC = 256;
+/// Default maximum number of concurrent async IPC calls.
+/// Configurable at runtime via gossamer_set_max_inflight().
+const DEFAULT_MAX_INFLIGHT_ASYNC: u32 = 256;
+
+/// Absolute ceiling to prevent OOM from absurd values.
+const ABSOLUTE_MAX_INFLIGHT: u32 = 16384;
 
 /// Thread-safe inflight slot registry for async IPC calls.
-/// Bounded at MAX_INFLIGHT_ASYNC (256) to prevent unbounded memory growth
-/// and provide back-pressure when the system is overloaded.
+/// Bounded at a configurable limit (default 256) to prevent unbounded
+/// memory growth and provide back-pressure when overloaded.
+///
+/// The limit can be raised at runtime via gossamer_set_max_inflight()
+/// before any async IPC calls are made. This supports high-concurrency
+/// apps that need more than 256 simultaneous in-flight requests.
 ///
 /// Public so that the platform module (webview_gtk.zig) can acquire/release
 /// slots from the worker thread dispatch path.
 ///
-/// Thread safety: all slot operations are guarded by a Mutex because
-/// acquireSlot() is called on the GTK main thread and releaseSlot()
-/// is called from the g_idle_add callback (also main thread, but after
-/// the worker thread has completed). The mutex also protects against
-/// potential future multi-webview scenarios.
+/// Thread safety: all slot operations are guarded by a Mutex.
 pub const async_ipc = struct {
     /// Slot occupancy bitfield — true means the slot is in use.
-    var slots: [MAX_INFLIGHT_ASYNC]bool = [_]bool{false} ** MAX_INFLIGHT_ASYNC;
+    /// Sized to ABSOLUTE_MAX_INFLIGHT; effective limit controlled by max_slots.
+    var slots: [ABSOLUTE_MAX_INFLIGHT]bool = [_]bool{false} ** ABSOLUTE_MAX_INFLIGHT;
+
+    /// Current configurable maximum (default 256).
+    var max_slots: u32 = DEFAULT_MAX_INFLIGHT_ASYNC;
 
     /// Mutex protecting the slots array and count.
     /// Worker threads and the GTK main thread may access concurrently.
@@ -255,13 +262,37 @@ pub const async_ipc = struct {
     /// Number of currently occupied slots (cached for fast queries).
     var count: u32 = 0;
 
+    /// Set the maximum number of inflight async IPC calls.
+    /// Must be called before any async IPC calls are dispatched.
+    /// Clamped to [1, ABSOLUTE_MAX_INFLIGHT].
+    pub fn setMaxSlots(max: u32) void {
+        mutex.lock();
+        defer mutex.unlock();
+        if (max == 0) {
+            max_slots = 1;
+        } else if (max > ABSOLUTE_MAX_INFLIGHT) {
+            max_slots = ABSOLUTE_MAX_INFLIGHT;
+        } else {
+            max_slots = max;
+        }
+    }
+
+    /// Query the current maximum slot limit.
+    pub fn getMaxSlots() u32 {
+        mutex.lock();
+        defer mutex.unlock();
+        return max_slots;
+    }
+
     /// Acquire a free slot. Returns the slot index, or null if all slots
     /// are occupied (back-pressure — caller should reject the IPC call).
     pub fn acquireSlot() ?usize {
         mutex.lock();
         defer mutex.unlock();
 
-        for (&slots, 0..) |*slot, i| {
+        if (count >= max_slots) return null;
+
+        for (slots[0..max_slots], 0..) |*slot, i| {
             if (!slot.*) {
                 slot.* = true;
                 count += 1;
@@ -277,7 +308,7 @@ pub const async_ipc = struct {
         mutex.lock();
         defer mutex.unlock();
 
-        if (index < MAX_INFLIGHT_ASYNC and slots[index]) {
+        if (index < ABSOLUTE_MAX_INFLIGHT and slots[index]) {
             slots[index] = false;
             if (count > 0) count -= 1;
         }
@@ -294,7 +325,7 @@ pub const async_ipc = struct {
     pub fn reset() void {
         mutex.lock();
         defer mutex.unlock();
-        for (&slots) |*slot| {
+        for (slots[0..max_slots]) |*slot| {
             slot.* = false;
         }
         count = 0;
@@ -2161,18 +2192,44 @@ export fn gossamer_async_inflight_count() u32 {
     return async_ipc.inflightCount();
 }
 
+/// Set the maximum number of concurrent async IPC calls.
+///
+/// Default is 256. Increase for high-concurrency apps that need more
+/// simultaneous in-flight requests. Maximum is 16384 (ABSOLUTE_MAX_INFLIGHT).
+///
+/// Must be called before dispatching async IPC calls for the new limit
+/// to take full effect. Clamped to [1, 16384].
+///
+/// Returns the actual limit set (after clamping).
+pub export fn gossamer_set_max_inflight(max: u32) u32 {
+    clearError();
+    async_ipc.setMaxSlots(max);
+    return async_ipc.getMaxSlots();
+}
+
+/// Query the current maximum inflight async IPC limit.
+pub export fn gossamer_get_max_inflight() u32 {
+    return async_ipc.getMaxSlots();
+}
+
 //==============================================================================
 // Capability Operations
 //==============================================================================
 
-/// Maximum number of active capability tokens.
-/// Keeps memory bounded without dynamic allocation for the cap registry.
-const MAX_CAPABILITIES = 256;
+/// Default maximum number of active capability tokens.
+/// Can be increased at runtime via gossamer_cap_set_max().
+const DEFAULT_MAX_CAPABILITIES: u32 = 256;
 
-/// Maximum number of revoked tokens to track.
+/// Absolute ceiling for the capability registry.
+const ABSOLUTE_MAX_CAPABILITIES: u32 = 4096;
+
+/// Default maximum number of revoked tokens to track.
 /// Once full, oldest revocations are evicted (safe — prevents re-use
 /// only as a belt-and-suspenders check alongside Ephapax linear types).
-const MAX_REVOKED = 512;
+const DEFAULT_MAX_REVOKED: u32 = 512;
+
+/// Absolute ceiling for revoked token tracking.
+const ABSOLUTE_MAX_REVOKED: u32 = 8192;
 
 /// Registry entry mapping a token to its resource kind.
 const CapEntry = struct {
@@ -2183,18 +2240,25 @@ const CapEntry = struct {
 
 /// Active capability registry.
 /// Fixed-size array avoids dynamic allocation in the capability hot path.
-var cap_registry: [MAX_CAPABILITIES]CapEntry = [_]CapEntry{.{
+/// Sized to ABSOLUTE_MAX_CAPABILITIES; effective limit controlled by cap_max.
+var cap_registry: [ABSOLUTE_MAX_CAPABILITIES]CapEntry = [_]CapEntry{.{
     .token = 0,
     .resource_kind = 0,
     .active = false,
-}} ** MAX_CAPABILITIES;
+}} ** ABSOLUTE_MAX_CAPABILITIES;
+
+/// Current configurable maximum (default 256).
+var cap_max: u32 = DEFAULT_MAX_CAPABILITIES;
 
 /// Number of active capabilities.
 var cap_count: usize = 0;
 
 /// Revocation set — tokens that have been revoked.
 /// Checked on gossamer_cap_check to reject revoked tokens.
-var revoked_tokens: [MAX_REVOKED]u64 = [_]u64{0} ** MAX_REVOKED;
+var revoked_tokens: [ABSOLUTE_MAX_REVOKED]u64 = [_]u64{0} ** ABSOLUTE_MAX_REVOKED;
+
+/// Current configurable revocation limit (default 512).
+var revoked_max: u32 = DEFAULT_MAX_REVOKED;
 
 /// Number of revoked tokens currently tracked.
 var revoked_count: usize = 0;
@@ -2220,8 +2284,8 @@ pub export fn gossamer_cap_grant(resource_kind: u32) u64 {
     }
 
     // Check capacity
-    if (cap_count >= MAX_CAPABILITIES) {
-        setError("Capability registry full (256 slots)");
+    if (cap_count >= cap_max) {
+        setError("Capability registry full");
         return CAP_ERROR;
     }
 
@@ -2317,18 +2381,47 @@ export fn gossamer_cap_revoke(token: u64) void {
     }
 
     // Add to revocation set (belt-and-suspenders alongside Ephapax linear types)
-    if (revoked_count < MAX_REVOKED) {
+    if (revoked_count < revoked_max) {
         revoked_tokens[revoked_count] = token;
         revoked_count += 1;
     } else {
         // Evict oldest revocation to make room
         // Safe: the primary enforcement is Ephapax's linear type system;
         // the revocation set is a runtime safety net, not the authority.
-        std.mem.copyForwards(u64, revoked_tokens[0 .. MAX_REVOKED - 1], revoked_tokens[1..MAX_REVOKED]);
-        revoked_tokens[MAX_REVOKED - 1] = token;
+        std.mem.copyForwards(u64, revoked_tokens[0 .. revoked_max - 1], revoked_tokens[1..revoked_max]);
+        revoked_tokens[revoked_max - 1] = token;
     }
 
     clearError();
+}
+
+/// Set the maximum number of active capability tokens.
+///
+/// Default is 256. Increase for apps that need many concurrent capabilities
+/// (e.g. multi-panel apps with per-panel sandboxes). Maximum is 4096.
+///
+/// Must be called before granting capabilities for the new limit to take
+/// full effect. Clamped to [1, 4096].
+///
+/// Returns the actual limit set (after clamping).
+pub export fn gossamer_cap_set_max(max: u32) u32 {
+    clearError();
+    if (max == 0) {
+        cap_max = 1;
+    } else if (max > ABSOLUTE_MAX_CAPABILITIES) {
+        cap_max = ABSOLUTE_MAX_CAPABILITIES;
+    } else {
+        cap_max = max;
+    }
+    // Scale the revocation set proportionally (2x the cap limit)
+    const new_revoked = @min(cap_max * 2, ABSOLUTE_MAX_REVOKED);
+    revoked_max = new_revoked;
+    return cap_max;
+}
+
+/// Query the current maximum capability registry size.
+pub export fn gossamer_cap_get_max() u32 {
+    return cap_max;
 }
 
 //==============================================================================
@@ -2778,12 +2871,14 @@ test "setError preserves message content" {
 test "capability registry full returns CAP_ERROR" {
     // Save and reset cap state for this test
     const saved_count = cap_count;
+    const saved_max = cap_max;
     cap_count = 0;
+    cap_max = DEFAULT_MAX_CAPABILITIES;
 
-    // Fill all 256 slots
-    var tokens: [MAX_CAPABILITIES]u64 = undefined;
+    // Fill all slots up to the configurable cap_max limit
+    var tokens: [DEFAULT_MAX_CAPABILITIES]u64 = undefined;
     var granted: usize = 0;
-    for (0..MAX_CAPABILITIES) |i| {
+    for (0..DEFAULT_MAX_CAPABILITIES) |i| {
         const token = gossamer_cap_grant(@intCast(i % 6)); // 0-5 are valid kinds
         if (token != CAP_ERROR) {
             tokens[granted] = token;
@@ -2799,16 +2894,20 @@ test "capability registry full returns CAP_ERROR" {
         gossamer_cap_revoke(t);
     }
     cap_count = saved_count; // Restore for other tests
+    cap_max = saved_max;
 }
 
-test "async IPC slots are bounded at MAX_INFLIGHT_ASYNC" {
+test "async IPC slots are bounded at configurable limit" {
+    async_ipc.reset();
+    // Set a small limit for testing
+    async_ipc.setMaxSlots(DEFAULT_MAX_INFLIGHT_ASYNC);
     // Acquire all slots
     var acquired: usize = 0;
     while (async_ipc.acquireSlot()) |_| {
         acquired += 1;
-        if (acquired > MAX_INFLIGHT_ASYNC + 1) break; // Safety limit
+        if (acquired > DEFAULT_MAX_INFLIGHT_ASYNC + 1) break; // Safety limit
     }
-    try std.testing.expectEqual(MAX_INFLIGHT_ASYNC, acquired);
+    try std.testing.expectEqual(DEFAULT_MAX_INFLIGHT_ASYNC, acquired);
 
     // Release all
     for (0..acquired) |i| {
@@ -2816,23 +2915,44 @@ test "async IPC slots are bounded at MAX_INFLIGHT_ASYNC" {
     }
 }
 
-test "revocation set handles more than MAX_REVOKED entries via FIFO" {
+test "gossamer_set_max_inflight changes the limit" {
+    async_ipc.reset();
+    const new_limit = gossamer_set_max_inflight(512);
+    try std.testing.expectEqual(@as(u32, 512), new_limit);
+    try std.testing.expectEqual(@as(u32, 512), gossamer_get_max_inflight());
+    // Restore default
+    _ = gossamer_set_max_inflight(DEFAULT_MAX_INFLIGHT_ASYNC);
+}
+
+test "gossamer_cap_set_max changes the limit" {
+    const old_max = cap_max;
+    const new_limit = gossamer_cap_set_max(1024);
+    try std.testing.expectEqual(@as(u32, 1024), new_limit);
+    try std.testing.expectEqual(@as(u32, 1024), gossamer_cap_get_max());
+    // Restore
+    _ = gossamer_cap_set_max(old_max);
+}
+
+test "revocation set handles more than revoked_max entries via FIFO" {
     // Reset revocation state for this test
     const saved_count = revoked_count;
-    revoked_count = MAX_REVOKED - 1;
+    const saved_max = revoked_max;
+    revoked_max = DEFAULT_MAX_REVOKED;
+    revoked_count = DEFAULT_MAX_REVOKED - 1;
 
     // Add one more — should succeed (fills last slot)
     gossamer_cap_revoke(0xDEAD);
-    try std.testing.expectEqual(MAX_REVOKED, revoked_count);
+    try std.testing.expectEqual(DEFAULT_MAX_REVOKED, revoked_count);
 
     // Add another — should evict oldest via FIFO
     gossamer_cap_revoke(0xBEEF);
-    try std.testing.expectEqual(MAX_REVOKED, revoked_count);
+    try std.testing.expectEqual(DEFAULT_MAX_REVOKED, revoked_count);
     // The newest token should be at the end
-    try std.testing.expectEqual(@as(u64, 0xBEEF), revoked_tokens[MAX_REVOKED - 1]);
+    try std.testing.expectEqual(@as(u64, 0xBEEF), revoked_tokens[DEFAULT_MAX_REVOKED - 1]);
 
     // Restore
     revoked_count = saved_count;
+    revoked_max = saved_max;
 }
 
 test "Result enum has at least 10 variants and they are contiguous" {
