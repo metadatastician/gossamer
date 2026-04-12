@@ -362,13 +362,37 @@ export fn gossamer_dialog_open_multiple(title: [*:0]const u8, filters: [*:0]cons
 /// Convenience function so callers do not need to know the allocator
 /// implementation. Safe to call with 0 (null).
 ///
+/// Implementation note: path strings are allocated via `c_allocator` (libc
+/// malloc wrapped by `dupeZ`). At this call site we do not have the original
+/// slice length, so we call `std.c.free()` directly rather than routing
+/// through Zig's `Allocator.free` interface (which requires the original
+/// length to satisfy tracking-allocator contracts).
+///
+/// COUPLING: this function must remain paired with `c_allocator` in this file.
+/// If the allocator constant above is ever changed, this function must change
+/// to match — using the wrong free will corrupt the heap.
+///
 /// Matches: Gossamer.ABI.Foreign.prim__dialogFreePath
 export fn gossamer_dialog_free_path(path_ptr: u64) void {
     if (path_ptr == 0) return;
-    const raw: [*]u8 = @ptrFromInt(@as(usize, @intCast(path_ptr)));
-    // Find the null terminator to determine the length for free()
-    var len: usize = 0;
-    while (raw[len] != 0) : (len += 1) {}
-    // Free the libc-allocated buffer (allocated via c_allocator / dupeZ)
-    allocator.free(raw[0 .. len + 1]); // +1 to include the sentinel byte
+    std.c.free(@ptrFromInt(@as(usize, @intCast(path_ptr))));
+}
+
+//==============================================================================
+// Unit Tests
+//==============================================================================
+
+test "gossamer_dialog_free_path: null pointer is a no-op" {
+    // Calling with 0 must not crash or invoke free(NULL).
+    gossamer_dialog_free_path(0);
+}
+
+test "gossamer_dialog_free_path: frees c_allocator allocation without crash" {
+    // Allocate a small buffer via c_allocator (the same allocator used by the
+    // dialog functions) and verify that gossamer_dialog_free_path can free it.
+    const buf = try allocator.dupeZ(u8, "/tmp/test-path");
+    const ptr: u64 = @intCast(@intFromPtr(buf.ptr));
+    // gossamer_dialog_free_path calls std.c.free — must not double-free or crash.
+    gossamer_dialog_free_path(ptr);
+    // buf is now freed; do NOT use it after this point.
 }
