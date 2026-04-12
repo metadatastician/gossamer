@@ -542,7 +542,7 @@ single Zig FFI layer. The distinction is purely at the Ephapax
 compiler level:
 
 \begin{lstlisting}[style=ephapax]
-// Affine mode — implicit cleanup OK
+// Affine mode -- implicit cleanup OK
 fn affine_example() -> i32 {
     region proto:
         let webview = Shell.create@proto({...})
@@ -552,7 +552,7 @@ fn affine_example() -> i32 {
         0
 }
 
-// Linear mode — explicit consumption required
+// Linear mode -- explicit consumption required
 fn linear_example() -> i32 {
     region prod:
         let! webview = Shell.create@prod({...})
