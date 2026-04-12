@@ -324,6 +324,20 @@ export
 %foreign "C:gossamer_channel_bind, libgossamer"
 prim__channelBind : Bits64 -> String -> AnyPtr -> AnyPtr -> PrimIO Bits32
 
+||| Bind a named command handler for ASYNC dispatch on the IPC channel.
+||| Identical to prim__channelBind except the callback runs on a dedicated worker
+||| thread instead of the GTK main thread. Responses are posted back to the main
+||| thread via g_idle_add when the callback returns.
+|||
+||| Use this for I/O-heavy commands (HTTP requests, file reads, DB queries) that
+||| would block the GTK event loop and freeze the UI if run synchronously.
+||| Maximum concurrent inflight calls: 256 (gossamer_set_max_inflight to raise).
+|||
+||| BORROWING operation on the channel.
+export
+%foreign "C:gossamer_channel_bind_async, libgossamer"
+prim__channelBindAsync : Bits64 -> String -> AnyPtr -> AnyPtr -> PrimIO Bits32
+
 ||| Close the IPC channel.
 ||| CONSUMING operation — the channel handle is destroyed.
 export

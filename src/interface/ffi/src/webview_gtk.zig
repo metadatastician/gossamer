@@ -621,8 +621,10 @@ fn onIPCMessage(
             .inflight_slot = slot,
         };
 
-        // Spawn worker thread — the callback runs off the GTK main thread
-        _ = std.Thread.spawn(.{}, asyncWorkerFn, .{ctx}) catch {
+        // Spawn worker thread — the callback runs off the GTK main thread.
+        // detach() so the OS reclaims the thread stack when the worker exits;
+        // we never join (response arrives via g_idle_add instead).
+        const t = std.Thread.spawn(.{}, asyncWorkerFn, .{ctx}) catch {
             allocator.free(payload_duped);
             allocator.free(id_duped);
             allocator.destroy(ctx);
@@ -630,6 +632,7 @@ fn onIPCMessage(
             sendIPCError(handle, id, "Failed to spawn worker thread");
             return;
         };
+        t.detach();
 
         // The worker thread owns ctx from here. Response will arrive via
         // g_idle_add when the callback completes.
@@ -644,8 +647,13 @@ fn onIPCMessage(
     };
     defer allocator.free(payload_z);
 
-    // Invoke the callback with user data
+    // Invoke the callback with user data.
+    // Guard against null returns: std.mem.span on a null sentinel pointer is UB.
     const response_ptr = entry.callback(payload_z, entry.user_data);
+    if (@intFromPtr(response_ptr) == 0) {
+        sendIPCError(handle, id, "Sync callback returned null");
+        return;
+    }
     const response = std.mem.span(response_ptr);
 
     // Send the response back to JavaScript
@@ -659,7 +667,13 @@ fn asyncWorkerFn(ctx: *AsyncIPCContext) void {
     // Invoke the callback — this can block (I/O, HTTP, DB queries, etc.)
     // without affecting the GTK event loop.
     const response_ptr = ctx.callback(ctx.payload_z, ctx.user_data);
-    ctx.response = std.mem.span(response_ptr);
+
+    // Guard against null returns from C callbacks.
+    // std.mem.span on a null sentinel pointer is UB; leave ctx.response as
+    // null and let asyncIdleCallback send the error instead.
+    if (@intFromPtr(response_ptr) != 0) {
+        ctx.response = std.mem.span(response_ptr);
+    }
 
     // Schedule response delivery on the GTK main thread.
     // g_idle_add is thread-safe and will call asyncIdleCallback

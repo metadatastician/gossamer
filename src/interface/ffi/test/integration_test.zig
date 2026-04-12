@@ -734,6 +734,46 @@ test "async_inflight_count returns value in 0..256" {
     try testing.expect(count <= 256);
 }
 
+test "async_ipc acquireSlot increments inflight count" {
+    gossamer.async_ipc.reset();
+    const slot = gossamer.async_ipc.acquireSlot();
+    try testing.expect(slot != null);
+    try testing.expectEqual(@as(u32, 1), gossamer.gossamer_async_inflight_count());
+    gossamer.async_ipc.releaseSlot(slot.?);
+}
+
+test "async_ipc releaseSlot decrements inflight count back to zero" {
+    gossamer.async_ipc.reset();
+    const slot = gossamer.async_ipc.acquireSlot().?;
+    gossamer.async_ipc.releaseSlot(slot);
+    try testing.expectEqual(@as(u32, 0), gossamer.gossamer_async_inflight_count());
+}
+
+test "async_ipc acquireSlot returns null when all slots occupied" {
+    gossamer.async_ipc.reset();
+    // Set a small limit so we can fill it without allocating 256 slots
+    _ = gossamer.gossamer_set_max_inflight(2);
+    defer _ = gossamer.gossamer_set_max_inflight(256);
+
+    const s0 = gossamer.async_ipc.acquireSlot();
+    const s1 = gossamer.async_ipc.acquireSlot();
+    const s2 = gossamer.async_ipc.acquireSlot(); // must fail — limit is 2
+
+    try testing.expect(s0 != null);
+    try testing.expect(s1 != null);
+    try testing.expect(s2 == null);
+
+    gossamer.async_ipc.releaseSlot(s0.?);
+    gossamer.async_ipc.releaseSlot(s1.?);
+}
+
+test "async_ipc releaseSlot on already-free slot is a no-op" {
+    gossamer.async_ipc.reset();
+    // Releasing a slot that was never acquired must not corrupt the count
+    gossamer.async_ipc.releaseSlot(0);
+    try testing.expectEqual(@as(u32, 0), gossamer.gossamer_async_inflight_count());
+}
+
 //==============================================================================
 // Platform Query API Tests
 //==============================================================================

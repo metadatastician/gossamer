@@ -392,7 +392,7 @@ handle : (1 _ : Channel req resp)
 On the frontend side, a generated JavaScript client (produced from the
 protocol type at compile time) provides a typed interface:
 
-\begin{lstlisting}[language=JavaScript]
+\begin{lstlisting}[style=ephapax]
 // Generated from Protocol [("greet", String, String)]
 const gossamer = {
   greet: async (name: string): Promise<string> => {
