@@ -71,12 +71,14 @@ Version bumped to 0.3.0.
 - Post to lobste.rs / Hacker News
 - OpenSSF Scorecard badge
 
-### P5 — IDApTIK full migration [PARTIALLY DONE — staging decision required]
+### P5 — IDApTIK full migration [DONE — 2026-04-12]
 
 - [x] Wire all 12 UMS FFI functions through IPC (done in P0, 2026-03-29)
-- [ ] Migrate UMS from Tauri to Gossamer for desktop (requires staging vs live decision)
+- [x] Migrate UMS from Tauri to Gossamer for desktop (2026-04-12): idaptik-ums/deno.json
+  tasks updated (gossamer:dev / gossamer:build); Justfile ums-gossamer recipe added;
+  TOPOLOGY and llm-warmup-dev.md updated; stale ums-tauri / ums-tauri-test removed
 - [x] Mobile platform support: iOS screen size fixed, Android JNI constructor fixed (2026-04-03)
-- [ ] Test with real level editing workflow
+- [ ] Test with real level editing workflow (manual — requires Jonathan)
 
 ### P6 — Ephapax compiler improvements
 
