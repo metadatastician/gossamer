@@ -813,3 +813,250 @@ ssgBuildSite : String -> String -> String -> IO Bool
 ssgBuildSite contentDir templateFile outDir = do
   rc <- primIO (prim__ssgBuildSite contentDir templateFile outDir)
   pure (rc == 0)
+
+--------------------------------------------------------------------------------
+-- Build Information
+--------------------------------------------------------------------------------
+
+||| Get library build info string (version + build metadata).
+export
+%foreign "C:gossamer_build_info, libgossamer"
+prim__buildInfo : PrimIO Bits64
+
+||| Safe wrapper for build info.
+export
+buildInfo : IO String
+buildInfo = do
+  ptr <- primIO prim__buildInfo
+  pure (ptrToString ptr)
+
+--------------------------------------------------------------------------------
+-- Window Guard (Anti-Close Lock)
+--------------------------------------------------------------------------------
+
+||| Set window guard mode. Modes: 0=free, 1=locked, 2=read_only.
+||| When locked, WM close button is intercepted.
+export
+%foreign "C:gossamer_guard_set, libgossamer"
+prim__guardSet : Bits64 -> Int -> PrimIO Bits32
+
+||| Query current window guard mode. Returns 0=free, 1=locked, 2=read_only.
+export
+%foreign "C:gossamer_guard_get, libgossamer"
+prim__guardGet : Bits64 -> PrimIO Int
+
+--------------------------------------------------------------------------------
+-- Window Registry (Multi-Window)
+--------------------------------------------------------------------------------
+
+||| Register a window handle in the global registry.
+||| Returns the assigned window ID (non-zero), or 0 on failure.
+||| Required before using gossamer_send_to or gossamer_group_*.
+export
+%foreign "C:gossamer_registry_add, libgossamer"
+prim__registryAdd : Bits64 -> PrimIO Bits32
+
+||| Remove a window handle from the registry.
+export
+%foreign "C:gossamer_registry_remove, libgossamer"
+prim__registryRemove : Bits64 -> PrimIO ()
+
+||| Query the number of windows currently in the registry.
+export
+%foreign "C:gossamer_registry_count, libgossamer"
+prim__registryCount : PrimIO Bits32
+
+||| Register a window and return its assigned ID.
+export
+registryAdd : WebviewHandle -> IO Bits32
+registryAdd wv = primIO (prim__registryAdd (webviewPtr wv))
+
+||| Remove a window from the registry.
+export
+registryRemove : WebviewHandle -> IO ()
+registryRemove wv = primIO (prim__registryRemove (webviewPtr wv))
+
+||| Count registered windows.
+export
+registryCount : IO Bits32
+registryCount = primIO prim__registryCount
+
+--------------------------------------------------------------------------------
+-- Window Groups
+--------------------------------------------------------------------------------
+
+||| Create a named window group. Pass empty string for no label.
+||| Returns a group ID (non-zero), or 0 on failure.
+export
+%foreign "C:gossamer_group_create, libgossamer"
+prim__groupCreate : String -> PrimIO Bits32
+
+||| Add a registered window to a group.
+export
+%foreign "C:gossamer_group_add, libgossamer"
+prim__groupAdd : Bits32 -> Bits32 -> PrimIO Bits32
+
+||| Remove a window from a group.
+export
+%foreign "C:gossamer_group_remove, libgossamer"
+prim__groupRemove : Bits32 -> Bits32 -> PrimIO Bits32
+
+||| Destroy a group (does not close the windows).
+export
+%foreign "C:gossamer_group_destroy, libgossamer"
+prim__groupDestroy : Bits32 -> PrimIO ()
+
+||| Apply a bulk operation to all windows in a group.
+||| ops: 0=minimize, 1=maximize, 2=restore, 3=raise, 4=lower, 5=close.
+export
+%foreign "C:gossamer_group_apply, libgossamer"
+prim__groupApply : Bits32 -> Bits32 -> PrimIO Bits32
+
+--------------------------------------------------------------------------------
+-- Z-Order Management
+--------------------------------------------------------------------------------
+
+||| Raise a window to the top of the window stack.
+export
+%foreign "C:gossamer_raise, libgossamer"
+prim__raise : Bits64 -> PrimIO Bits32
+
+||| Lower a window to the bottom of the window stack.
+export
+%foreign "C:gossamer_lower, libgossamer"
+prim__lower : Bits64 -> PrimIO Bits32
+
+--------------------------------------------------------------------------------
+-- Auto-Arrange
+--------------------------------------------------------------------------------
+
+||| Arrange all registered windows by strategy.
+||| Strategies: 0=tile, 1=cascade, 2=stack, 3=grid.
+export
+%foreign "C:gossamer_arrange, libgossamer"
+prim__arrange : Bits32 -> PrimIO Bits32
+
+--------------------------------------------------------------------------------
+-- Transmute (Window Mode Switching)
+--------------------------------------------------------------------------------
+
+||| Switch a window between CLI/TUI/GUI/PanLL modes.
+||| Modes: 0=gui, 1=cli, 2=tui, 3=panll_attach, 4=panll_detach.
+export
+%foreign "C:gossamer_transmute, libgossamer"
+prim__transmute : Bits64 -> Int -> PrimIO Bits32
+
+||| Query the current transmute mode of a window.
+export
+%foreign "C:gossamer_transmute_get, libgossamer"
+prim__transmuteGet : Bits64 -> PrimIO Int
+
+--------------------------------------------------------------------------------
+-- Activity Throttling
+--------------------------------------------------------------------------------
+
+||| Set activity level for a window. Levels: 0=paused, 1=throttled, 2=realtime.
+export
+%foreign "C:gossamer_activity_set, libgossamer"
+prim__activitySet : Bits64 -> Int -> PrimIO Bits32
+
+||| Query the current activity level of a window.
+export
+%foreign "C:gossamer_activity_get, libgossamer"
+prim__activityGet : Bits64 -> PrimIO Int
+
+--------------------------------------------------------------------------------
+-- Debug Drawer
+--------------------------------------------------------------------------------
+
+||| Open the WebKit inspector / debug drawer for a window.
+export
+%foreign "C:gossamer_debug_open, libgossamer"
+prim__debugOpen : Bits64 -> PrimIO Bits32
+
+||| Close the debug drawer for a window.
+export
+%foreign "C:gossamer_debug_close, libgossamer"
+prim__debugClose : Bits64 -> PrimIO Bits32
+
+||| Toggle the debug drawer for a window.
+export
+%foreign "C:gossamer_debug_toggle, libgossamer"
+prim__debugToggle : Bits64 -> PrimIO Bits32
+
+--------------------------------------------------------------------------------
+-- Groove Inter-Window Connections
+--------------------------------------------------------------------------------
+
+||| Connect to a target window via a typed Groove link with a TTL.
+||| groove_type: 0=hard, 1=soft, 2=data, 3=control, 4=sync, 5=async.
+||| ttl: seconds before the connection auto-expires (0=no expiry).
+export
+%foreign "C:gossamer_groove_connect_typed, libgossamer"
+prim__grooveConnectTyped : Bits32 -> Int -> Bits32 -> PrimIO Bits32
+
+||| Disconnect a Groove link to a target window.
+export
+%foreign "C:gossamer_groove_disconnect_typed, libgossamer"
+prim__grooveDisconnectTyped : Bits32 -> PrimIO Bits32
+
+||| Query the Groove type connected to a target window.
+||| Returns -1 if no connection.
+export
+%foreign "C:gossamer_groove_query_type, libgossamer"
+prim__grooveQueryType : Bits32 -> PrimIO Int
+
+||| Dock a URL panel to a window at a given pixel width.
+export
+%foreign "C:gossamer_groove_dock, libgossamer"
+prim__grooveDock : Bits64 -> String -> Bits32 -> PrimIO Bits32
+
+||| Undock any attached panel from a window.
+export
+%foreign "C:gossamer_groove_undock, libgossamer"
+prim__grooveUndock : Bits64 -> PrimIO Bits32
+
+--------------------------------------------------------------------------------
+-- Async IPC Configuration
+--------------------------------------------------------------------------------
+
+||| Query the current number of inflight async IPC calls (0..max).
+export
+%foreign "C:gossamer_async_inflight_count, libgossamer"
+prim__asyncInflightCount : PrimIO Bits32
+
+||| Set the maximum concurrent inflight async IPC calls. Returns clamped value.
+||| Default: 256. Maximum: 16384.
+export
+%foreign "C:gossamer_set_max_inflight, libgossamer"
+prim__setMaxInflight : Bits32 -> PrimIO Bits32
+
+||| Query the current maximum inflight async IPC limit.
+export
+%foreign "C:gossamer_get_max_inflight, libgossamer"
+prim__getMaxInflight : PrimIO Bits32
+
+--------------------------------------------------------------------------------
+-- Capability Limits
+--------------------------------------------------------------------------------
+
+||| Set the maximum number of concurrent capability tokens. Returns clamped value.
+||| Default: 256. Maximum: 16384.
+export
+%foreign "C:gossamer_cap_set_max, libgossamer"
+prim__capSetMax : Bits32 -> PrimIO Bits32
+
+||| Query the current capability slot limit.
+export
+%foreign "C:gossamer_cap_get_max, libgossamer"
+prim__capGetMax : PrimIO Bits32
+
+--------------------------------------------------------------------------------
+-- Content Security Policy
+--------------------------------------------------------------------------------
+
+||| Apply a Content-Security-Policy to a webview by injecting a <meta> tag.
+||| Safe to call at any time. Re-call after navigation if needed.
+export
+%foreign "C:gossamer_set_csp, libgossamer"
+prim__setCsp : Bits64 -> String -> PrimIO Bits32
