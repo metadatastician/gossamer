@@ -197,6 +197,28 @@ fi
 echo ""
 
 # ═══════════════════════════════════════════════════════════════════════
+# Section 7: Display integration test indicator
+# ═══════════════════════════════════════════════════════════════════════
+bold "Section 7: Display integration tests (Xvfb)"
+
+DISPLAY_TEST="$FFI_DIR/test/display_test.zig"
+if [ -f "$DISPLAY_TEST" ]; then
+    pass "display_test.zig present ($(wc -l < "$DISPLAY_TEST") lines)"
+    if command -v xvfb-run >/dev/null 2>&1; then
+        if (cd "$FFI_DIR" && xvfb-run -a --server-args="-screen 0 1024x768x24" zig build test-display 2>/dev/null); then
+            pass "Display integration tests passed under Xvfb"
+        else
+            fail_test "Display integration tests failed under Xvfb"
+        fi
+    else
+        skip_test "Display tests" "xvfb-run not available (run in CI with apt-get install xvfb)"
+    fi
+else
+    fail_test "display_test.zig not found at $DISPLAY_TEST"
+fi
+echo ""
+
+# ═══════════════════════════════════════════════════════════════════════
 # Summary
 # ═══════════════════════════════════════════════════════════════════════
 echo "═══════════════════════════════════════════════════════════════"
