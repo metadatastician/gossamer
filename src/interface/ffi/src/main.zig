@@ -1180,6 +1180,19 @@ export fn gossamer_lower(handle_ptr: u64) Result {
 }
 
 //==============================================================================
+// Streaming IPC — Backend → Frontend Event Push
+//==============================================================================
+//
+// gossamer_emit:        push a named JSON event to a handle          [csp.zig]
+// gossamer_emit_binary: push a named binary event (base64-encoded)   [csp.zig]
+// gossamer_broadcast:   send a named event + JSON to ALL windows      [below]
+// gossamer_send_to:     send a named event to a window by registry ID [below]
+//
+// All four are delivered via __gossamer_emit() / __gossamer_emit_binary() in the
+// target webview's JS context. JavaScript subscribes via gossamer.on(event, cb).
+//
+
+//==============================================================================
 // Cross-Window Communication (Panel Bus)
 //==============================================================================
 //
@@ -2016,6 +2029,17 @@ export fn gossamer_channel_open(handle_ptr: u64) u64 {
         \\    for (var i = 0; i < listeners.length; i++) {
         \\      try { listeners[i](payload); } catch(e) { console.error("Gossamer event error:", e); }
         \\    }
+        \\  }
+        \\};
+        \\window.__gossamer_emit_binary = function(eventName, base64) {
+        \\  var listeners = window.__gossamer_listeners[eventName];
+        \\  if (!listeners || listeners.length === 0) return;
+        \\  var bin = atob(base64);
+        \\  var buf = new ArrayBuffer(bin.length);
+        \\  var view = new Uint8Array(buf);
+        \\  for (var i = 0; i < bin.length; i++) view[i] = bin.charCodeAt(i);
+        \\  for (var j = 0; j < listeners.length; j++) {
+        \\    try { listeners[j](buf); } catch(e) { console.error("Gossamer binary event error:", e); }
         \\  }
         \\};
         \\window.gossamer = new Proxy({}, {

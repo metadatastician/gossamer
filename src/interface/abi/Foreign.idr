@@ -350,6 +350,36 @@ channelClose : (Channel req resp) -> IO ()
 channelClose ch = primIO (prim__channelClose (channelPtr ch))
 
 --------------------------------------------------------------------------------
+-- Streaming IPC — Backend → Frontend Event Push
+--------------------------------------------------------------------------------
+
+||| Push a named JSON event to a specific webview handle.
+||| Delivers via window.__gossamer_emit() in the target JS context.
+||| JavaScript subscribes with gossamer.on(eventName, callback).
+||| Maximum combined event + payload: 4096 bytes.
+export
+%foreign "C:gossamer_emit, libgossamer"
+prim__emit : Bits64 -> String -> String -> PrimIO Bits32
+
+||| Push a named binary event to a specific webview handle.
+||| The bytes are base64-encoded and delivered as an ArrayBuffer to JS listeners.
+||| No size limit beyond available memory.
+export
+%foreign "C:gossamer_emit_binary, libgossamer"
+prim__emitBinary : Bits64 -> String -> AnyPtr -> Bits32 -> PrimIO Bits32
+
+||| Broadcast a named JSON event to ALL registered webview windows.
+||| Returns the number of windows that received the event.
+export
+%foreign "C:gossamer_broadcast, libgossamer"
+prim__broadcast : String -> String -> PrimIO Bits32
+
+||| Send a named JSON event to a specific window by its registry ID.
+export
+%foreign "C:gossamer_send_to, libgossamer"
+prim__sendTo : Bits32 -> String -> String -> PrimIO Bits32
+
+--------------------------------------------------------------------------------
 -- Capability Operations
 --------------------------------------------------------------------------------
 

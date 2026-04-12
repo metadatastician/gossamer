@@ -1,25 +1,31 @@
 // Gossamer — CSP Enforcement & Streaming IPC (Backend → Frontend Push)
 //
-// Provides two runtime capabilities:
+// Provides three runtime capabilities:
 //
 //   1. Content-Security-Policy enforcement:
 //      gossamer_set_csp(handle, csp_string) injects a <meta> CSP tag into the
 //      webview, restricting the origin policy for scripts, styles, images, etc.
 //      Can be called from config at startup or at runtime for dynamic policy.
 //
-//   2. Streaming IPC (gossamer_emit):
-//      gossamer_emit(handle, event_name, payload_json) pushes an event from
+//   2. Streaming IPC — JSON events (gossamer_emit):
+//      gossamer_emit(handle, event_name, payload_json) pushes a JSON event from
 //      the backend (any thread) to the frontend. Uses g_idle_add to marshal
 //      the JS evaluation onto the GTK main thread, so it is safe to call from
 //      worker threads, async callbacks, or external event sources.
 //
+//   3. Streaming IPC — Binary events (gossamer_emit_binary):
+//      gossamer_emit_binary(handle, event_name, data, data_len) base64-encodes
+//      raw bytes and delivers them as an ArrayBuffer to JS listeners. Same
+//      thread-safety model as gossamer_emit.
+//
 //      Frontend JS API:
-//        window.__gossamer_on(eventName, callback) — register listener
-//        window.__gossamer_emit(eventName, payload)  — dispatched by backend
-//        window.gossamer.on(eventName, callback)    — proxy alias
+//        window.__gossamer_on(eventName, callback)           — register listener
+//        window.__gossamer_emit(eventName, jsonPayload)      — JSON dispatch (backend)
+//        window.__gossamer_emit_binary(eventName, base64)    — binary dispatch (backend)
+//        window.gossamer.on(eventName, callback)             — proxy alias
 //
 // Thread safety:
-//   Both functions use g_idle_add for GTK thread marshalling. The context
+//   All three functions use g_idle_add for GTK thread marshalling. The context
 //   structs are heap-allocated and self-freeing in the idle callback.
 //
 // SPDX-License-Identifier: PMPL-1.0-or-later
@@ -213,6 +219,89 @@ export fn gossamer_emit(
     return .ok;
 }
 
+/// Push a named binary event from the backend to the frontend webview.
+///
+/// The `data` bytes are base64-encoded and delivered via:
+///   window.__gossamer_emit_binary('eventName', 'BASE64_DATA')
+///
+/// The JS bridge decodes the base64 to an ArrayBuffer before calling listeners:
+///   gossamer.on("eventName", function(buf) { /* buf is ArrayBuffer */ });
+///
+/// Thread safety: uses g_idle_add exactly like gossamer_emit. Safe from any thread.
+///
+/// Matches: Gossamer.ABI.Foreign.prim__emitBinary
+export fn gossamer_emit_binary(
+    handle_ptr: u64,
+    event_name: [*:0]const u8,
+    data: [*]const u8,
+    data_len: u32,
+) main.Result {
+    main.clearError();
+    const handle = main.ptrFromU64(handle_ptr) orelse {
+        main.setError("Null webview handle");
+        return .null_pointer;
+    };
+
+    if (!handle.initialized) {
+        main.setError("Webview not initialized");
+        return .@"error";
+    }
+
+    if (handle.closed) {
+        main.setError("Webview already closed");
+        return .already_consumed;
+    }
+
+    const allocator = std.heap.c_allocator;
+    const raw: []const u8 = data[0..data_len];
+    const event_slice = std.mem.span(event_name);
+
+    // Escape the event name (base64 chars are safe as-is; event name may not be).
+    const escaped_event = escapeForJSSingleQuote(allocator, event_slice) catch {
+        main.setError("Out of memory escaping event name");
+        return .out_of_memory;
+    };
+    defer allocator.free(escaped_event);
+
+    // Base64-encode the binary payload.
+    const b64_len = std.base64.standard.Encoder.calcSize(raw.len);
+    const b64_buf = allocator.alloc(u8, b64_len) catch {
+        main.setError("Out of memory encoding binary data");
+        return .out_of_memory;
+    };
+    defer allocator.free(b64_buf);
+    _ = std.base64.standard.Encoder.encode(b64_buf, raw);
+
+    // Build JS: if(window.__gossamer_emit_binary){window.__gossamer_emit_binary('event','B64')}
+    // Base64 alphabet (A-Z a-z 0-9 + / =) is JS-string-safe — no escaping needed.
+    const js = std.fmt.allocPrintSentinel(
+        allocator,
+        "if(window.__gossamer_emit_binary){{window.__gossamer_emit_binary('{s}','{s}')}}",
+        .{ escaped_event, b64_buf },
+        0,
+    ) catch {
+        main.setError("Out of memory building binary emit JS");
+        return .out_of_memory;
+    };
+
+    const ctx = allocator.create(EmitContext) catch {
+        allocator.free(js);
+        main.setError("Out of memory allocating binary emit context");
+        return .out_of_memory;
+    };
+
+    ctx.* = .{
+        .allocator = allocator,
+        .handle = handle,
+        .js = js,
+    };
+
+    _ = c.g_idle_add(@ptrCast(&emitIdleCallback), @ptrCast(ctx));
+
+    main.clearError();
+    return .ok;
+}
+
 /// GLib idle callback — runs on the GTK main thread.
 /// Evaluates the emit JS and frees the context.
 /// Returns G_SOURCE_REMOVE (0) for single invocation.
@@ -308,5 +397,11 @@ test "gossamer_set_csp rejects null handle" {
 
 test "gossamer_emit rejects null handle" {
     const result = gossamer_emit(0, "test_event", "{}");
+    try std.testing.expectEqual(main.Result.null_pointer, result);
+}
+
+test "gossamer_emit_binary rejects null handle" {
+    var dummy: [4]u8 = .{ 0xDE, 0xAD, 0xBE, 0xEF };
+    const result = gossamer_emit_binary(0, "bin_event", &dummy, dummy.len);
     try std.testing.expectEqual(main.Result.null_pointer, result);
 }
