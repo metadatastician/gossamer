@@ -6,11 +6,11 @@
 
 [metadata]
 version = "0.2.0"
-last-updated = "2026-03-23"
+last-updated = "2026-04-12"
 
 [project]
 name = "gossamer"
-purpose = "Linearly-typed webview shell with formal ABI proofs — async IPC, CSP enforcement, streaming events"
+purpose = "Linearly-typed webview shell with formal ABI proofs — async IPC, CSP enforcement, streaming + binary events, multi-window registry, Groove connections, plugin system (planned)"
 role = "library"  # e.g. ffi-infrastructure, cli-tool, library, service
 
 [position-in-ecosystem]

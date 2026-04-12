@@ -6,21 +6,21 @@
 uuid = "a5ea1382-a34c-5334-8a46-a2ebe904c810"
 primary-forge = "github"
 primary-owner = "hyperpolymath"
-canonical-name = "rsr-template-repo"
-prefixed-name = "rm-rsr-template-repo"
+canonical-name = "gossamer"
+prefixed-name = "gv-gossamer"
 
 [clade]
-primary = "rm"
-secondary = ["gv"]
+primary = "gv"
+secondary = []
 assigned = "2026-03-16"
-rationale = ""
+rationale = "Gossamer is a webview/GUI-layer project; gv (graphical/visual) clade."
 
 [forges]
-github = "hyperpolymath/rsr-template-repo"
-gitlab = "hyperpolymath/rsr-template-repo"
-bitbucket = "hyperpolymath/rsr-template-repo"
+github = "hyperpolymath/gossamer"
+gitlab = "hyperpolymath/gossamer"
+bitbucket = "hyperpolymath/gossamer"
 
 [lineage]
 type = "standalone"
-parent = "RSR template — scaffold for new repos"
+parent = "ephapax — linearly-typed language Gossamer is built on"
 born = "2026-03-16"

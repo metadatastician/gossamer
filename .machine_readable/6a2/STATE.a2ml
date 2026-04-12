@@ -6,13 +6,13 @@
 [metadata]
 project = "gossamer"
 version = "0.3.1"
-last-updated = "2026-04-04"
+last-updated = "2026-04-13"
 status = "active"  # active | paused | archived
 
 [project-context]
 name = "gossamer"
 purpose = "Linearly-typed webview shell with formal ABI proofs — Ephapax backend, Idris2 ABI, Zig FFI. Desktop apps that can't leak resources by design."
-completion-percentage = 85
+completion-percentage = 90
 
 [crg]
 grade = "C"           # D | C | B | A
@@ -42,15 +42,15 @@ milestones = [
 
 [critical-next-actions]
 actions = [
-  "Submit gossamer-arxiv-paper.tex to arxiv.org (cs.PL or cs.SE) — requires user login",
+  "arXiv submission: attempt at arxiv.org (cs.PL / cs.SE) using OU .ac.uk email — may bypass endorsement; Zenodo draft 19535676 already published as preprint",
   "IDApTIK desktop migration: replace Tauri with Gossamer for desktop builds (staging decision required)",
   "Android NDK build integration and Gradle scaffolding for full Android support",
   "App Store packaging, code signing, and notarisation for iOS",
-  "Plugin system (load/unload .so/.dylib/.dll at runtime) — Phase 4 Production",
+  "Plugin system (load/unload .so/.dylib/.dll at runtime) — Phase 6; see HANDOVER-gossamer-plugin-system.md",
 ]
 
 [maintenance-status]
-last-run-utc = "2026-03-23"
+last-run-utc = "2026-04-12"
 last-report = "docs/reports/maintenance/latest.json"
 last-result = "pass"  # unknown | pass | warn | fail
 open-warnings = 0
@@ -82,3 +82,21 @@ depends-on = ["ephapax", "idris2", "zig", "webkitgtk"]
 #             async IPC exhaustion, revocation FIFO, result enum integrity). Hot reload watcher already
 #             implemented. All corrective backlog items now closed.
 #             deno.json added with test task definitions. TEST-NEEDS.md updated to CRG C.
+# 2026-04-12: Full maintenance backlog sweep (all 3 SHOULD + all COULD items closed):
+#             [1] Async IPC bugs: thread not detached (resource leak), null-return UB in asyncWorkerFn
+#                 and sync path, prim__channelBindAsync missing from Foreign.idr. 4 slot-lifecycle tests added.
+#             [2] Streaming IPC: gossamer_emit_binary (g_idle_add, heap-alloc, JS-escaped) added to csp.zig;
+#                 __gossamer_emit_binary bridge (atob → ArrayBuffer) added to injected JS.
+#             [3] ABI completeness: 28 previously undeclared exports now in Foreign.idr — guard, registry,
+#                 groups, z-order, arrange, transmute, activity, debug drawer, Groove, async config,
+#                 capability limits, CSP, build_info.
+#             [4] .gitignore: docs/whitepapers/*.pdf added (compiled PDF excluded; .tex source tracked).
+#             Hot reload and SSG confirmed already complete (stale backlog entries). Maintenance backlog CLOSED.
+#             Plugin system is the single remaining COULD — see HANDOVER-gossamer-plugin-system.md.
+# 2026-04-13: Paper compilation session. gossamer-arxiv-paper.tex fixed (language=JavaScript→style=ephapax,
+#             em-dashes in lstlisting replaced with --). Compiled clean, zero errors/warnings.
+#             Zenodo draft 19535676 created and updated with clean PDF. .gitignore extended with LaTeX
+#             intermediate patterns (*.aux *.out *.fls *.fdb_latexmk *.synctex.gz).
+#             dogfood-gate.yml: SHA-pinned a2ml-validate-action and k9-validate-action (were @main).
+#             CLADE.a2ml: fixed rsr-template-repo placeholder → gossamer identity.
+#             feat/window-controls-api-recovery branch deleted (4 commits superseded by main).

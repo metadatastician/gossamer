@@ -38,7 +38,7 @@ jobs:
 
       - name: Validate A2ML manifests
         if: steps.detect.outputs.count > 0
-        uses: hyperpolymath/a2ml-validate-action@main
+        uses: hyperpolymath/a2ml-validate-action@2fb7d7999c957d8db4fd7084aab6d5b8bf87c242 # main
         with:
           path: '.'
           strict: 'false'
@@ -86,7 +86,7 @@ jobs:
 
       - name: Validate K9 contracts
         if: steps.detect.outputs.k9_count > 0
-        uses: hyperpolymath/k9-validate-action@main
+        uses: hyperpolymath/k9-validate-action@a744acae4bb6e36af8782365dc32f22741eee621 # main
         with:
           path: '.'
           strict: 'false'

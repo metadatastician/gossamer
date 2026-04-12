@@ -107,6 +107,14 @@ sync_report*.txt
 **/.zig-cache/
 **/zig-out/
 
+# Compiled paper PDFs and LaTeX build intermediates (source .tex is tracked; artefacts are not)
+docs/whitepapers/*.pdf
+docs/whitepapers/*.aux
+docs/whitepapers/*.out
+docs/whitepapers/*.fls
+docs/whitepapers/*.fdb_latexmk
+docs/whitepapers/*.synctex.gz
+
 # SSG generated output
 site/dist/
 
