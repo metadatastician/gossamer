@@ -561,7 +561,13 @@ fn computeHmac(message: []const u8) ?[64]u8 {
     // Use SipHash-2-4 (128-bit MAC) for message authentication.
     // SipHash is the same algorithm used for IPC integrity stamps.
     // This keeps the groove signing consistent with the IPC layer.
-    var hasher = std.crypto.auth.siphash.SipHash128(2, 4).init(hmac_key[0..@min(hmac_key_len, 16)].*);
+    //
+    // SipHash128.init requires a comptime-known-length key ([16]u8).
+    // Copy hmac_key into a fixed-size buffer before passing.
+    var key16: [16]u8 = [_]u8{0} ** 16;
+    const copy_len = @min(hmac_key_len, 16);
+    @memcpy(key16[0..copy_len], hmac_key[0..copy_len]);
+    var hasher = std.crypto.auth.siphash.SipHash128(2, 4).init(&key16);
     hasher.update(message);
     hasher.final(&mac);
 
