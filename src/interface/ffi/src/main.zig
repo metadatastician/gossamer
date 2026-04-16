@@ -67,6 +67,13 @@ comptime {
     _ = @import("clipboard.zig");
 }
 
+// Plugin system FFI functions (gossamer_plugin_load, gossamer_plugin_unload,
+// gossamer_plugin_list). Dynamic loading of .so/.dylib/.dll extensions at
+// runtime via dlopen + restricted vtable API.
+comptime {
+    _ = @import("plugin.zig");
+}
+
 // Version information — bump on each release
 const VERSION = "0.3.0";
 const BUILD_INFO = "Gossamer " ++ VERSION ++ " built with Zig " ++ @import("builtin").zig_version_string;
@@ -175,12 +182,21 @@ pub const BindingCallback = *const fn ([*:0]const u8, ?*anyopaque) callconv(.c) 
 ///   false (default) — callback runs synchronously on the GTK main thread
 ///   true            — callback is spawned on a worker thread; response is
 ///                     delivered back to JS via g_idle_add when it completes
+///
+/// The `plugin_id` field tracks which plugin registered this binding.
+/// When a plugin is unloaded, all bindings with its plugin_id are removed.
+/// The IPC dispatcher checks plugin liveness before invoking the callback
+/// to prevent use-after-free on unloaded plugin code.
 pub const BindingEntry = struct {
     callback: BindingCallback,
     user_data: ?*anyopaque,
     /// When true, the callback is dispatched to a worker thread so that
     /// I/O-heavy operations do not block the GTK event loop.
     run_async: bool = false,
+    /// Plugin that registered this binding (0 = core/non-plugin).
+    /// Checked at dispatch time for liveness — if the plugin has been
+    /// unloaded, the IPC call returns a clean error instead of crashing.
+    plugin_id: u32 = 0,
 };
 
 /// Borrowed-window guard used by window operations that should fail once the

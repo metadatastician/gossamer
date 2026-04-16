@@ -1531,3 +1531,72 @@ test "boundary: registry count never exceeds 64 after multiple add/remove cycles
         h.bindings.deinit();
     }
 }
+
+//==============================================================================
+// Plugin System Tests (plugin.zig)
+//==============================================================================
+
+const plugin_mod = @import("../src/plugin.zig");
+
+test "plugin_load with null handle returns 0" {
+    plugin_mod.resetForTesting();
+    const id = plugin_mod.gossamer_plugin_load(0, "/tmp/nonexistent.so");
+    try testing.expectEqual(@as(u32, 0), id);
+}
+
+test "plugin_load with empty path returns 0" {
+    plugin_mod.resetForTesting();
+    // Empty path must be rejected before dlopen is attempted
+    const id = plugin_mod.gossamer_plugin_load(0, "");
+    try testing.expectEqual(@as(u32, 0), id);
+}
+
+test "plugin_load with nonexistent library path returns 0" {
+    plugin_mod.resetForTesting();
+
+    // Create a stack-allocated fake handle with initialized=true, closed=false
+    var fake_handle = std.mem.zeroes(gossamer.GossamerHandle);
+    fake_handle.initialized = true;
+    fake_handle.closed = false;
+    fake_handle.allocator = std.heap.c_allocator;
+    fake_handle.bindings = std.StringHashMap(gossamer.BindingEntry).init(std.heap.c_allocator);
+    defer fake_handle.bindings.deinit();
+
+    // Path that definitely does not exist — dlopen must fail
+    const id = plugin_mod.gossamer_plugin_load(
+        @intFromPtr(&fake_handle),
+        "/tmp/__gossamer_test_nonexistent_plugin_42__.so",
+    );
+    try testing.expectEqual(@as(u32, 0), id);
+}
+
+test "plugin_unload with 0 is idempotent no-op" {
+    plugin_mod.gossamer_plugin_unload(0);
+}
+
+test "plugin_unload with unknown id is idempotent no-op" {
+    plugin_mod.resetForTesting();
+    plugin_mod.gossamer_plugin_unload(9999);
+}
+
+test "plugin_unload double-unload is safe" {
+    plugin_mod.resetForTesting();
+    // Unload twice with the same ID — second call must be a silent no-op
+    plugin_mod.gossamer_plugin_unload(1);
+    plugin_mod.gossamer_plugin_unload(1);
+}
+
+test "plugin_list returns empty JSON array when no plugins loaded" {
+    plugin_mod.resetForTesting();
+    const json = std.mem.span(plugin_mod.gossamer_plugin_list());
+    try testing.expectEqualStrings("[]", json);
+}
+
+test "isPluginLoaded returns true for plugin_id 0 (non-plugin)" {
+    try testing.expect(plugin_mod.isPluginLoaded(0));
+}
+
+test "isPluginLoaded returns false for unregistered plugin_id" {
+    plugin_mod.resetForTesting();
+    try testing.expect(!plugin_mod.isPluginLoaded(42));
+}

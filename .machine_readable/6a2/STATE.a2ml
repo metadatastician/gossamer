@@ -6,13 +6,13 @@
 [metadata]
 project = "gossamer"
 version = "0.3.1"
-last-updated = "2026-04-13"
+last-updated = "2026-04-12"
 status = "active"  # active | paused | archived
 
 [project-context]
 name = "gossamer"
 purpose = "Linearly-typed webview shell with formal ABI proofs — Ephapax backend, Idris2 ABI, Zig FFI. Desktop apps that can't leak resources by design."
-completion-percentage = 90
+completion-percentage = 92
 
 [crg]
 grade = "C"           # D | C | B | A
@@ -35,6 +35,7 @@ milestones = [
   { name = "Phase 3: Integration tests + hot reload", completion = 100 },
   { name = "Phase 4: macOS and Windows support", completion = 100 },
   { name = "Phase 5: Mobile (iOS and Android)", completion = 70 },
+  { name = "Phase 6: Plugin system (dlopen vtable, load/unload/list, liveness check)", completion = 100 },
 ]
 
 [blockers-and-issues]
@@ -46,7 +47,6 @@ actions = [
   "IDApTIK desktop migration: replace Tauri with Gossamer for desktop builds (staging decision required)",
   "Android NDK build integration and Gradle scaffolding for full Android support",
   "App Store packaging, code signing, and notarisation for iOS",
-  "Plugin system (load/unload .so/.dylib/.dll at runtime) — Phase 6; see HANDOVER-gossamer-plugin-system.md",
 ]
 
 [maintenance-status]
@@ -100,3 +100,14 @@ depends-on = ["ephapax", "idris2", "zig", "webkitgtk"]
 #             dogfood-gate.yml: SHA-pinned a2ml-validate-action and k9-validate-action (were @main).
 #             CLADE.a2ml: fixed rsr-template-repo placeholder → gossamer identity.
 #             feat/window-controls-api-recovery branch deleted (4 commits superseded by main).
+# 2026-04-12: Phase 6 plugin system implemented:
+#             [1] plugin.zig: GossamerVtable (9-function restricted API table), dlopen/dlsym/dlclose lifecycle,
+#                 64-slot plugin registry, PluginEntry tracking, liveness check for IPC dispatch.
+#             [2] main.zig: BindingEntry extended with plugin_id field (0=core). comptime import of plugin.zig.
+#             [3] webview_gtk.zig: IPC dispatch path checks plugin liveness before invoking callbacks —
+#                 prevents use-after-free when plugin unloaded while handlers still registered.
+#             [4] Foreign.idr: prim__pluginLoad, prim__pluginUnload, prim__pluginList + safe wrappers.
+#             [5] build.zig: libdl linked on Linux/BSD for dlopen.
+#             [6] integration_test.zig: 9 new tests (null handle, empty path, nonexistent .so, double-unload,
+#                 idempotent unload, empty list JSON, isPluginLoaded semantics).
+#             HANDOVER-gossamer-plugin-system.md deleted on completion.

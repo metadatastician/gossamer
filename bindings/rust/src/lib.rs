@@ -111,6 +111,25 @@ extern "C" {
         label: *const c_char,
         callback: *const c_void,
     ) -> c_int;
+    #[allow(dead_code)]
+    fn gossamer_tray_add_separator(tray: u64) -> c_int;
+    #[allow(dead_code)]
+    fn gossamer_tray_set_callback(
+        tray: u64,
+        callback: *const c_void,
+    ) -> c_int;
+    #[allow(dead_code)]
+    fn gossamer_tray_set_icon(tray: u64, icon_name: *const c_char) -> c_int;
+    #[allow(dead_code)]
+    fn gossamer_tray_set_icon_from_file(tray: u64, path: *const c_char) -> c_int;
+    #[allow(dead_code)]
+    fn gossamer_tray_set_tooltip(tray: u64, tooltip: *const c_char) -> c_int;
+    #[allow(dead_code)]
+    fn gossamer_tray_set_visible(tray: u64, visible: u32) -> c_int;
+    #[allow(dead_code)]
+    fn gossamer_tray_set_window(tray: u64, window: u64) -> c_int;
+    #[allow(dead_code)]
+    fn gossamer_tray_destroy(tray: u64);
     fn gossamer_notify(title: *const c_char, body: *const c_char) -> c_int;
 
     fn gossamer_set_csp(handle: u64, csp: *const c_char) -> c_int;
@@ -222,7 +241,7 @@ extern "C" fn command_trampoline(payload: *const c_char, user_data: *mut c_void)
 
     // Serialize the response to a C string
     let response = serde_json::to_string(&result).unwrap_or_else(|_| "{}".to_string());
-    let c_response = CString::new(response).unwrap_or_else(|_| CString::new("{}").unwrap());
+    let c_response = CString::new(response).unwrap_or_else(|_| CString::new("{}").expect("TODO: handle error"));
 
     // Leak the CString — Zig copies it via std.mem.span, so this is safe.
     // The leaked memory is small and bounded by the number of IPC calls.
@@ -636,6 +655,74 @@ impl App {
         let body_c = CString::new(body).map_err(|e| Error::InvalidString(e.to_string()))?;
         // SAFETY: valid null-terminated strings
         check_result(unsafe { gossamer_notify(title_c.as_ptr(), body_c.as_ptr()) })
+    }
+
+    /// Create a system tray icon.
+    pub fn tray_create(&self, tooltip: &str) -> Result<u64, Error> {
+        let tooltip_c = CString::new(tooltip).map_err(|e| Error::InvalidString(e.to_string()))?;
+        // SAFETY: valid null-terminated string
+        let handle = unsafe { gossamer_tray_create(tooltip_c.as_ptr()) };
+        if handle == 0 {
+            Err(Error::OperationFailed {
+                code: 1,
+                message: "Failed to create system tray icon".to_string(),
+            })
+        } else {
+            Ok(handle)
+        }
+    }
+
+    /// Add a menu item to the system tray context menu.
+    pub fn tray_add_menu_item(&self, tray: u64, label: &str) -> Result<(), Error> {
+        let label_c = CString::new(label).map_err(|e| Error::InvalidString(e.to_string()))?;
+        // SAFETY: valid null-terminated string
+        check_result(unsafe { gossamer_tray_add_menu_item(tray, label_c.as_ptr(), std::ptr::null()) })
+    }
+
+    /// Add a separator to the system tray context menu.
+    pub fn tray_add_separator(&self, tray: u64) -> Result<(), Error> {
+        // SAFETY: valid tray handle
+        check_result(unsafe { gossamer_tray_add_separator(tray) })
+    }
+
+    /// Set the system tray icon by icon name.
+    pub fn tray_set_icon(&self, tray: u64, icon_name: &str) -> Result<(), Error> {
+        let icon_name_c = CString::new(icon_name).map_err(|e| Error::InvalidString(e.to_string()))?;
+        // SAFETY: valid null-terminated string
+        check_result(unsafe { gossamer_tray_set_icon(tray, icon_name_c.as_ptr()) })
+    }
+
+    /// Set the system tray icon from a file path.
+    pub fn tray_set_icon_from_file(&self, tray: u64, path: &str) -> Result<(), Error> {
+        let path_c = CString::new(path).map_err(|e| Error::InvalidString(e.to_string()))?;
+        // SAFETY: valid null-terminated string
+        check_result(unsafe { gossamer_tray_set_icon_from_file(tray, path_c.as_ptr()) })
+    }
+
+    /// Set the system tray tooltip.
+    pub fn tray_set_tooltip(&self, tray: u64, tooltip: &str) -> Result<(), Error> {
+        let tooltip_c = CString::new(tooltip).map_err(|e| Error::InvalidString(e.to_string()))?;
+        // SAFETY: valid null-terminated string
+        check_result(unsafe { gossamer_tray_set_tooltip(tray, tooltip_c.as_ptr()) })
+    }
+
+    /// Show or hide the system tray icon.
+    pub fn tray_set_visible(&self, tray: u64, visible: bool) -> Result<(), Error> {
+        // SAFETY: valid tray handle
+        check_result(unsafe { gossamer_tray_set_visible(tray, visible as u32) })
+    }
+
+    /// Attach the main window to the system tray icon.
+    pub fn tray_set_window(&self, tray: u64) -> Result<(), Error> {
+        // SAFETY: valid tray handle and window handle
+        check_result(unsafe { gossamer_tray_set_window(tray, self.handle) })
+    }
+
+    /// Destroy the system tray icon.
+    pub fn tray_destroy(&self, tray: u64) -> Result<(), Error> {
+        // SAFETY: valid tray handle
+        unsafe { gossamer_tray_destroy(tray) };
+        Ok(())
     }
 
     /// Get the Gossamer library version string.

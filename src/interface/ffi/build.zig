@@ -36,6 +36,8 @@ fn linkPlatformLibs(module: *std.Build.Module, os: std.Target.Os.Tag) void {
             module.linkSystemLibrary("gtk+-3.0", .{});
             module.linkSystemLibrary("webkit2gtk-4.1", .{});
             module.linkSystemLibrary("glib-2.0", .{});
+            // libdl for plugin system (dlopen/dlsym/dlclose)
+            module.linkSystemLibrary("dl", .{});
         },
         .macos => {
             // Cocoa + WebKit frameworks

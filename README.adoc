@@ -91,6 +91,8 @@ cd gossamer && bash examples/hello/run.sh
 * *Thread-local error safety* — all 16+ exported functions clear stale errors on entry.
 * *Capability registry* — 256-slot registry with FIFO eviction and clear overflow diagnostics.
 
+**Note**: Tile dirty-rect notifications and other high-frequency events use the dedicated streaming IPC system (`gossamer_emit`), not the 256-slot capability registry. This separation ensures command traffic doesn't interfere with real-time rendering performance.
+
 == Current Status
 
 * *v0.3.1 (current)*: 173 integration tests. Mobile bug fixes (iOS screen size, Android JNI constructor). Package distribution (deb/rpm/flatpak/dmg/wix).

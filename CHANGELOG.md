@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Plugin system (Phase 6)**: Dynamic loading of `.so`/`.dylib`/`.dll` extensions at runtime
+  - `src/interface/ffi/src/plugin.zig`: `GossamerVtable` (9-function restricted API), dlopen/dlsym/dlclose lifecycle, 64-slot plugin registry
+  - `gossamer_plugin_load(handle, path)` → plugin_id, `gossamer_plugin_unload(plugin_id)`, `gossamer_plugin_list()` → JSON
+  - Each plugin exports `gossamer_plugin_init(handle, channel, vtable)` and receives a restricted vtable (no GTK/WebKit internals — only eval/emit/channel_bind/cap_grant family)
+  - `BindingEntry.plugin_id` field + liveness check in `webview_gtk.zig` IPC dispatch path prevents use-after-free when handlers are called after plugin unload
+  - `prim__pluginLoad`/`prim__pluginUnload`/`prim__pluginList` added to `Foreign.idr` with safe wrappers
+  - Linux/BSD builds now link `libdl` for dlopen support
+  - 9 new integration tests covering null handle, empty path, nonexistent library, double-unload, idempotent unload, and empty-list JSON
+  - Sandboxing model: API restriction via vtable + RTLD_LOCAL (Phase 6a). Subprocess isolation (Phase 6b) deferred — plugins currently share process privileges, appropriate for developer tooling
+
 ## [0.3.1] — 2026-04-03
 
 ### Added

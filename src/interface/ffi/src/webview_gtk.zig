@@ -578,6 +578,15 @@ fn onIPCMessage(
         return;
     };
 
+    // Plugin liveness check — if the binding was registered by a plugin
+    // that has since been unloaded, return a clean error instead of
+    // calling into freed code (use-after-free prevention).
+    const plugin_mod = @import("plugin.zig");
+    if (!plugin_mod.isPluginLoaded(entry.plugin_id)) {
+        sendIPCError(handle, id, "Plugin unloaded — handler no longer available");
+        return;
+    }
+
     // ─── Async dispatch path ───
     // If the binding is marked async, spawn a worker thread so the
     // GTK event loop is not blocked by I/O-heavy callbacks.

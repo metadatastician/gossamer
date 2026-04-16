@@ -129,7 +129,7 @@ Mobile platforms using platform-native webviews.
 
 Full-featured framework ready for production use.
 
-* [ ] Plugin system (load/unload .so/.dylib/.dll at runtime)
+* [x] Plugin system (load/unload .so/.dylib/.dll at runtime) — DONE 2026-04-12 (dlopen vtable, 9-function restricted API, liveness check)
 * [ ] Auto-updater with delta updates
 * [ ] Application bundler (single binary with embedded assets)
 * [ ] WASM build target for web fallback
