@@ -259,7 +259,7 @@ find . -type f \( -name '*.idr' -o -name '*.idris2' -o -name '*.zig' \)
 - [ ] Re-run until acceptable.
 
 ```bash
-PANIC_BIN="/var/mnt/eclipse/repos/panic-attacker/target/release/panic-attack"
+PANIC_BIN="/var/mnt/eclipse/repos/games-ecosystem/panic-attacker/target/release/panic-attack"
 "$PANIC_BIN" assail "$REPO" --output /tmp/assail.json --output-format json --quiet
 jq -r '.weak_points | length' /tmp/assail.json
 jq -r '.weak_points[] | "\(.severity)|\(.location)|\(.description)"' /tmp/assail.json

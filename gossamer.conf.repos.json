@@ -1,0 +1,24 @@
+{
+  "$schema": "https://gossamer.dev/schemas/config/v1",
+  "productName": "My Gossamer App",
+  "version": "0.1.0",
+  "identifier": "com.example.myapp",
+  "build": {
+    "frontendDist": "../public",
+    "devUrl": "http://localhost:8000/",
+    "beforeDevCommand": "deno task dev",
+    "beforeBuildCommand": "deno task build"
+  },
+  "app": {
+    "windows": [{
+      "title": "My Gossamer App",
+      "width": 800,
+      "height": 600,
+      "resizable": true,
+      "decorations": true
+    }],
+    "security": { "capabilities": ["filesystem", "network"] },
+    "ipc": { "protocol": "json", "bridgeInjection": true }
+  },
+  "bundle": { "active": true, "targets": ["deb", "appimage"] }
+}
