@@ -1,0 +1,356 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+
+= Gossamer — CRG Audit (2026-04-18)
+Jonathan D.A. Jewell
+2026-04-18
+:toc:
+:sectnums:
+
+== Scope and Standard
+
+Evaluates the `gossamer` repository against *Component Readiness Grades v2.0
+(STRICT)*, 2026-03-30 revision. First flagship audit per the Phase 1 estate
+inventory (`~/Desktop/CRG-STATE-INVENTORY.md`).
+
+- Standard: `standards/component-readiness-grades/COMPONENT-READINESS-GRADES.md`
+- Criteria boilerplate: `rsr-template-repo/docs/governance/CRG-CRITERIA.adoc`
+- Audit template: `rsr-template-repo/docs/governance/CRG-AUDIT-TEMPLATE.adoc`
+- Self-declared grade (prior art):
+  * `.machine_readable/6a2/STATE.a2ml` `[crg] grade = "C"`, achieved 2026-04-04.
+  * Notes field: "106 Deno tests + 27 native Zig tests. Binary IPC support added. Approaching B (needs multi-platform CI)."
+- Audit date: 2026-04-18
+- Auditor: Jonathan D.A. Jewell
+
+Schema note: gossamer uses `[crg] grade = …` (section style). HYP-S005 currently
+matches only flat `crg-grade = …`. This is real-estate drift to fix in the
+detector rule (see §Non-Negotiables); the audit itself reads the value the
+repo intends.
+
+The audit grades the repo *as-is today*, not aspirationally.
+
+== v2.0 Strictness Recap
+
+[cols="1,3,4"]
+|===
+| Grade | Release Stage | Hard Requirement (v2.0)
+
+| X | None             | Untested.
+| F | Reject           | Harmful, wasteful, or superseded.
+| E | Pre-alpha        | >=1 test, failures documented.
+| D | Alpha            | Test matrix + scope documented + *RSR compliance mandatory*.
+| C | Alpha-stable     | Dogfooded, CI green, *deep per-file + per-directory annotation*.
+| B | Beta             | 6+ *diverse* external targets, issues fed back.
+| A | Stable           | Real-world external feedback confirms value; no harm.
+|===
+
+Publication requires B+. Long alpha is discipline, not shame.
+
+== Evidence Inventory (verified 2026-04-18)
+
+=== Structural compliance
+
+[cols="2,1,3"]
+|===
+| Item | State | Source
+
+| RSR mandatory workflows (17+)
+| PRESENT (22 workflows)
+| `.github/workflows/`
+
+| `.machine_readable/6a2/` canonical A2ML
+| PRESENT (STATE, META, ECOSYSTEM, AGENTIC, NEUROSYM, PLAYBOOK)
+| Layout matches CLAUDE.md invariant
+
+| `0-AI-MANIFEST.a2ml`
+| PRESENT
+| Root
+
+| `docs/EXPLAINME.adoc`, `docs/RSR_OUTLINE.adoc`
+| PRESENT
+| `docs/` (EXPLAINME via RSR_OUTLINE.adoc; `QUICKSTART.adoc` complements)
+
+| `docs/READINESS.md`
+| *ABSENT*
+| Required for C; missing
+
+| `guix.scm` + `flake.nix`
+| *guix.scm absent*; `flake.nix` present (`flake.lock` also present)
+| Root
+
+| `.well-known/`
+| Not verified in this pass
+| Per RSR_OUTLINE.adoc
+
+| SPDX headers on source
+| PRESENT on sampled files
+| `PMPL-1.0-or-later` declared
+
+| `Containerfile` (not `Dockerfile`)
+| PRESENT; *zero* `Dockerfile*` at any depth
+| Root `Containerfile` + `container/` configs
+
+| `deno.json` (no `package.json`/`webpack`)
+| PRESENT; *zero* `package.json` in-tree
+| Deno policy cleanly met
+
+| Contractile trident
+| PRESENT (`INTENT.contractile`, `TRUST.contractile`, `MUST.contractile`, `ADJUST.contractile`) + `contractiles/` subtree
+| `.machine_readable/`, root
+
+| Remote
+| `git@github.com:hyperpolymath/gossamer.git` (origin) + 4 mirrors
+| `git remote -v`
+|===
+
+RSR compliance verdict: *met with one gap* — `guix.scm` missing and
+`docs/READINESS.md` absent. Both are D-floor-adjacent issues; the rest of
+the D structural picture is clean. Gossamer is the cleanest-structured repo
+audited to date (boj-server + academic-workflow-suite comparison).
+
+=== Code and proofs
+
+[cols="2,1,3"]
+|===
+| Item | Count | Notes
+
+| Idris2 ABI modules (`src/interface/abi/*.idr`)
+| 13 files
+| HandleLinearity, CapabilityAuthenticity, IPCIntegrity, IPCDispatch, GrooveTermination, WindowStateMachine, LayoutStability, PanelIsolation, ResourceCleanup, Groove, Foreign, Layout, Types.
+
+| Zig FFI modules (`src/interface/ffi/src/*.zig`)
+| 5+ files (csp.zig, tray.zig, groove.zig, webview_android.zig, webview_gtk.zig, plus plugin.zig, main.zig)
+| Core engine including the Phase 6 plugin vtable (2026-04-12).
+
+| FFI exports (from STATE.a2ml / memory)
+| 102 FFI exports, 25 IPC handlers wired in CLI
+| Core surface area.
+
+| `believe_me` / `assert_total` / `sorry` / `unsafeCoerce` / `Obj.magic`
+| *0* actual uses in `src/`
+| 11 grep hits are all docstring lines of the form "Zero believe_me. All proofs are constructive." — claims of absence, not uses.
+
+| Idris2 ABI docstring pattern
+| "Zero believe_me. All proofs are constructive." at the head of each ABI module
+| Strong signal for C-level annotation depth on the proof layer.
+|===
+
+=== Test matrix
+
+*Live counts (verified today)* diverge from STATE.a2ml:
+
+- Deno tests: *180* `Deno.test()` calls across 8 files under `tests/`
+  (unit: capability 17, dialog 17, guard_mode 38, ipc 17, result_code 36;
+  property: contracts 15; e2e: webview_lifecycle 15; aspect: security 25).
+- Zig tests: *276* `test "…"` blocks across `src/`.
+- Zig integration tests: `src/interface/ffi/test/` contains
+  `display_test.zig`, `integration_test.zig`, plus its own README.
+- Benchmarks: `benchmarks/startup-bench.sh`.
+
+STATE.a2ml `[crg] notes` claims "106 Deno tests + 27 native Zig tests" —
+*stale by ~74 Deno + ~249 Zig tests*. The real posture is much stronger than
+the declared one. STATE.a2ml test-count lines should be refreshed.
+
+CI coverage: `.github/workflows/e2e.yml` triggers on push to main/master/develop
+for changes under `src/**`, `cli/**`, `tests/**`. 22 workflows in total.
+
+=== Annotation depth
+
+Top-level documentation structure (strong):
+
+- `docs/architecture/` — THREAT-MODEL.adoc
+- `docs/decisions/` — ADR template + ADR-001 + README (ADR machinery in place)
+- `docs/practice/` — AI-CONVENTIONS.adoc, STATE-VISUALIZER-GUIDE.adoc, README
+- `docs/theory/`, `docs/whitepapers/`, `docs/wikis/` — all present
+- `docs/governance/` — CRG-CRITERIA, MAINTENANCE-CHECKLIST, SOFTWARE-DEVELOPMENT-APPROACH, TSDM (all present)
+- Root `BENCHMARK-COMPARISON.adoc`, `EPHAPAX-GRAMMAR.adoc`, `STATE-VISUALIZER.adoc`
+
+Per-directory README coverage: *5 of 14 non-hidden source subtrees* have a
+README.
+
+[cols="1,1"]
+|===
+| README present | README absent
+| `container/`   | `android/`
+| `docs/`        | `api/`
+| `examples/`    | `benchmarks/`
+| `src/`         | `bindings/`
+| `verification/`| `cli/`
+|                | `configs/`
+|                | `contractiles/`
+|                | `ffi/`
+|                | `tests/`
+|===
+
+Idris2 ABI: every module carries the "Zero believe_me. All proofs are
+constructive." docstring — good per-module convention.
+
+`docs/practice/DOGFOOD-LOG.adoc`: *ABSENT*.
+
+=== Dogfooding / home-stable evidence
+
+STATE.a2ml has *no* `[dogfooding-status]` section. No `DOGFOOD-LOG.adoc`.
+
+Indirect dogfooding evidence exists:
+
+- IDApTIK desktop migration queued (`P3: Tauri → Gossamer staging decision`)
+  — *planned*, not done, so no dogfood evidence yet.
+- PanLL integration (`TransmuteMode` to CLI/TUI/GUI/PanLL) is in the ABI
+  but no per-panel dogfood record.
+- `examples/window-controls/` demo page exists.
+- arXiv paper drafted + Zenodo draft 19535676 ready to publish — the repo
+  exists coherently enough to write a paper about.
+
+These are suggestive but do not substitute for a dated dogfood log. v2.0
+C requires *continuous* home-context use with no known failures — a
+moving claim, not a one-off.
+
+=== External validation
+
+*No* `[external-targets]` section. *No* `[issues-fed-back]`. *No*
+`[field-signal]`.
+
+External-adjacent signals that are *not* equivalent to C→B evidence:
+
+- Zenodo draft 19535676 (preprint publication). *Publication without
+  external users is not external validation under v2.0.*
+- arXiv submission planned. Same caveat.
+- 4 mirror forges configured. Mirror presence is not usage.
+- Multi-platform support (Linux + Windows WebView2 + macOS IPC + Android
+  70%). Capability, not target trail.
+
+Per v2.0, reaching B requires *6+ diverse external targets* actually
+using the software with feedback fed back. Gossamer is currently at *0*
+recorded external targets.
+
+== Grade x Evidence Matrix
+
+[cols="1,1,3,3"]
+|===
+| Grade | Met? | Evidence supporting | Evidence against / gaps
+
+| X
+| n/a
+| Tests exist → not X
+| —
+
+| F
+| n/a
+| Not superseded; no harm signal; novel (linearly-typed webview shell)
+| —
+
+| E
+| ✓
+| 450+ tests (180 Deno + 276 Zig) across unit/property/e2e/aspect/benchmark
+| —
+
+| D
+| *✓ strong pass*
+| 22 RSR workflows; Containerfile + Deno policies cleanly met (0 violations); 13 Idris2 ABI modules with constructive proofs; 0 dangerous-pattern uses; scope documented across 6 completed phases + 1 at 70%
+| `guix.scm` missing; `docs/READINESS.md` absent — minor gaps relative to the rest of the D picture.
+
+| C
+| *✗ close but blocked*
+| CI green (e2e.yml + 21 others); top-level `docs/` annotation structure complete (architecture, decisions with ADRs, practice, theory, whitepapers, wikis, governance); Idris2 modules carry per-module annotation.
+| `[dogfooding-status]` section absent from STATE.a2ml. `DOGFOOD-LOG.adoc` absent. Per-directory README coverage 5/14 (~36%) — `android`, `api`, `benchmarks`, `bindings`, `cli`, `configs`, `contractiles`, `ffi`, `tests` lack orientation READMEs. STATE.a2ml test counts stale by ~74 Deno + ~249 Zig.
+
+| B
+| ✗
+| —
+| Zero external targets. Zero issues-fed-back trail. Zero field-signal. The `[crg] notes` line "Approaching B (needs multi-platform CI)" misstates v2.0 B: B requires external-target diversity, not multi-platform CI.
+
+| A
+| ✗
+| —
+| No field signal of external confirmation.
+|===
+
+== Verdict
+
+*Current CRG grade: **D (Alpha), close to C**.*
+
+Self-declared grade: *C*. Audited grade: *D*. This is an overclaim of one
+grade, consistent with the estate-wide "honesty delta" the Phase 1 inventory
+projected — but gossamer is genuinely near-C and the gaps are tractable.
+
+Recommended action: update `.machine_readable/6a2/STATE.a2ml` `[crg]` to
+`grade = "D"` with `grade-previous = "C"` and a `notes` entry citing this
+audit. Retain `next-target = "C"` (rather than the current `"B"`) to reflect
+reality — the C bar is what's proximate.
+
+The D grade is earned on four positive signals:
+
+1. 22 RSR workflows + *zero* structural-policy violations (Containerfile
+   correct, Deno-only, no package.json, no Dockerfile at any depth).
+2. 450+ tests: 180 Deno across unit/property/e2e/aspect + 276 Zig in-source.
+3. 13 Idris2 ABI modules, each docstring-claiming "Zero believe_me. All
+   proofs are constructive." — grep confirms zero actual uses of
+   `believe_me`, `assert_total`, `sorry`, `unsafeCoerce`, `Obj.magic`.
+4. Clean top-level `docs/` structure with ADRs, governance, practice,
+   theory, whitepapers, wikis subtrees — stronger than boj-server's
+   annotation surface.
+
+What blocks *immediate* promotion to C:
+
+1. `[dogfooding-status]` section missing. Populate with concrete
+   "done — <evidence>" entries — e.g. which hyperpolymath tools actually
+   shell through gossamer today, and when they started.
+2. `docs/practice/DOGFOOD-LOG.adoc` absent. Start it, date-stamped; commit
+   one entry per dogfood session over the evidence window (recommended
+   4 weeks).
+3. Per-directory orientation READMEs missing in *9 of 14* source subtrees:
+   `android/`, `api/`, `benchmarks/`, `bindings/`, `cli/`, `configs/`,
+   `contractiles/`, `ffi/`, `tests/`. Short README is sufficient — purpose
+   + what lives here + entry points.
+4. Refresh STATE.a2ml test counts (currently claim 106 Deno + 27 Zig;
+   actuals are 180 + 276). The stale numbers make the self-declared
+   grade look weaker than the code supports.
+5. Add `guix.scm` (a common hyperpolymath pattern; `flake.nix` already
+   present). Add root `docs/READINESS.md` populated from
+   `rsr-template-repo/READINESS.md`.
+
+What blocks promotion to B (after C):
+
+1. *Zero* external targets. Need 6+ diverse ones (different language
+   runtimes, OS families, authn postures, topologies).
+2. *Zero* external-contributor flow. Need a closed-issue trail with
+   external-reporter labels and a feedback-fed-back log.
+3. The existing "approaching B (needs multi-platform CI)" framing in
+   STATE.a2ml is incorrect under v2.0. Multi-platform CI is *internal*
+   quality work. External targets are what B requires.
+4. IDApTIK desktop migration (Tauri → Gossamer) would be a *single* target,
+   not six. Plan the other five now so B is reachable when C closes.
+
+== Notes on Non-Negotiables Respected by this Audit
+
+- Zenodo 19535676 + arXiv preprint are *publications*, not external-user
+  targets. They are recorded in Phase 1 inventory as publication-adjacent
+  signals, but audit does not treat them as B evidence.
+- The "Zero believe_me. All proofs are constructive." docstring convention
+  is accepted at face value — grep confirms the claim for every ABI module.
+- Plugin system Phase 6 (2026-04-12) and HANDOVER closure are taken as done;
+  not re-audited.
+- Schema-drift note (flat vs `[crg]` section) is flagged for the detector
+  rule to accommodate, not for the repo to fix.
+
+== Related Files
+
+- `.machine_readable/6a2/STATE.a2ml` `[crg]` — authoritative self-declared
+  state; recommend demote C→D with notes citing this audit.
+- `docs/governance/CRG-CRITERIA.adoc` — boilerplate criteria doc (present).
+- `docs/governance/CRG-LIFT-PLAN-2026-04-18.adoc` — *to be written* as the
+  companion plan for the C lift (blockers 1–5 above).
+- `~/Desktop/CRG-STATE-INVENTORY.md` — Phase 1 estate inventory.
+
+== Detector-Rule Drift (cross-cutting)
+
+Gossamer's `[crg] grade = "C"` convention is *not* matched by HYP-S005,
+which currently scans for flat `crg-grade = "C"`. Neither is it matched by
+HYP-S001 which reads `crg-grade` octads. The rule needs to accept both:
+
+- flat form: `crg-grade = "C"`
+- sectioned form: `[crg] / grade = "C"`
+
+Capture as follow-up against `developer-ecosystem/standards/hypatia-rules/`.
+
+_End of audit._
