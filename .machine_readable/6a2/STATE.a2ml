@@ -15,10 +15,17 @@ purpose = "Linearly-typed webview shell with formal ABI proofs — Ephapax backe
 completion-percentage = 92
 
 [crg]
-grade = "C"           # D | C | B | A
-achieved-on = "2026-04-04"
-next-target = "B"
-notes = "CRG C: 106 Deno tests + 27 native Zig tests. Binary IPC support added. Approaching B (needs multi-platform CI)."
+grade = "D"           # D | C | B | A
+achieved-on = "2026-04-18"
+next-target = "C"
+notes = "CRG D after 2026-04-18 audit: strong test/proof posture but missing per-directory README coverage needed for C. Dogfooding evidence now populated below (2026-04-18)."
+
+[dogfooding-status]
+# Populated 2026-04-18 against real on-disk integrations. Each entry must
+# resolve to a grep-hit in the cited path. See CRG-DOGFOODING-OPPORTUNITIES
+# on Desktop for the estate-wide opportunity map.
+boj-server-mcp = "2026-04-18 — gossamer-mcp cartridge (289 LOC, Deno mod.js + Idris2 ABI + Zig FFI). POST to GOSSAMER_BACKEND_URL, tools incl. gossamer_create_window. Path: boj-server/cartridges/gossamer-mcp/"
+idaptik-migration-target = "2026-04-18 — IDApTIK desktop migration scheduled (Tauri -> Gossamer). See critical-next-actions."
 
 [position]
 phase = "testing"  # design | implementation | testing | maintenance | archived
