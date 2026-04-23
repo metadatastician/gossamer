@@ -52,12 +52,6 @@ __pycache__/
 /obj/
 /bin/
 
-# Nix
-# flake.lock is ignored in the template repo because each project should
-# generate its own lock file on first use. In derived projects, REMOVE this
-# line and track flake.lock for reproducible builds.
-flake.lock
-
 # Haskell
 /.stack-work/
 /dist-newstyle/

@@ -106,10 +106,10 @@ extern "C" {
     #[allow(dead_code)]
     fn gossamer_tray_create(tooltip: *const c_char) -> u64;
     #[allow(dead_code)]
-    fn gossamer_tray_add_menu_item(
+    fn gossamer_tray_add_item(
         tray: u64,
         label: *const c_char,
-        callback: *const c_void,
+        item_id: u32,
     ) -> c_int;
     #[allow(dead_code)]
     fn gossamer_tray_add_separator(tray: u64) -> c_int;
@@ -675,8 +675,9 @@ impl App {
     /// Add a menu item to the system tray context menu.
     pub fn tray_add_menu_item(&self, tray: u64, label: &str) -> Result<(), Error> {
         let label_c = CString::new(label).map_err(|e| Error::InvalidString(e.to_string()))?;
-        // SAFETY: valid null-terminated string
-        check_result(unsafe { gossamer_tray_add_menu_item(tray, label_c.as_ptr(), std::ptr::null()) })
+        // SAFETY: valid null-terminated string. We use a dummy ID for now as
+        // the callback system is being refactored.
+        check_result(unsafe { gossamer_tray_add_item(tray, label_c.as_ptr(), 0) })
     }
 
     /// Add a separator to the system tray context menu.
