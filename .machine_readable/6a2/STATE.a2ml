@@ -6,7 +6,7 @@
 [metadata]
 project = "gossamer"
 version = "0.3.1"
-last-updated = "2026-04-12"
+last-updated = "2026-04-25"
 status = "active"  # active | paused | archived
 
 [project-context]
@@ -18,7 +18,7 @@ completion-percentage = 92
 grade = "D"           # D | C | B | A
 achieved-on = "2026-04-18"
 next-target = "C"
-notes = "CRG D after 2026-04-18 audit: strong test/proof posture but missing per-directory README coverage needed for C. Dogfooding evidence now populated below (2026-04-18)."
+notes = "CRG D after 2026-04-18 audit. D→C blocker resolved 2026-04-25: 16 per-directory README.adoc files added (android/ api/ benchmarks/ bindings/ cli/ configs/ contractiles/ deploy/ ffi/ generated/ packaging/ schema/ schemas/ scripts/ site/ tests/). Dogfooding evidence populated 2026-04-18. Pending CI green on README commit to formally claim C."
 
 [dogfooding-status]
 # Populated 2026-04-18 against real on-disk integrations. Each entry must
@@ -72,6 +72,8 @@ depends-on = ["ephapax", "idris2", "zig", "webkitgtk"]
 #             Async IPC implemented (gossamer_channel_bind_async, 256-slot inflight, worker threads, Rust binding).
 #             CSP enforcement added (gossamer_set_csp, CLI auto-apply, Rust/ReScript bindings).
 #             Streaming IPC added (gossamer_emit, g_idle_add, JS/Rust/ReScript bindings). 13 new tests.
+# 2026-04-25: D→C blocker: 16 per-directory README.adoc files added across all
+#             source/build/test subtrees.
 # 2026-04-03: Window controls API recovery merged. Zig build artifacts removed (13,704 lines).
 #             Gitignore broadened (**/.zig-cache/, **/zig-out/) to prevent future binary artifact commits.
 #             iOS bug fixed: UIScreen.mainScreen.bounds queried via objc_msgSend CGRect cast; dynamic screen size.
