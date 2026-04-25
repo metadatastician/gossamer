@@ -1,0 +1,4 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= API
+Public API surface for gossamer, currently exposing a V-lang binding (`v/gossamer.v`).
+This directory tracks the versioned stable interface that downstream consumers depend on; each subdirectory corresponds to a major API version.

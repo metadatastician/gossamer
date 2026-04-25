@@ -1,0 +1,4 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= Site
+Static website sources for the gossamer project homepage.
+Contains `index.html`, `style.css`, a `src/` subtree for additional page content, and a dev.to announcement draft; built by `scripts/ssg-build-runner.zig`.

@@ -1,0 +1,4 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= Tests
+Full test suite for gossamer, organised by category.
+Subdirectories: `unit/` (capability, dialog, guard-mode, IPC, result-code), `e2e/` (webview lifecycle), `property/` (contract-based property tests), `bench/` (startup and throughput benchmarks), and `aspect/` (cross-cutting security aspect tests).

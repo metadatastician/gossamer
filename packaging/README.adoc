@@ -1,0 +1,4 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= Packaging
+Platform-specific packaging recipes for distributing gossamer to end users.
+Subdirectories cover `debian/` (APT), `flatpak/` (Flatpak/Flathub), `macos/` (notarised DMG), `rpm/` (RPM spec), and `windows/` (WiX installer).

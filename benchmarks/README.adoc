@@ -1,0 +1,4 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= Benchmarks
+Top-level benchmark entry-point scripts for gossamer.
+The `startup-bench.sh` script here drives high-level timing measurements; per-category benchmarks live under `tests/bench/`.

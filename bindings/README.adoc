@@ -1,0 +1,4 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= Bindings
+Language-specific client bindings that wrap the gossamer C ABI for use from higher-level languages.
+Current targets are `rescript/` (ReScript/Deno) and `rust/` (Rust crate); each subdirectory is a self-contained build unit.
