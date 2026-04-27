@@ -241,7 +241,8 @@ extern "C" fn command_trampoline(payload: *const c_char, user_data: *mut c_void)
 
     // Serialize the response to a C string
     let response = serde_json::to_string(&result).unwrap_or_else(|_| "{}".to_string());
-    let c_response = CString::new(response).unwrap_or_else(|_| CString::new("{}").expect("TODO: handle error"));
+    let c_response = CString::new(response)
+        .unwrap_or_else(|_| CString::new("{}").expect("the literal \"{}\" contains no interior NUL byte"));
 
     // Leak the CString — Zig copies it via std.mem.span, so this is safe.
     // The leaked memory is small and bounded by the number of IPC calls.
