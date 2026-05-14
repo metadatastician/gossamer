@@ -56,6 +56,9 @@ jobs:
 
       - name: Run Hypatia scan
         id: scan
+        env:
+          # Suppress the Dependabot "GITHUB_TOKEN not set" warning.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "Scanning repository: ${{ github.repository }}"
 
@@ -82,7 +85,7 @@ jobs:
           echo "- Medium: $MEDIUM" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload findings artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: hypatia-findings
           path: hypatia-findings.json
