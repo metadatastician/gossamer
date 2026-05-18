@@ -512,10 +512,16 @@ handshakeRank HSRejected         = 0
 public export
 transitionDecreases : (t : HandshakeTransition from to)
                    -> LTE (S (handshakeRank to)) (handshakeRank from)
-transitionDecreases BeginProbe      = lteRefl           -- S 4 <= 5
-transitionDecreases ReceiveManifest = lteRefl           -- S 3 <= 4
-transitionDecreases ProbeFailed     = LTESucc (LTESucc (LTESucc (LTESucc LTEZero))) -- S 0 <= 4
-transitionDecreases BeginCapCheck   = lteRefl           -- S 2 <= 3
-transitionDecreases ManifestBad     = LTESucc (LTESucc (LTESucc LTEZero)) -- S 0 <= 3
-transitionDecreases CapCheckOk      = LTESucc (LTESucc LTEZero) -- S 0 <= 2
-transitionDecreases CapCheckFail    = LTESucc (LTESucc LTEZero) -- S 0 <= 2
+-- Rank table: HSIdle 5, HSProbing 4, HSManifestReceived 3,
+-- HSCapabilityCheck 2, HSConnected 0, HSRejected 0.  Goal is
+-- `LTE (S rank[to]) rank[from]`.  The `-> HSRejected/HSConnected`
+-- (rank 0) transitions need `LTE 1 k = LTESucc LTEZero`, NOT the
+-- `LTE k k` terms the pre-compile draft carried (those were latent
+-- type errors masked by the earlier `lteRefl` scope failure).
+transitionDecreases BeginProbe      = LTESucc (LTESucc (LTESucc (LTESucc (LTESucc LTEZero)))) -- LTE 5 5  (HSIdle→HSProbing)
+transitionDecreases ReceiveManifest = LTESucc (LTESucc (LTESucc (LTESucc LTEZero)))           -- LTE 4 4  (HSProbing→HSManifestReceived)
+transitionDecreases ProbeFailed     = LTESucc LTEZero                                         -- LTE 1 4  (HSProbing→HSRejected)
+transitionDecreases BeginCapCheck   = LTESucc (LTESucc (LTESucc LTEZero))                     -- LTE 3 3  (HSManifestReceived→HSCapabilityCheck)
+transitionDecreases ManifestBad     = LTESucc LTEZero                                         -- LTE 1 3  (HSManifestReceived→HSRejected)
+transitionDecreases CapCheckOk      = LTESucc LTEZero                                         -- LTE 1 2  (HSCapabilityCheck→HSConnected)
+transitionDecreases CapCheckFail    = LTESucc LTEZero                                         -- LTE 1 2  (HSCapabilityCheck→HSRejected)

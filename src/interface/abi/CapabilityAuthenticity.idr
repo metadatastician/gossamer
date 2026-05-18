@@ -147,7 +147,7 @@ data Attenuated : (original : ResourceKind) -> (derived : ResourceKind) -> Type 
   AttSame : Attenuated r r
   ||| Filesystem read-only is an attenuation of read-write.
   AttFsReadOnly : Attenuated (FileSystem (ReadWrite paths))
-                              (FileSystem (ReadOnly paths))
+                              (FileSystem (ReadOnlyPaths paths))
   ||| Filesystem AppData is an attenuation of any filesystem scope.
   AttFsAppData : Attenuated (FileSystem scope) (FileSystem AppData)
   ||| Network: specific hosts is an attenuation of all-network.
