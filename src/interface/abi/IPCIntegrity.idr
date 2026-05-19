@@ -169,7 +169,7 @@ hashPreservation (MkVerified (MkReceipt msg) received {intact}) = intact
 ||| automatically monotonic.
 public export
 seqMonotonicity : Succeeds (MkSeq {n = S n} v2) (MkSeq {n} v1) -> LTE (S n) (S n)
-seqMonotonicity MkSucceeds = lteRefl
+seqMonotonicity MkSucceeds = reflexive
 
 --------------------------------------------------------------------------------
 -- No Phantom Messages
@@ -251,18 +251,21 @@ public export
 receiptHash : SendReceipt payload n -> MsgHash
 receiptHash (MkReceipt msg) = msg.hash
 
+||| Extract the receipt's stamped message. Top-level (a `where` block on a
+||| `data` declaration is not valid Idris2 — this was the original parse
+||| failure); used by `MkVerified`'s `Untampered` obligation.
+public export
+receiptMsg : SendReceipt payload n -> StampedMessage payload n
+receiptMsg (MkReceipt m) = m
+
 ||| A receive verification pairs a received message with a send receipt
 ||| and proves that the hashes match.
 public export
 data VerifiedReceive : (payload : Type) -> (n : Nat) -> Type where
   MkVerified : (receipt : SendReceipt payload n)
             -> (received : StampedMessage payload n)
-            -> {auto 0 intact : Untampered (receipt.msg) received}
+            -> {auto 0 intact : Untampered (receiptMsg receipt) received}
             -> VerifiedReceive payload n
-  where
-    ||| Helper to extract the receipt's message for the Untampered proof.
-    (.msg) : SendReceipt payload n -> StampedMessage payload n
-    (.msg) (MkReceipt m) = m
 
 --------------------------------------------------------------------------------
 -- Protocol Conformance

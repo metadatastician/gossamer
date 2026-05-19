@@ -25,11 +25,12 @@ export
 prim__init : PrimIO Bits64
 
 ||| Safe wrapper for library initialization
+||| Requires a MainThreadProof witness — the library handle is main-thread-bound.
 export
-init : IO (Maybe Handle)
+init : {auto prf : MainThreadProof} -> IO (Maybe WebviewHandle)
 init = do
   ptr <- primIO prim__init
-  pure (createHandle ptr)
+  pure (createWebview ptr)
 
 ||| Clean up library resources
 export
@@ -38,8 +39,8 @@ prim__free : Bits64 -> PrimIO ()
 
 ||| Safe wrapper for cleanup
 export
-free : Handle -> IO ()
-free h = primIO (prim__free (handlePtr h))
+free : WebviewHandle -> IO ()
+free h = primIO (prim__free (webviewPtr h))
 
 --------------------------------------------------------------------------------
 -- Core Operations
@@ -52,9 +53,9 @@ prim__process : Bits64 -> Bits32 -> PrimIO Bits32
 
 ||| Safe wrapper with error handling
 export
-process : Handle -> Bits32 -> IO (Either Result Bits32)
+process : WebviewHandle -> Bits32 -> IO (Either Result Bits32)
 process h input = do
-  result <- primIO (prim__process (handlePtr h) input)
+  result <- primIO (prim__process (webviewPtr h) input)
   pure $ case result of
     0 => Left Error
     n => Right n
@@ -80,9 +81,9 @@ prim__getResult : Bits64 -> PrimIO Bits64
 
 ||| Safe string getter
 export
-getString : Handle -> IO (Maybe String)
+getString : WebviewHandle -> IO (Maybe String)
 getString h = do
-  ptr <- primIO (prim__getResult (handlePtr h))
+  ptr <- primIO (prim__getResult (webviewPtr h))
   if ptr == 0
     then pure Nothing
     else do
@@ -101,9 +102,9 @@ prim__processArray : Bits64 -> Bits64 -> Bits32 -> PrimIO Bits32
 
 ||| Safe array processor
 export
-processArray : Handle -> (buffer : Bits64) -> (len : Bits32) -> IO (Either Result ())
+processArray : WebviewHandle -> (buffer : Bits64) -> (len : Bits32) -> IO (Either Result ())
 processArray h buf len = do
-  result <- primIO (prim__processArray (handlePtr h) buf len)
+  result <- primIO (prim__processArray (webviewPtr h) buf len)
   pure $ case resultFromInt result of
     Just Ok => Right ()
     Just err => Left err
@@ -135,14 +136,7 @@ lastError = do
     then pure Nothing
     else pure (Just (prim__getString ptr))
 
-||| Get error description for result code
-export
-errorDescription : Result -> String
-errorDescription Ok = "Success"
-errorDescription Error = "Generic error"
-errorDescription InvalidParam = "Invalid parameter"
-errorDescription OutOfMemory = "Out of memory"
-errorDescription NullPointer = "Null pointer"
+-- errorDescription is re-exported via Gossamer.ABI.Types
 
 --------------------------------------------------------------------------------
 -- Version Information
@@ -181,16 +175,20 @@ public export
 Callback : Type
 Callback = Bits64 -> Bits32 -> Bits32
 
-||| Register a callback
+||| Register a callback.
+||| The callback is passed to C as a function pointer: Idris2's C FFI
+||| marshals the `Callback` closure directly (the prior `AnyPtr` +
+||| `cast` had no `Cast Callback AnyPtr` instance and never compiled —
+||| a latent error masked by the never-built module).
 export
 %foreign "C:gossamer_register_callback, libgossamer"
-prim__registerCallback : Bits64 -> AnyPtr -> PrimIO Bits32
+prim__registerCallback : Bits64 -> Callback -> PrimIO Bits32
 
 ||| Safe callback registration
 export
-registerCallback : Handle -> Callback -> IO (Either Result ())
+registerCallback : WebviewHandle -> Callback -> IO (Either Result ())
 registerCallback h cb = do
-  result <- primIO (prim__registerCallback (handlePtr h) (cast cb))
+  result <- primIO (prim__registerCallback (webviewPtr h) cb)
   pure $ case resultFromInt result of
     Just Ok => Right ()
     Just err => Left err
@@ -211,7 +209,7 @@ prim__isInitialized : Bits64 -> PrimIO Bits32
 
 ||| Check initialization status
 export
-isInitialized : Handle -> IO Bool
+isInitialized : WebviewHandle -> IO Bool
 isInitialized h = do
-  result <- primIO (prim__isInitialized (handlePtr h))
+  result <- primIO (prim__isInitialized (webviewPtr h))
   pure (result /= 0)

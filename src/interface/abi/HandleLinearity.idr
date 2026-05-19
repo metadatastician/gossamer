@@ -52,6 +52,28 @@ checkValid token =
     Left ok  => Just (MkValid {token})
     Right _  => Nothing
 
+||| Recover the (erased) non-null witness carried by each handle's
+||| constructor as a `ValidToken` for its raw token. The witness already
+||| exists inside the handle — `MkWebview`/`MkGroove`/`MkChannel`/`MkCap`
+||| each require `So (ptr /= 0)` at construction — but the `*Ptr`/`capToken`
+||| projections discard it. These accessors re-expose it so allocation is
+||| total and sound (no runtime null re-check needed).
+public export
+webviewValid : (wv : WebviewHandle) -> ValidToken (webviewPtr wv)
+webviewValid (MkWebview ptr {nonNull}) = MkValid {nonNull}
+
+public export
+grooveValid : (gh : GrooveHandle offers consumes) -> ValidToken (groovePtr gh)
+grooveValid (MkGroove ptr {nonNull}) = MkValid {nonNull}
+
+public export
+channelValid : (ch : Channel req resp) -> ValidToken (channelPtr ch)
+channelValid (MkChannel ptr {nonNull}) = MkValid {nonNull}
+
+public export
+capValid : (cap : Cap resource) -> ValidToken (capToken cap)
+capValid (MkCap token {nonNull}) = MkValid {nonNull}
+
 --------------------------------------------------------------------------------
 -- Handle Lifecycle States
 --------------------------------------------------------------------------------
@@ -188,7 +210,7 @@ LinearWebview = LinearHandle WebviewHandle
 ||| The handle starts in the Allocated state.
 public export
 allocateWebview : WebviewHandle -> LinearWebview Allocated
-allocateWebview wv = MkLinear wv (webviewPtr wv)
+allocateWebview wv = MkLinear wv (webviewPtr wv) {valid = webviewValid wv}
 
 ||| Run a webview (consuming it).
 ||| The handle transitions from Active to Consumed.
@@ -217,7 +239,7 @@ LinearGroove offers consumes = LinearHandle (GrooveHandle offers consumes)
 public export
 allocateGroove : GrooveHandle offers consumes
               -> LinearGroove offers consumes Allocated
-allocateGroove gh = MkLinear gh (groovePtr gh)
+allocateGroove gh = MkLinear gh (groovePtr gh) {valid = grooveValid gh}
 
 ||| Disconnect a groove (consuming it).
 public export
@@ -237,7 +259,7 @@ LinearChannel req resp = LinearHandle (Channel req resp)
 ||| Allocate a linear channel.
 public export
 allocateChannel : Channel req resp -> LinearChannel req resp Allocated
-allocateChannel ch = MkLinear ch (channelPtr ch)
+allocateChannel ch = MkLinear ch (channelPtr ch) {valid = channelValid ch}
 
 ||| Close a channel (consuming it).
 public export
@@ -257,7 +279,7 @@ LinearCap resource = LinearHandle (Cap resource)
 ||| Allocate a linear capability.
 public export
 allocateCap : Cap resource -> LinearCap resource Allocated
-allocateCap cap = MkLinear cap (capToken cap)
+allocateCap cap = MkLinear cap (capToken cap) {valid = capValid cap}
 
 ||| Revoke a capability (consuming it).
 public export

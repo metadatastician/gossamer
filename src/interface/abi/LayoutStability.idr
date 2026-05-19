@@ -69,26 +69,31 @@ record VersionedLayout where
 ||| 1. All old fields are preserved (same name, size, alignment, in order)
 ||| 2. New fields are only appended at the end
 ||| 3. The struct alignment is at least as strict
+||| Check if one field list is a prefix of another. Two fields match if
+||| name, size, and alignment are identical. Defined before
+||| `IsExtensionOf` (which uses it in `MkExtension`) and given a distinct
+||| name: the original `isPrefixOf` both forward-referenced this and
+||| clashed with `Data.List.isPrefixOf` (`Eq a => ...`), so the GADT
+||| resolved to the constrained Prelude version and demanded an
+||| `Eq FieldSpec` that does not exist.
+public export
+fieldsArePrefixOf : List FieldSpec -> List FieldSpec -> Bool
+fieldsArePrefixOf [] _ = True
+fieldsArePrefixOf _ [] = False
+fieldsArePrefixOf (f :: fs) (g :: gs) =
+  f.fieldName == g.fieldName &&
+  f.fieldSize == g.fieldSize &&
+  f.fieldAlign == g.fieldAlign &&
+  fieldsArePrefixOf fs gs
+
 public export
 data IsExtensionOf : (older : VersionedLayout) -> (newer : VersionedLayout) -> Type where
   ||| Witness that newer.fields starts with older.fields (prefix relation).
   MkExtension : {older, newer : VersionedLayout}
               -> {auto 0 versionOrd : So (versionLTE older.version newer.version)}
-              -> {auto 0 isPrefix : So (isPrefixOf older.fields newer.fields)}
+              -> {auto 0 isPrefix : So (fieldsArePrefixOf older.fields newer.fields)}
               -> {auto 0 alignPres : So (newer.sAlign >= older.sAlign)}
               -> IsExtensionOf older newer
-
-||| Check if one field list is a prefix of another.
-||| Two fields match if name, size, and alignment are identical.
-public export
-isPrefixOf : List FieldSpec -> List FieldSpec -> Bool
-isPrefixOf [] _ = True
-isPrefixOf _ [] = False
-isPrefixOf (f :: fs) (g :: gs) =
-  f.fieldName == g.fieldName &&
-  f.fieldSize == g.fieldSize &&
-  f.fieldAlign == g.fieldAlign &&
-  isPrefixOf fs gs
 
 --------------------------------------------------------------------------------
 -- WindowConfig Stability Across Versions
@@ -140,7 +145,7 @@ windowConfigV030 = MkVersioned (MkVersion 0 3 0)
 ||| Proof: v0.3.0 layout is identical to v0.2.0 layout (no changes).
 public export
 v030ExtendsV020 : IsExtensionOf windowConfigV020 windowConfigV030
-v030ExtendsV020 = MkExtension
+v030ExtendsV020 = MkExtension  -- OWED: So-witnesses over opaque layout constants need choose-based discharge (Refs standards#131)
 
 --------------------------------------------------------------------------------
 -- Result Enum Stability
@@ -166,22 +171,27 @@ resultCodesV030 =
   , ("CapabilityDenied", 10), ("GuardLocked", 11)
   ]
 
+||| True when `older` is a prefix of `newer` (same name/value pairs, in
+||| order). Top-level so it can appear in `ResultCodesPreserved`'s type —
+||| a `where` block on a `data` declaration is not valid Idris2 and was
+||| the original parse failure.
+public export
+isPrefixOfCodes : List (String, Nat) -> List (String, Nat) -> Bool
+isPrefixOfCodes [] _ = True
+isPrefixOfCodes _ [] = False
+isPrefixOfCodes ((n1, v1) :: rest1) ((n2, v2) :: rest2) =
+  n1 == n2 && v1 == v2 && isPrefixOfCodes rest1 rest2
+
 ||| Proof that existing result codes are preserved across versions.
 ||| New codes are only appended — old code values never change.
 public export
 data ResultCodesPreserved : List (String, Nat) -> List (String, Nat) -> Type where
   MkPreserved : {auto 0 prf : So (isPrefixOfCodes older newer)} -> ResultCodesPreserved older newer
-  where
-    isPrefixOfCodes : List (String, Nat) -> List (String, Nat) -> Bool
-    isPrefixOfCodes [] _ = True
-    isPrefixOfCodes _ [] = False
-    isPrefixOfCodes ((n1, v1) :: rest1) ((n2, v2) :: rest2) =
-      n1 == n2 && v1 == v2 && isPrefixOfCodes rest1 rest2
 
 ||| Proof: v0.3.0 result codes preserve all v0.1.0 codes.
 public export
 resultCodesStable : ResultCodesPreserved LayoutStability.resultCodesV010 LayoutStability.resultCodesV030
-resultCodesStable = MkPreserved
+resultCodesStable = MkPreserved  -- OWED: as above
 
 --------------------------------------------------------------------------------
 -- Handle Size Stability

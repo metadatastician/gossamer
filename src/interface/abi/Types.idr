@@ -151,6 +151,7 @@ errorDescription DoubleFree = "Double-free attempt"
 errorDescription WebviewUnavailable = "Webview engine unavailable on this platform"
 errorDescription IPCProtocolError = "IPC protocol violation"
 errorDescription CapabilityDenied = "Capability denied"
+errorDescription GuardLocked = "Window guard is active — unlock before performing this operation"
 
 --------------------------------------------------------------------------------
 -- Main-Thread Witness
@@ -473,8 +474,10 @@ data Protocol : List (String, Type, Type) -> Type where
 ||| Filesystem capability scope.
 public export
 data FilesystemScope : Type where
-  ||| Read-only access to specific directory paths
-  ReadOnly  : (paths : List String) -> FilesystemScope
+  ||| Read-only access to specific directory paths.
+  ||| (Named `ReadOnlyPaths`, not `ReadOnly`, to avoid a same-module
+  ||| constructor clash with `GuardMode.ReadOnly`.)
+  ReadOnlyPaths : (paths : List String) -> FilesystemScope
   ||| Read-write access to specific directory paths
   ReadWrite : (paths : List String) -> FilesystemScope
   ||| Access only the application's own data directory
@@ -540,10 +543,14 @@ data ResourceKind : Type where
 ||| for revocation tracking.
 public export
 data Cap : (resource : ResourceKind) -> Type where
-  MkCap : (token : Bits64) -> Cap resource
+  MkCap : (token : Bits64)
+        -> {auto 0 nonNull : So (token /= 0)}
+        -> Cap resource
 
 ||| Extract token value from capability (for FFI calls).
-||| Not exported — internal use only.
+||| Exported so the linear-handle layer can recover the (erased) non-null
+||| witness when allocating a `LinearCap` — see HandleLinearity.capValid.
+public export
 capToken : Cap resource -> Bits64
 capToken (MkCap token) = token
 

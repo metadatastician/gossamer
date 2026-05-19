@@ -41,6 +41,11 @@ check-affine:
 check-example name:
     {{ephapax}} check examples/{{name}}/main.eph --mode linear -v
 
+# Type-check the formal ABI proof package (idris2 0.8.0). This is a
+# REQUIRED gate, not optional: the ABI modules silently bit-rot otherwise.
+abi-check:
+    idris2 --typecheck gossamer-abi.ipkg
+
 # Build the Gossamer CLI (links libgossamer)
 build-cli: build-ffi
     cd cli && zig build

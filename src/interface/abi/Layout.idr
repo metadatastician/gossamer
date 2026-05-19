@@ -116,7 +116,7 @@ resultAlign : HasAlignment Result 4
 resultAlign = AlignProof
 
 ||| All result code values fit in a Bits32.
-||| (Max value is 10 = CapabilityDenied, well within 0..4294967295)
+||| (Max value is 11 = GuardLocked, well within 0..4294967295)
 public export
 resultFitsInBits32 : (r : Result) -> So (resultToInt r <= 4294967295)
 resultFitsInBits32 Ok = Oh
@@ -130,6 +130,7 @@ resultFitsInBits32 DoubleFree = Oh
 resultFitsInBits32 WebviewUnavailable = Oh
 resultFitsInBits32 IPCProtocolError = Oh
 resultFitsInBits32 CapabilityDenied = Oh
+resultFitsInBits32 GuardLocked = Oh
 
 --------------------------------------------------------------------------------
 -- Proof: WindowConfig Layout
