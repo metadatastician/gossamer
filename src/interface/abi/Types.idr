@@ -543,10 +543,14 @@ data ResourceKind : Type where
 ||| for revocation tracking.
 public export
 data Cap : (resource : ResourceKind) -> Type where
-  MkCap : (token : Bits64) -> Cap resource
+  MkCap : (token : Bits64)
+        -> {auto 0 nonNull : So (token /= 0)}
+        -> Cap resource
 
 ||| Extract token value from capability (for FFI calls).
-||| Not exported — internal use only.
+||| Exported so the linear-handle layer can recover the (erased) non-null
+||| witness when allocating a `LinearCap` — see HandleLinearity.capValid.
+public export
 capToken : Cap resource -> Bits64
 capToken (MkCap token) = token
 

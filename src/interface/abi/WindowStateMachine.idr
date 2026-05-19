@@ -248,15 +248,18 @@ public export
 closedNotActive : IsActive Closed -> Void
 closedNotActive x = case x of {}
 
-||| Every non-Closed state is active.
+||| Every non-Closed state is active. Takes a proof that `s` is not
+||| `Closed` (the original `s = Closed -> Void -> IsActive s` signature
+||| was ill-formed: `notClosed` had type `s = Closed`, so `notClosed Refl`
+||| did not type-check; the intended contract is `Not (s = Closed)`).
 public export
-nonClosedIsActive : (s : WindowState) -> s = Closed -> Void -> IsActive s
-nonClosedIsActive Created   notClosed _ = ActiveCreated
-nonClosedIsActive Visible   notClosed _ = ActiveVisible
-nonClosedIsActive Hidden    notClosed _ = ActiveHidden
-nonClosedIsActive Minimized notClosed _ = ActiveMinimized
-nonClosedIsActive Maximized notClosed _ = ActiveMaximized
-nonClosedIsActive Closed    notClosed _ = absurd (notClosed Refl)
+nonClosedIsActive : (s : WindowState) -> Not (s = Closed) -> IsActive s
+nonClosedIsActive Created   notClosed = ActiveCreated
+nonClosedIsActive Visible   notClosed = ActiveVisible
+nonClosedIsActive Hidden    notClosed = ActiveHidden
+nonClosedIsActive Minimized notClosed = ActiveMinimized
+nonClosedIsActive Maximized notClosed = ActiveMaximized
+nonClosedIsActive Closed    notClosed = absurd (notClosed Refl)
 
 ||| A borrow transition preserves the Active property.
 public export

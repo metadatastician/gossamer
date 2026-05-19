@@ -164,6 +164,10 @@ data Attenuated : (original : ResourceKind) -> (derived : ResourceKind) -> Type 
 public export
 attenuateTransitive : Attenuated a b -> Attenuated b b -> Attenuated a b
 attenuateTransitive prf AttSame = prf
+-- `AttFsAppData : Attenuated (FileSystem scope) (FileSystem AppData)` also
+-- inhabits `Attenuated b b` (when scope = AppData), so coverage requires it.
+-- `b` is then `FileSystem AppData` and `prf : Attenuated a b` is the result.
+attenuateTransitive prf AttFsAppData = prf
 
 --------------------------------------------------------------------------------
 -- Revocation Completeness

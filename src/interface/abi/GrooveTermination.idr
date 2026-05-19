@@ -158,23 +158,25 @@ verifyRejectIs3Steps = Refl
 ||| Proof: ALL possible handshake paths terminate in at most 4 steps.
 ||| This is proved by exhaustive case analysis — the 3 possible paths
 ||| have lengths 4, 2, and 3 respectively.
+||| Length of a completed handshake's trace (top-level so it can appear
+||| in `allPathsBounded`'s type — a `where` block cannot, which was the
+||| original parse failure).
+public export
+completedLength : CompletedHandshake -> Nat
+completedLength (Success trace) = traceLength trace
+completedLength (Failure trace) = traceLength trace
+
 public export
 allPathsBounded : (h : CompletedHandshake) -> LTE (completedLength h) 4
+allPathsBounded (Success trace) = boundSuccess trace
   where
-    completedLength : CompletedHandshake -> Nat
-    completedLength (Success trace) = traceLength trace
-    completedLength (Failure trace) = traceLength trace
-
-    allPathsBounded (Success trace) = boundSuccess trace
-      where
-        boundSuccess : (t : HandshakeTrace Init Connected) -> LTE (traceLength t) 4
-        boundSuccess (Step SendManifest (Step AcceptReply (Step VerifyMutual (Step Establish Done)))) = LTESucc (LTESucc (LTESucc (LTESucc LTEZero)))
-
-    allPathsBounded (Failure trace) = boundFailure trace
-      where
-        boundFailure : (t : HandshakeTrace Init Rejected) -> LTE (traceLength t) 4
-        boundFailure (Step SendManifest (Step RejectReply Done)) = LTESucc (LTESucc LTEZero)
-        boundFailure (Step SendManifest (Step AcceptReply (Step RejectMutual Done))) = LTESucc (LTESucc (LTESucc LTEZero))
+    boundSuccess : (t : HandshakeTrace Init Connected) -> LTE (traceLength t) 4
+    boundSuccess (Step SendManifest (Step AcceptReply (Step VerifyMutual (Step Establish Done)))) = LTESucc (LTESucc (LTESucc (LTESucc LTEZero)))
+allPathsBounded (Failure trace) = boundFailure trace
+  where
+    boundFailure : (t : HandshakeTrace Init Rejected) -> LTE (traceLength t) 4
+    boundFailure (Step SendManifest (Step RejectReply Done)) = LTESucc (LTESucc LTEZero)
+    boundFailure (Step SendManifest (Step AcceptReply (Step RejectMutual Done))) = LTESucc (LTESucc (LTESucc LTEZero))
 
 --------------------------------------------------------------------------------
 -- No Privilege Escalation
