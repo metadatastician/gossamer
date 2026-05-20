@@ -64,5 +64,6 @@ docs/** linguist-documentation
 .machine_readable/** linguist-generated
 container/** linguist-generated
 features/** linguist-generated
+generated/** linguist-generated
 verification/** linguist-generated
 contractile.just linguist-generated

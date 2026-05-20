@@ -1,4 +1,4 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
 = Generated
 Auto-generated artefacts produced by tooling during the build or verification pipeline — do not edit by hand.
-`tlaiser/` contains TLA+ model-checking specs generated for gossamer's capability-token and window-lifecycle state machines; `wokelangiser/` holds compliance and consent reports.
+`tlaiser/` contains TLA+ model-checking specs generated for gossamer's capability-token and window-lifecycle state machines.
