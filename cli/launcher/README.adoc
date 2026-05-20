@@ -1,0 +1,115 @@
+= Gossamer Launcher (MVP)
+:toc:
+
+The launcher binary embeds wasmtime and runs a precompiled `cli.wasm`
+produced by the Ephapax toolchain. This is Phase 14a.5a: minimum viable
+host that bridges only the 5 baseline `env::*` imports. The ~80
+`gossamer_*` libgossamer bridges land in 14a.5b; full build integration
+(compile `cli.wasm` from `cli/src/Main.eph`, install alongside the
+binary, runtime discovery) lands in 14a.5c.
+
+== Prerequisites
+
+* Zig 0.15+ (project standard).
+* `libwasmtime` C API v44.0.1+ — install from the official release
+  bundle:
++
+[source,sh]
+----
+curl -L https://github.com/bytecodealliance/wasmtime/releases/download/v44.0.1/wasmtime-v44.0.1-x86_64-linux-c-api.tar.xz | tar -xJ
+sudo cp -r wasmtime-v44.0.1-x86_64-linux-c-api/include/* /usr/local/include/
+sudo cp -r wasmtime-v44.0.1-x86_64-linux-c-api/lib/*     /usr/local/lib/
+sudo ldconfig
+----
++
+Verify:
++
+[source,sh]
+----
+test -f /usr/local/include/wasmtime.h && \
+test -f /usr/local/lib/libwasmtime.so && \
+echo "libwasmtime ready"
+----
+
+* `wabt` (for compiling the test WAT to wasm):
++
+[source,sh]
+----
+sudo dnf install wabt       # Fedora
+sudo apt-get install wabt   # Debian / Ubuntu
+----
+
+== Build
+
+[source,sh]
+----
+cd cli/launcher
+zig build
+----
+
+The binary lands at `cli/launcher/zig-out/bin/gossamer-launcher`.
+
+== Smoke test
+
+[source,sh]
+----
+cd cli/launcher
+wat2wasm src/hello.wat -o hello.wasm
+./zig-out/bin/gossamer-launcher hello.wasm one two three
+----
+
+Expected output:
+
+----
+3
+onetwothree
+----
+
+The leading `3` is `print_i32(argv_count())`; the three concatenated
+words come from looping over argv and calling `print_string` once per
+argument (no newline separation — the hello-world doesn't bother).
+
+== What the launcher provides
+
+[cols="1m,2,2"]
+|===
+| Import | Signature | Notes
+
+| env::print_i32
+| `(i32) -> ()`
+| Prints the integer + newline to stderr.
+
+| env::print_string
+| `(i32 ptr, i32 len) -> ()`
+| Resolves `ptr/len` against the guest's exported `memory` and prints the
+  UTF-8 bytes (no trailing newline).
+
+| env::argv_count
+| `() -> i32`
+| Number of arguments visible to the guest (argv after the launcher binary
+  and wasm path are stripped).
+
+| env::argv_arg_len
+| `(i32 idx) -> i32`
+| Byte length of `argv[idx]`, or `-1` if `idx` is out of range.
+
+| env::argv_arg_get
+| `(i32 idx, i32 buf_ptr, i32 buf_len) -> i32`
+| Copies `argv[idx]` into guest memory at `buf_ptr`. Returns bytes
+  written, or `-1` if `idx` is out of range, `buf_len` is insufficient,
+  or the buffer overflows the guest's memory.
+|===
+
+== What's NOT in MVP
+
+* The ~80 `gossamer_*` symbols (window controls, IPC, conf, shell, fs,
+  watcher, …) — those come in 14a.5b.
+* Capability grants at startup — also 14a.5b.
+* Building `cli.wasm` from an `.eph` source — 14a.5c.
+* Discovery of `cli.wasm` at `/usr/share/gossamer/` — 14a.5c.
+
+== Tracking
+
+* Umbrella issue: gossamer CLI port to typed-wasm Ephapax (forthcoming).
+* Prep merged so far: PRs #24 (file_watcher relocate), #26 (shell+fs FFI),
+  #27 (conf JSON loader); ephapax #86 (Argv stdlib).
