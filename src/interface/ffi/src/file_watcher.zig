@@ -1,8 +1,14 @@
-// Gossamer CLI — File Watcher for Hot Reload
+// Gossamer libgossamer — File Watcher for Hot Reload
 //
 // Polling-based file watcher that monitors directories for changes to
 // frontend assets (.html, .js, .css, .res.js). When a change is detected,
 // it schedules a webview reload on the GTK main thread via g_idle_add().
+//
+// Lives in the FFI layer (rather than in cli/) so any libgossamer
+// consumer — the legacy native Zig CLI, the future Ephapax-wasm CLI
+// behind a host launcher, third-party embedders — can use the same
+// hot-reload path. Exposed to C as gossamer_watcher_start /
+// gossamer_watcher_stop (see C-ABI exports at the end of this file).
 //
 // Design:
 //   - Runs on a dedicated std.Thread, separate from the GTK event loop.
@@ -150,6 +156,14 @@ const WatcherState = struct {
 
     /// Thread handle for join on shutdown.
     thread: ?std.Thread = null,
+
+    /// Caller-owned buffer copies kept alive for the lifetime of the
+    /// watcher. The WatchConfig holds slices into these. Non-null only
+    /// when the watcher was started via the C-ABI `gossamer_watcher_start`
+    /// export (which dupes its inputs); the Zig-native `start()` path
+    /// leaves them null because the caller manages buffer lifetime.
+    owned_json: ?[]u8 = null,
+    owned_frontend_dist: ?[]u8 = null,
 };
 
 //==============================================================================
@@ -188,6 +202,8 @@ pub fn stop(watcher: WatcherHandle) void {
     if (watcher.thread) |t| {
         t.join();
     }
+    if (watcher.owned_json) |j| std.heap.c_allocator.free(j);
+    if (watcher.owned_frontend_dist) |fd| std.heap.c_allocator.free(fd);
     std.heap.c_allocator.destroy(watcher);
 }
 
@@ -497,4 +513,65 @@ fn extractSimpleInt(json: []const u8, key: []const u8) ?u32 {
     while (i < after.len and after[i] >= '0' and after[i] <= '9') : (i += 1) {}
     if (i == num_start) return null;
     return std.fmt.parseInt(u32, after[num_start..i], 10) catch null;
+}
+
+//==============================================================================
+// C ABI — exported as gossamer_watcher_* in libgossamer
+//==============================================================================
+
+/// Start the hot-reload file watcher.
+///
+/// Both `config_json` (the full gossamer.conf.json content, used to extract
+/// the optional `"watch"` block) and `frontend_dist` (used as the fallback
+/// watch path) are copied into watcher-owned memory, so callers may free
+/// their buffers immediately after this returns.
+///
+/// Returns an opaque pointer to be passed to gossamer_watcher_stop, or
+/// null if the watcher could not be started.
+export fn gossamer_watcher_start(
+    handle: u64,
+    config_json: [*:0]const u8,
+    frontend_dist: [*:0]const u8,
+) ?*anyopaque {
+    const json_in = std.mem.span(config_json);
+    const fd_in = std.mem.span(frontend_dist);
+
+    const json_copy = std.heap.c_allocator.dupe(u8, json_in) catch return null;
+    const fd_copy = std.heap.c_allocator.dupe(u8, fd_in) catch {
+        std.heap.c_allocator.free(json_copy);
+        return null;
+    };
+
+    const cfg = parseWatchConfig(json_copy, fd_copy);
+
+    const state = std.heap.c_allocator.create(WatcherState) catch {
+        std.heap.c_allocator.free(json_copy);
+        std.heap.c_allocator.free(fd_copy);
+        return null;
+    };
+    state.* = .{
+        .handle = handle,
+        .config = cfg,
+        .owned_json = json_copy,
+        .owned_frontend_dist = fd_copy,
+    };
+
+    scanAllPaths(state);
+
+    state.thread = std.Thread.spawn(.{}, watcherThreadFn, .{state}) catch {
+        std.heap.c_allocator.free(json_copy);
+        std.heap.c_allocator.free(fd_copy);
+        std.heap.c_allocator.destroy(state);
+        return null;
+    };
+    return @ptrCast(state);
+}
+
+/// Stop the watcher started by gossamer_watcher_start. Blocks until the
+/// poll thread exits (bounded by one poll interval) and frees all
+/// watcher-owned resources. Safe to call with null (no-op).
+export fn gossamer_watcher_stop(opaque_handle: ?*anyopaque) void {
+    const p = opaque_handle orelse return;
+    const state: *WatcherState = @alignCast(@ptrCast(p));
+    stop(state);
 }
