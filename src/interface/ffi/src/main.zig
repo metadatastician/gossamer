@@ -74,6 +74,16 @@ comptime {
     _ = @import("plugin.zig");
 }
 
+// Default channel handlers (gossamer_channel_register_defaults).
+// 28 handlers (27 window/group/transmute/debug/groove + 1 shell-exec)
+// migrated from cli/src/main.zig so libgossamer can register them
+// automatically when a channel opens. Means the Ephapax-wasm CLI doesn't
+// have to bridge them through wasm — they're available as defaults the
+// moment gossamer_channel_open succeeds.
+comptime {
+    _ = @import("ipc_handlers.zig");
+}
+
 // Version information — bump on each release
 const VERSION = "0.3.0";
 const BUILD_INFO = "Gossamer " ++ VERSION ++ " built with Zig " ++ @import("builtin").zig_version_string;
