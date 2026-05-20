@@ -32,6 +32,7 @@ modules = Gossamer.ABI.Types
         , Gossamer.ABI.IPCDispatch
         , Gossamer.ABI.HandleLinearity
         , Gossamer.ABI.WindowStateMachine
+        , Gossamer.ABI.GrooveTermination
 
 -- DEFERRED (owner design call — Refs standards#131). Syntactic/structural
 -- defects were fixed in-tree (parse errors, name clashes, lteRefl, missing
@@ -44,14 +45,10 @@ modules = Gossamer.ABI.Types
 --   * LayoutStability — `So` witnesses (`v030ExtendsV020`,
 --     `resultCodesStable`) range over opaque top-level layout constants
 --     that do not reduce; needs `choose`-based discharge.
---   * GrooveTermination — redefines `HandshakeState`/`HandshakeStep`
---     already exported by `Gossamer.ABI.Groove` (ambiguous elaboration);
---     needs de-dup against Groove or qualified imports.
 --   * IPCIntegrity — `hashPreservation` is forward-referenced before
 --     `VerifiedReceive` and its theorem statement has unbound implicits
 --     plus a second `where`-accessor; needs theorem restatement.
 --      , Gossamer.ABI.PanelIsolation
 --      , Gossamer.ABI.ResourceCleanup
 --      , Gossamer.ABI.LayoutStability
---      , Gossamer.ABI.GrooveTermination
 --      , Gossamer.ABI.IPCIntegrity
