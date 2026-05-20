@@ -22,9 +22,16 @@ BuildRequires:  webkit2gtk4-devel >= 2.40
 BuildRequires:  gtk3-devel >= 3.22
 BuildRequires:  just
 BuildRequires:  pkg-config
+# wasmtime C API >= v44.0.1 — packaged out-of-tree for now; install
+# from https://github.com/bytecodealliance/wasmtime/releases under
+# /usr/local before building (see cli/launcher/build.zig).
+# ephapax — compiles cli/src/Main.eph → cli.wasm during the launcher
+# build. Set EPHAPAX=/path/to/ephapax if not on PATH.
 
 Requires:       webkit2gtk4 >= 2.40
 Requires:       gtk3 >= 3.22
+# wasmtime is dlopened by the launcher binary; same out-of-tree note
+# applies — /usr/local/lib/libwasmtime.so must be present at runtime.
 
 %description
 Gossamer is a webview shell framework that uses linear types to guarantee
@@ -55,8 +62,8 @@ building applications that embed the Gossamer webview shell framework.
 # Build the Zig FFI shared library in release mode.
 just build-ffi-release
 
-# Build the Gossamer CLI in release mode.
-just build-cli-release
+# Build the wasmtime-host launcher + cli.wasm in release mode.
+just build-launcher-release
 
 %install
 # Clear any stale install root.
@@ -70,9 +77,15 @@ install -Dm755 src/interface/ffi/zig-out/lib/libgossamer.so \
 install -Dm644 src/interface/ffi/zig-out/lib/libgossamer.a \
     %{buildroot}%{_libdir}/libgossamer.a
 
-# Install the CLI binary.
-install -Dm755 cli/zig-out/bin/gossamer \
+# Install the launcher binary as `gossamer` (preserving the existing
+# UX). The launcher discovers cli.wasm via the install-prefix-relative
+# path <exe_dir>/../share/gossamer/cli.wasm at runtime.
+install -Dm755 cli/launcher/zig-out/bin/gossamer-launcher \
     %{buildroot}%{_bindir}/gossamer
+
+# Install the precompiled cli.wasm into the share/gossamer prefix.
+install -Dm644 cli/launcher/zig-out/share/gossamer/cli.wasm \
+    %{buildroot}%{_datadir}/gossamer/cli.wasm
 
 # Install the public C header.
 install -Dm644 generated/abi/gossamer.h \
@@ -83,6 +96,7 @@ install -Dm644 generated/abi/gossamer.h \
 %doc README.adoc
 %{_libdir}/libgossamer.so
 %{_bindir}/gossamer
+%{_datadir}/gossamer/cli.wasm
 
 %files devel
 %{_libdir}/libgossamer.a

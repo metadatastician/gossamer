@@ -13,7 +13,7 @@
 # the default dh_auto_build heuristic (which does not know about Zig).
 override_dh_auto_build:
 	just build-ffi-release
-	just build-cli-release
+	just build-launcher-release
 
 # Override the install step to place files into the package staging tree.
 # dh_auto_install would look for a Makefile install target; we do it manually.
@@ -22,9 +22,15 @@ override_dh_auto_install:
 	install -Dm755 src/interface/ffi/zig-out/lib/libgossamer.so \
 		debian/gossamer/usr/lib/libgossamer.so
 
-	# CLI binary — goes to /usr/bin/
-	install -Dm755 cli/zig-out/bin/gossamer \
+	# CLI launcher (wasmtime host) — installed as `gossamer` so existing
+	# UX is preserved. Renames gossamer-launcher → gossamer.
+	install -Dm755 cli/launcher/zig-out/bin/gossamer-launcher \
 		debian/gossamer/usr/bin/gossamer
+
+	# Precompiled cli.wasm — discovered by the launcher at
+	# <exe_dir>/../share/gossamer/cli.wasm at runtime.
+	install -Dm644 cli/launcher/zig-out/share/gossamer/cli.wasm \
+		debian/gossamer/usr/share/gossamer/cli.wasm
 
 	# Public C header — goes to /usr/include/gossamer/
 	install -Dm644 generated/abi/gossamer.h \
