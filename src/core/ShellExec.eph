@@ -21,3 +21,21 @@ fn execute(program: String, argsJson: String, capToken: I64): I64 =
 // FFI: gossamer_shell_open(url, cap_token) -> result
 fn openUrl(url: String, capToken: I64): I32 =
   __ffi("gossamer_shell_open", url, capToken)
+
+// Spawn a shell command in the background and return an opaque child
+// handle. The command runs via /bin/sh -c (POSIX) or cmd /c (Windows)
+// with stdin/stdout/stderr inherited from the caller. The handle is
+// only valid until passed to spawnKill; do not use it for anything else.
+// Requires a valid shell capability token.
+// Returns 0 on error (check Shell.lastError for details).
+// FFI: gossamer_shell_spawn(command, cap_token) -> opaque_handle
+fn spawn(command: String, capToken: I64): I64 =
+  __ffi("gossamer_shell_spawn", command, capToken)
+
+// Terminate a previously-spawned background child and wait for it to
+// exit. Idempotent on 0 (no-op). The handle is invalid after this call.
+// Requires a valid shell capability token.
+// Returns 0 (ok) or non-zero error code.
+// FFI: gossamer_shell_kill(opaque_handle, cap_token) -> result
+fn spawnKill(handle: I64, capToken: I64): I32 =
+  __ffi("gossamer_shell_kill", handle, capToken)
