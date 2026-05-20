@@ -199,3 +199,70 @@ export fn gossamer_fs_remove(
     main.clearError();
     return .ok;
 }
+
+/// Create a directory recursively (equivalent of `mkdir -p`).
+/// Succeeds when the directory already exists.
+///
+/// Validates the capability token is active and of type FileSystem (kind=0).
+export fn gossamer_fs_mkdir_p(
+    path: [*:0]const u8,
+    cap_token: u64,
+) main.Result {
+    if (main.gossamer_cap_check(cap_token) != .ok) {
+        main.setError("FileSystem capability denied");
+        return .capability_denied;
+    }
+    if (main.gossamer_cap_resource_kind(cap_token) != 0) {
+        main.setError("Wrong capability kind — expected FileSystem (0)");
+        return .capability_denied;
+    }
+
+    const path_slice = std.mem.span(path);
+
+    std.fs.cwd().makePath(path_slice) catch |e| {
+        switch (e) {
+            error.PathAlreadyExists => {
+                main.clearError();
+                return .ok;
+            },
+            else => {
+                main.setError("Failed to create directory");
+                return .@"error";
+            },
+        }
+    };
+
+    main.clearError();
+    return .ok;
+}
+
+/// Copy a file from `src` to `dst`. Overwrites the destination if it
+/// exists. Parent directory of `dst` must already exist — call
+/// gossamer_fs_mkdir_p first if needed.
+///
+/// Validates the capability token is active and of type FileSystem (kind=0).
+export fn gossamer_fs_copy_file(
+    src: [*:0]const u8,
+    dst: [*:0]const u8,
+    cap_token: u64,
+) main.Result {
+    if (main.gossamer_cap_check(cap_token) != .ok) {
+        main.setError("FileSystem capability denied");
+        return .capability_denied;
+    }
+    if (main.gossamer_cap_resource_kind(cap_token) != 0) {
+        main.setError("Wrong capability kind — expected FileSystem (0)");
+        return .capability_denied;
+    }
+
+    const src_slice = std.mem.span(src);
+    const dst_slice = std.mem.span(dst);
+
+    std.fs.cwd().copyFile(src_slice, std.fs.cwd(), dst_slice, .{}) catch {
+        main.setError("Failed to copy file");
+        return .@"error";
+    };
+
+    main.clearError();
+    return .ok;
+}

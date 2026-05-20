@@ -83,6 +83,13 @@ comptime {
     _ = @import("file_watcher.zig");
 }
 
+// Shell FFI functions (gossamer_shell_spawn, gossamer_shell_kill).
+// Capability-gated background process management. Used by `gossamer dev`
+// to run the user's frontend dev server alongside the webview.
+comptime {
+    _ = @import("shell.zig");
+}
+
 // Version information — bump on each release
 const VERSION = "0.3.0";
 const BUILD_INFO = "Gossamer " ++ VERSION ++ " built with Zig " ++ @import("builtin").zig_version_string;
