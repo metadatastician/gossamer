@@ -35,13 +35,18 @@ modules = Gossamer.ABI.Types
         , Gossamer.ABI.GrooveTermination
         , Gossamer.ABI.LayoutStability
         , Gossamer.ABI.IPCIntegrity
+        , Gossamer.ABI.PanelIsolation
+        , Gossamer.ABI.ResourceCleanup
 
--- DEFERRED (owner design call — Refs standards#131). Syntactic/structural
--- defects were fixed in-tree, but each module has RESIDUAL proof/design
--- debt that is not a clean discharge. Excluded so the CI gate stays
--- green and the debt stays visible rather than silently bit-rotting:
---   * PanelIsolation / ResourceCleanup — `distinctSym` needs commutativity
---     of primitive String `==`: a sanctioned String-primitive bridge axiom
---     or refactor `Distinct` to carry `Not (a = b)`.
---      , Gossamer.ABI.PanelIsolation
---      , Gossamer.ABI.ResourceCleanup
+-- All formerly-deferred ABI proof modules from gossamer#22's OWED list
+-- are now wired and `idris2 --typecheck` green:
+--   * GrooveTermination  — discharged in gossamer#36 (MERGED)
+--   * LayoutStability    — discharged in gossamer#40 (MERGED)
+--   * IPCIntegrity       — discharged in gossamer#40 (MERGED)
+--   * PanelIsolation     — discharged in this branch via a sanctioned
+--                           class-J axiom (`stringNotEqCommut`) over the
+--                           Idris2 backend primitive `prim__eq_String`.
+--                           First class-J axiom in gossamer; same trust
+--                           posture as boj-server's `Boj.SafetyLemmas.*`.
+--   * ResourceCleanup    — discharged in this branch (missing `Data.DPair`
+--                           import + lowercase `exists` → `Exists`).
