@@ -1,31 +1,109 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 //
-// Gossamer CLI — Phase 14a.5c placeholder.
+// Gossamer CLI — typed-wasm entry point loaded by gossamer-launcher.
 //
-// This is the wasm entry point the gossamer-launcher loads at runtime
-// once the launcher is renamed to `gossamer` (which #15 does). For now
-// it's a placeholder that proves the build pipeline:
+// Phase #15 step 2 — demonstrates that the v2-grammar Ephapax surface
+// is rich enough to drive real CLI dispatch through the launcher's
+// host imports. The actual subcommand bodies still live in libgossamer
+// behind the FFI bridges added in Phase 14a; this module is the
+// orchestration layer.
 //
-//   ephapax compile cli/src/Main.eph -o cli.wasm
-//   gossamer-launcher cli.wasm
-//
-// On run it calls argv_count() and prints the integer back via the
-// baseline env::print_i32 host import. The real CLI surface — dev /
-// build / bundle / run / init / info — lands in #15 once the v2
-// grammar supports enough of the patterns the existing cli/src/main.zig
-// needs (string slicing, conf-handle lifetimes, etc).
-//
-// Imports below are deliberately a subset of what the launcher provides
-// (5 baseline + 29 libgossamer bridges from 14a.5b). The full set is in
-// cli/launcher/src/bridges.zig — adding new ones here is just a matter
-// of declaring the matching extern "env" fn.
+// Subcommand selection by argv_count (rather than argv[1] string match)
+// because v2-grammar Ephapax doesn't yet expose linear-memory reads to
+// user code — extracting bytes from an argv buffer for string comparison
+// requires runtime helpers that aren't surfaced at the source level.
+// Once the stdlib gains a `bytes_to_string` or `string_eq` helper, the
+// dispatcher swaps to the conventional argv[1] match on
+// "dev"|"build"|"run"|... in a follow-up.
 
 module GossamerCli
+
+// ── Host imports ─────────────────────────────────────────────────────────
+//
+// Every name below maps to a wasmtime_func_callback_t in the launcher
+// (see cli/launcher/src/main.zig + cli/launcher/src/bridges.zig). Five
+// baseline imports come from 14a.5a; Argv extern from 14a.1; the rest
+// from 14a.5b.
 
 extern "env" {
   fn print_i32(n: I32): Unit
   fn argv_count(): I32
+  fn argv_arg_len(idx: I32): I32
+  fn gossamer_groove_discover(): I32
+  fn gossamer_groove_status(target_id: I32): I32
 }
 
-fn main(): Unit = print_i32(argv_count())
+// Capability liveness check is deferred to a follow-up. The launcher's
+// env::cap_token returns I64 (because u64 tokens are too wide for I32),
+// but v2-grammar Ephapax has no I64 literal — integer literals always
+// parse as I32 unless they exceed i32::MAX, which a "compare token to
+// zero" can't express. Workarounds: (a) add an env::i64_is_zero helper
+// in the launcher, (b) widen the host return to I32 (loses information),
+// (c) wait for v2-grammar to gain an i64 literal suffix. Picking (a)
+// when we revisit token-passing for the real subcommand bodies.
+
+// ── Subcommand classification (argv-count based) ─────────────────────────
+
+pub data Subcommand =
+  | NoArg
+  | InfoOrVersion
+  | DevOrRunOrBuild
+  | Init
+  | Bundle
+  | TooMany
+
+fn classify(n: I32): Subcommand =
+  if n == 0 then NoArg
+  else if n == 1 then InfoOrVersion
+  else if n == 2 then DevOrRunOrBuild
+  else if n == 3 then Init
+  else if n == 4 then Bundle
+  else TooMany
+
+// Subcommand status code for downstream tools. The launcher (or a
+// scripting harness around it) can probe these to decide whether the
+// guest dispatched correctly. Stable indices, do not renumber.
+fn dispatchCode(s: Subcommand): I32 =
+  match s of
+    | NoArg            => 100
+    | InfoOrVersion    => 200
+    | DevOrRunOrBuild  => 300
+    | Init             => 400
+    | Bundle           => 500
+    | TooMany          => 900
+  end
+
+// ── Groove discovery (real FFI call into libgossamer) ───────────────────
+//
+// Proves the 14a.5b bridge surface is reachable from Ephapax. Always
+// returns the count of grooves visible to libgossamer at startup — a
+// liveness check that doesn't depend on the user's gossamer.conf.json.
+
+fn grooveProbe(): I32 = gossamer_groove_discover()
+
+// ── Composite status ─────────────────────────────────────────────────────
+//
+// Encodes two signals into a single i32:
+//   100s digit:  dispatch code (subcommand class)
+//   10s+1s:      groove count clamped to 0..99
+//
+// e.g. argv=["dev"] (2 args) with 1 groove -> 301
+//      argv=[] (no args) with 0 grooves    -> 100
+//
+// Cheap to decode from outside and exercises every reachable host
+// call path that does not involve I64 comparison.
+
+fn statusCode(): I32 =
+  let dispatch       : I32 = dispatchCode(classify(argv_count()))
+  let groove_raw     : I32 = grooveProbe()
+  let groove_clamped : I32 = if groove_raw > 99 then 99 else groove_raw
+  dispatch + groove_clamped
+
+// ── Entry point ──────────────────────────────────────────────────────────
+//
+// Prints the composite status integer and returns. The launcher's
+// env::print_i32 writes it to stderr followed by a newline; a wrapper
+// script or test harness reads it back to verify dispatch.
+
+fn main(): Unit = print_i32(statusCode())
