@@ -140,6 +140,61 @@ data Ordered : List (StampedMessage payload n) -> Type where
   OrdOne  : Ordered [msg]
 
 --------------------------------------------------------------------------------
+-- Send/Receive Protocol
+--------------------------------------------------------------------------------
+--
+-- Declared BEFORE the Hash Preservation Theorem so that `hashPreservation`
+-- can quantify over a `VerifiedReceive` without forward-referencing the
+-- type (the original module's forward-reference + inline `where`-accessor
+-- combination produced an unbound-implicit theorem statement; see the
+-- OWED note in `gossamer-abi.ipkg` for the original failure mode).
+
+||| A send receipt proves that a message was submitted to the channel.
+||| The receipt carries the hash computed at send time, which the
+||| receiver must match for integrity verification.
+public export
+data SendReceipt : (payload : Type) -> (n : Nat) -> Type where
+  MkReceipt : (msg : StampedMessage payload n) -> SendReceipt payload n
+
+||| Extract the hash from a send receipt (for verification).
+public export
+receiptHash : SendReceipt payload n -> MsgHash
+receiptHash (MkReceipt msg) = msg.hash
+
+||| Extract the receipt's stamped message. Top-level accessor (a `where`
+||| block on a `data` declaration is not valid Idris2 — this was the
+||| original parse failure); used by `MkVerified`'s `Untampered`
+||| obligation.
+public export
+receiptMsg : SendReceipt payload n -> StampedMessage payload n
+receiptMsg (MkReceipt m) = m
+
+||| A receive verification pairs a received message with a send receipt
+||| and proves that the hashes match.
+public export
+data VerifiedReceive : (payload : Type) -> (n : Nat) -> Type where
+  MkVerified : (receipt : SendReceipt payload n)
+            -> (received : StampedMessage payload n)
+            -> {auto 0 intact : Untampered (receiptMsg receipt) received}
+            -> VerifiedReceive payload n
+
+||| Extract the send receipt from a `VerifiedReceive`. Provided so that
+||| theorem statements about `VerifiedReceive` can name the receipt and
+||| received message without re-destructuring (the elaborator's
+||| lowercase-implicit-binding heuristic otherwise turns the bare names
+||| in a return type into fresh implicits and the proof obligation
+||| collapses to abstract record fields — same idiom as
+||| `LayoutStability.v030ExtendsV020`'s module-qualified constants).
+public export
+verifiedReceipt : VerifiedReceive payload n -> SendReceipt payload n
+verifiedReceipt (MkVerified r _) = r
+
+||| Extract the received stamped message from a `VerifiedReceive`.
+public export
+verifiedReceived : VerifiedReceive payload n -> StampedMessage payload n
+verifiedReceived (MkVerified _ rcv) = rcv
+
+--------------------------------------------------------------------------------
 -- Hash Preservation Theorem
 --------------------------------------------------------------------------------
 
@@ -153,23 +208,40 @@ data Ordered : List (StampedMessage payload n) -> Type where
 ||| The proof is definitional: VerifiedReceive includes Untampered as
 ||| an erased auto-implicit, so the type checker ensures hash equality
 ||| at construction time. This function witnesses that relationship.
+|||
+||| Restated to use the `verifiedReceipt` + `verifiedReceived` top-level
+||| accessors instead of an inline `where`-defined `.msg` projector — the
+||| original `Untampered (MkReceipt msg).msg received` form left `msg`
+||| and `received` as unbound implicits in the return type, which Idris2
+||| would silently bind as fresh variables (and which destroyed the
+||| dependency on the input `VerifiedReceive`).
+||| Marked `0` — this is a type-level theorem, not a runtime function.
+||| `MkVerified` binds its `intact` witness at quantity 0 (erased), so
+||| a quantity-1 caller cannot extract it. Quantity-0 callers can,
+||| which is exactly what proof-level use sites need.
 public export
-hashPreservation : VerifiedReceive payload n -> Untampered (MkReceipt msg).msg received
-hashPreservation (MkVerified (MkReceipt msg) received {intact}) = intact
-  where
-    (.msg) : SendReceipt payload n -> StampedMessage payload n
-    (.msg) (MkReceipt m) = m
+0 hashPreservation : (v : VerifiedReceive payload n)
+                  -> Untampered (receiptMsg (verifiedReceipt v)) (verifiedReceived v)
+hashPreservation (MkVerified _ _ {intact}) = intact
 
 ||| Sequence monotonicity: for any two successive messages in a valid
 ||| log, the later message has a strictly greater sequence index.
 |||
-||| This is proved by construction: StampedMessage carries the sequence
-||| number at the type level (Nat index), and Succeeds witnesses that
-||| S n > n. A log of StampedMessages with increasing Nat indices is
-||| automatically monotonic.
+||| This is proved by construction: `StampedMessage` carries the
+||| sequence number at the type level (Nat index), and `Succeeds`
+||| witnesses that `S n > n`. The proof is `LTE n (S n)` (current
+||| strictly precedes successor) — the original `LTE (S n) (S n)` was
+||| reflexivity, not monotonicity, and was the silent latent defect the
+||| coverage/quantity checker would have caught on first build.
+|||
+||| Marked `0` for the same reason as `hashPreservation`: `MkSucceeds`
+||| binds `n` at quantity 0 in the data constructor, so the proof
+||| `lteSuccRight reflexive` (which structurally recurses on `n`) needs
+||| `n` available at quantity 1 — only a quantity-0 caller can supply
+||| that. The theorem stands; only runtime invocation is prohibited.
 public export
-seqMonotonicity : Succeeds (MkSeq {n = S n} v2) (MkSeq {n} v1) -> LTE (S n) (S n)
-seqMonotonicity MkSucceeds = reflexive
+0 seqMonotonicity : Succeeds (MkSeq {n = S n} v2) (MkSeq {n} v1) -> LTE n (S n)
+seqMonotonicity MkSucceeds = lteSuccRight reflexive
 
 --------------------------------------------------------------------------------
 -- No Phantom Messages
@@ -234,38 +306,6 @@ chainedHashPreservation : (sent : StampedMessage payload n)
                        -> (0 leg2 : mid.hash = recv.hash)
                        -> sent.hash = recv.hash
 chainedHashPreservation sent mid recv leg1 leg2 = trans leg1 leg2
-
---------------------------------------------------------------------------------
--- Send/Receive Protocol
---------------------------------------------------------------------------------
-
-||| A send receipt proves that a message was submitted to the channel.
-||| The receipt carries the hash computed at send time, which the
-||| receiver must match for integrity verification.
-public export
-data SendReceipt : (payload : Type) -> (n : Nat) -> Type where
-  MkReceipt : (msg : StampedMessage payload n) -> SendReceipt payload n
-
-||| Extract the hash from a send receipt (for verification).
-public export
-receiptHash : SendReceipt payload n -> MsgHash
-receiptHash (MkReceipt msg) = msg.hash
-
-||| Extract the receipt's stamped message. Top-level (a `where` block on a
-||| `data` declaration is not valid Idris2 — this was the original parse
-||| failure); used by `MkVerified`'s `Untampered` obligation.
-public export
-receiptMsg : SendReceipt payload n -> StampedMessage payload n
-receiptMsg (MkReceipt m) = m
-
-||| A receive verification pairs a received message with a send receipt
-||| and proves that the hashes match.
-public export
-data VerifiedReceive : (payload : Type) -> (n : Nat) -> Type where
-  MkVerified : (receipt : SendReceipt payload n)
-            -> (received : StampedMessage payload n)
-            -> {auto 0 intact : Untampered (receiptMsg receipt) received}
-            -> VerifiedReceive payload n
 
 --------------------------------------------------------------------------------
 -- Protocol Conformance

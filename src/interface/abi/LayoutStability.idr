@@ -143,9 +143,17 @@ windowConfigV030 = MkVersioned (MkVersion 0 3 0)
   8
 
 ||| Proof: v0.3.0 layout is identical to v0.2.0 layout (no changes).
+|||
+||| Names are module-qualified (`LayoutStability.…`) to prevent Idris2's
+||| lowercase-implicit-binding heuristic from re-interpreting the two
+||| constants as fresh implicit variables (the elaborator otherwise
+||| issues "is shadowing Gossamer.ABI.LayoutStability.<name>" warnings
+||| and the auto-implicit `So` proofs collapse to "Can't find …" because
+||| their goal is then over abstract record fields, not the concrete
+||| record values — same idiom as `resultCodesStable` below).
 public export
-v030ExtendsV020 : IsExtensionOf windowConfigV020 windowConfigV030
-v030ExtendsV020 = MkExtension  -- OWED: So-witnesses over opaque layout constants need choose-based discharge (Refs standards#131)
+v030ExtendsV020 : IsExtensionOf LayoutStability.windowConfigV020 LayoutStability.windowConfigV030
+v030ExtendsV020 = MkExtension
 
 --------------------------------------------------------------------------------
 -- Result Enum Stability
