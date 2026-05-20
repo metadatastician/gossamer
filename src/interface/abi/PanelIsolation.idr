@@ -15,7 +15,11 @@
 ||| 3. Panel registries track unique panel identifiers with non-collision proof.
 ||| 4. No panel can forge another panel's state token.
 |||
-||| Zero believe_me. All proofs are constructive.
+||| One class-J axiom: `stringNotEqCommut` — commutativity of the
+||| Idris2 backend primitive `prim__eq_String`. Sanctioned principled
+||| assumption over a foreign primitive (same trust posture as
+||| boj-server's `Boj.SafetyLemmas.charEqSym`), not unproven debt. All
+||| other proofs in this module are constructive.
 
 module Gossamer.ABI.PanelIsolation
 
@@ -50,10 +54,47 @@ data Distinct : (a : PanelTag) -> (b : PanelTag) -> Type where
              -> {auto 0 prf : So (not (a == b))}
              -> Distinct a b
 
+--------------------------------------------------------------------------------
+-- Class-J axiom: String `==` commutativity (Refs standards#131 / #124)
+--------------------------------------------------------------------------------
+
+||| AXIOM (class-J): primitive String inequality is commutative.
+|||
+||| The `(==)` operator on `String` is the `Eq String` instance, which
+||| dispatches to Idris2's backend primitive `prim__eq_String`. The
+||| primitive is an opaque foreign function with no constructors and no
+||| in-language induction principle — its commutativity over content
+||| equality (`a == b` ⇔ `b == a`) holds on every supported backend
+||| (Chez, Racket, Node, JS — all dispatch to native string-equal which
+||| is content-symmetric) but cannot be derived inside Idris2 itself.
+|||
+||| Same trust posture as boj-server's `Boj.SafetyLemmas.charEqSym`
+||| (symmetry of `prim__eqChar`) and four sibling axioms over String /
+||| Char primitives. Audited as **class-(J)** — principled assumption
+||| over an Idris2 primitive, not unproven debt. See PROOF-NEEDS.md (in
+||| boj-server) for the per-site convention; this is gossamer's first
+||| class-J axiom and is documented at the use site rather than in a
+||| dedicated `SafetyLemmas` module — that module can be lifted out
+||| later if a second axiom appears.
+|||
+||| Soundness oracle: property-test validation against the runtime,
+||| per the boj-server backend-assurance harness pattern. A reduce-the-
+||| trusted-base PR can replace this axiom with a `prim__eq_String` /
+||| `prim__strEq` symmetry proof once that harness exists for gossamer.
+|||
+||| Refs: standards#131 (PanelIsolation `distinctSym`),
+||| standards#124 (proof-debt epic).
+%unsafe
+export
+stringNotEqCommut : {a, b : String} -> So (not (a == b)) -> So (not (b == a))
+stringNotEqCommut _ = believe_me ()
+
 ||| Distinctness is symmetric: if a /= b then b /= a.
+||| Constructive modulo `stringNotEqCommut` (class-J axiom above).
 public export
 distinctSym : Distinct a b -> Distinct b a
-distinctSym (MkDistinct {a} {b} {prf}) = MkDistinct {a=b} {b=a}
+distinctSym (MkDistinct {a} {b} {prf}) =
+  MkDistinct {a=b} {b=a} {prf = stringNotEqCommut prf}
 
 --------------------------------------------------------------------------------
 -- Panel-Scoped State

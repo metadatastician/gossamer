@@ -6,7 +6,7 @@
 [metadata]
 project = "gossamer"
 version = "0.3.1"
-last-updated = "2026-04-25"
+last-updated = "2026-05-20"
 status = "active"  # active | paused | archived
 
 [project-context]
@@ -120,3 +120,41 @@ depends-on = ["ephapax", "idris2", "zig", "webkitgtk"]
 #             [6] integration_test.zig: 9 new tests (null handle, empty path, nonexistent .so, double-unload,
 #                 idempotent unload, empty list JSON, isPluginLoaded semantics).
 #             HANDOVER-gossamer-plugin-system.md deleted on completion.
+# 2026-05-20: standards#131 close-out — all four formerly-deferred ABI proof
+#             modules from gossamer#22 wired into gossamer-abi.ipkg. Idris2
+#             0.8.0 `--typecheck` now passes 13/13 (was 4/4 before #22; 8/9
+#             after #22; 9/9 after #36; 11/11 after #40; 13/13 after #41).
+#             Discharge PRs:
+#             - #36 GrooveTermination (MERGED): renamed local types with
+#               `Term` prefix to disambiguate from Gossamer.ABI.Groove;
+#               added impossible-clauses to `boundSuccess`/`boundFailure`
+#               for the index-absurd reject/establish branches.
+#             - #40 LayoutStability + IPCIntegrity (MERGED): module-qualified
+#               LayoutStability's concrete-record names (OWED note's `choose`
+#               hint was a misdiagnosis — lowercase-implicit-binding shadow
+#               was the real issue); reordered IPCIntegrity so VerifiedReceive
+#               + accessors precede hashPreservation, added verifiedReceipt
+#               + verifiedReceived accessors, restated hashPreservation type,
+#               marked hashPreservation and seqMonotonicity 0-quantity (the
+#               erased-witness-extraction defect surfaced only on first build);
+#               also fixed latent seqMonotonicity bug — original stated
+#               `LTE (S n) (S n)` (reflexivity) instead of `LTE n (S n)`
+#               (monotonicity).
+#             - #41 PanelIsolation + ResourceCleanup (open, ready, rebased
+#               onto post-#40 main, local idris2 ✓ 13/13): added gossamer's
+#               FIRST class-J axiom `stringNotEqCommut` (commutativity of
+#               primitive String `==`), `%unsafe`-marked + believe_me ()-bodied,
+#               documented at use site with same trust posture as boj-server
+#               `Boj.SafetyLemmas.charEqSym`; chose Option 1 (axiom) over
+#               Option 2 (Distinct-refactor) because Option 2 relocates
+#               rather than eliminates the axiom (`decEq String` is the same
+#               primitive at one more level of indirection). ResourceCleanup
+#               needed unrelated fixes (missing Data.DPair import, lowercase
+#               `exists` → `Exists` typo).
+#             PROOF-NEEDS.md updated with Class-J axioms section + Discharge
+#             ledger + the meta-lesson: OWED notes from never-built modules
+#             systematically misdiagnose root cause (4/4 in gossamer#22's
+#             list). Build is the only oracle for proof-bearing code.
+#             standards#131 CLOSED owner-authorised at the discharge point
+#             with #41 merge-pending honestly noted in the closing comment.
+#             Epic standards#124 progress: 5/12 sub-issues closed (was 4/12).

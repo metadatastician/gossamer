@@ -27,6 +27,7 @@ import Data.Bits
 import Data.Nat
 import Data.List
 import Data.List.Elem
+import Data.DPair
 
 %default total
 
@@ -224,7 +225,7 @@ data ShellTeardown : Type where
 ||| Given any number of panel registries and a shell registry,
 ||| we can always produce a complete ShellTeardown.
 public export
-shellTeardownTotal : (panels : List (exists (\rs => Registry rs)))
+shellTeardownTotal : (panels : List (Exists (\rs => Registry rs)))
                    -> (shell : Registry shellRs)
                    -> ShellTeardown
 shellTeardownTotal panels shell =
