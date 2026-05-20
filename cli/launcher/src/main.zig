@@ -29,8 +29,9 @@
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 const std = @import("std");
+const bridges = @import("bridges.zig");
 
-const c = @cImport({
+pub const c = @cImport({
     @cInclude("wasm.h");
     @cInclude("wasmtime.h");
 });
@@ -38,7 +39,12 @@ const c = @cImport({
 /// Userdata threaded through every host-import callback. Holds the
 /// launcher's argv (already trimmed to drop argv[0]) and a pointer to
 /// the wasm linear memory so callbacks can read/write guest buffers.
-const HostEnv = struct {
+///
+/// `cap_tokens` holds the launcher's eager-granted capability tokens,
+/// indexed by ResourceKind (0=FileSystem, 1=Network, 2=Shell, 3=Clipboard,
+/// 4=Notification, 5=Tray). Set during init via bridges.grantCaps and
+/// read by the guest through env::cap_token(kind).
+pub const HostEnv = struct {
     /// argv visible to the wasm guest. argv[0] of the launcher is
     /// dropped so the guest sees only its own arguments.
     argv: []const []const u8,
@@ -48,6 +54,23 @@ const HostEnv = struct {
     /// Store context — needed to query the memory's data pointer at
     /// callback time (wasmtime expects this on every memory access).
     context: ?*c.wasmtime_context_t = null,
+    /// Eager-granted capability tokens, one slot per ResourceKind. 0
+    /// means no token was granted for that kind.
+    cap_tokens: [6]u64 = .{ 0, 0, 0, 0, 0, 0 },
+};
+
+pub const ImportSpec = struct {
+    name: []const u8,
+    params: []const c.wasm_valkind_t,
+    results: []const c.wasm_valkind_t,
+    callback: *const fn (
+        ?*anyopaque,
+        ?*c.wasmtime_caller_t,
+        [*c]const c.wasmtime_val_t,
+        usize,
+        [*c]c.wasmtime_val_t,
+        usize,
+    ) callconv(.c) ?*c.wasm_trap_t,
 };
 
 /// Pretty-print a wasmtime_error_t to stderr and return the same
@@ -93,7 +116,7 @@ fn funcType(params: []const c.wasm_valkind_t, results: []const c.wasm_valkind_t)
 
 /// Resolve a guest linear-memory range into a host slice. Bounds-checks
 /// against the current memory size; returns null on overflow / OOB.
-fn guestSlice(env: *HostEnv, ptr: i32, len: i32) ?[]u8 {
+pub fn guestSlice(env: *HostEnv, ptr: i32, len: i32) ?[]u8 {
     if (ptr < 0 or len < 0) return null;
     const mem = env.memory orelse return null;
     const ctx = env.context orelse return null;
@@ -212,20 +235,6 @@ fn hostArgvArgGet(
 // Linker setup — bind every env::* import to its host callback
 //==============================================================================
 
-const ImportSpec = struct {
-    name: []const u8,
-    params: []const c.wasm_valkind_t,
-    results: []const c.wasm_valkind_t,
-    callback: *const fn (
-        ?*anyopaque,
-        ?*c.wasmtime_caller_t,
-        [*c]const c.wasmtime_val_t,
-        usize,
-        [*c]c.wasmtime_val_t,
-        usize,
-    ) callconv(.c) ?*c.wasm_trap_t,
-};
-
 fn defineImports(
     linker: *c.wasmtime_linker_t,
     env: *HostEnv,
@@ -331,6 +340,13 @@ pub fn main() !u8 {
     };
 
     if (reportError("defineImports", defineImports(linker, &host_env, &imports)) != 0) return 1;
+
+    // Phase 14a.5b — libgossamer bridges. Eager-grant baseline caps
+    // (FileSystem / Network / Shell) before registering bridges so the
+    // guest can pass cap tokens through fs / shell / conf calls via
+    // env::cap_token(kind).
+    bridges.grantCaps(&host_env);
+    if (reportError("defineImports (bridges)", defineImports(linker, &host_env, &bridges.Imports)) != 0) return 1;
 
     // Compile + instantiate the module.
     var module: ?*c.wasmtime_module_t = null;

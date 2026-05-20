@@ -45,6 +45,14 @@ pub fn build(b: *std.Build) void {
     exe_module.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
     exe_module.linkSystemLibrary("wasmtime", .{});
 
+    // libgossamer — built from ../../src/interface/ffi by `zig build` in
+    // that directory. The bridges in src/bridges.zig declare the
+    // libgossamer symbols as `extern fn` and trampoline guest calls into
+    // them.
+    exe_module.addLibraryPath(b.path("../../src/interface/ffi/zig-out/lib"));
+    exe_module.addRPath(b.path("../../src/interface/ffi/zig-out/lib"));
+    exe_module.linkSystemLibrary("gossamer", .{});
+
     const exe = b.addExecutable(.{
         .name = "gossamer-launcher",
         .root_module = exe_module,
