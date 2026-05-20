@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+//
 // Gossamer — System Tray Implementation (Linux/KDE)
 //
 // Implements the system tray using GTK StatusIcon + GLib/GIO for notifications.

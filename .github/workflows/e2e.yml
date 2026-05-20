@@ -59,6 +59,44 @@ jobs:
       - name: Install GTK/WebKit dev headers
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev xvfb
 
+      # libwasmtime — C API release bundle from bytecodealliance/wasmtime.
+      # Required to link the cli/launcher (Zig wasm host). Pinned to a
+      # specific release SHA256 so a future repo move can't silently
+      # change what gets installed; the version itself tracks the API
+      # contract called by cli/launcher/src/main.zig (>= v44, see the
+      # comment in cli/launcher/build.zig).
+      - name: Install libwasmtime (C API)
+        env:
+          # x86_64-linux-c-api bundle. SHA256 verified locally on
+          # 2026-05-20 against the bytecodealliance/wasmtime release
+          # asset. Bump in lockstep with cli/launcher/build.zig's
+          # required-version comment.
+          WASMTIME_VERSION: v44.0.1
+          WASMTIME_SHA256: fe9b4bfa87724054cebcc09b83a17d5ded66a465054b77c8de0ebc166ad78d7a
+        run: |
+          set -euo pipefail
+          arch="$(uname -m)"
+          case "$arch" in
+            x86_64)  bundle="wasmtime-${WASMTIME_VERSION}-x86_64-linux-c-api.tar.xz" ;;
+            aarch64) bundle="wasmtime-${WASMTIME_VERSION}-aarch64-linux-c-api.tar.xz" ;;
+            *) echo "unsupported arch: $arch" >&2; exit 1 ;;
+          esac
+          url="https://github.com/bytecodealliance/wasmtime/releases/download/${WASMTIME_VERSION}/${bundle}"
+          curl -fsSL --retry 3 -o /tmp/wasmtime.tar.xz "$url"
+          # Only enforce the checksum for the canonical x86_64 bundle —
+          # aarch64 runners are rare in this CI and the pin can be
+          # extended to that arch in a follow-up.
+          if [ "$arch" = "x86_64" ]; then
+            echo "${WASMTIME_SHA256}  /tmp/wasmtime.tar.xz" | sha256sum -c -
+          fi
+          mkdir -p /tmp/wasmtime
+          tar -xJf /tmp/wasmtime.tar.xz -C /tmp/wasmtime --strip-components=1
+          sudo cp -r /tmp/wasmtime/include/. /usr/local/include/
+          sudo cp -r /tmp/wasmtime/lib/.     /usr/local/lib/
+          sudo ldconfig
+          test -f /usr/local/include/wasmtime.h
+          test -f /usr/local/lib/libwasmtime.so
+
       - name: Run E2E test suite (includes Xvfb display tests)
         if: steps.changes.outputs.run == 'true'
         run: bash tests/e2e.sh

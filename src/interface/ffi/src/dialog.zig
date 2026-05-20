@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+//
 // Gossamer — GTK File Dialog Implementation (Linux)
 //
 // Implements native file open/save/directory dialogs using GTK 3's

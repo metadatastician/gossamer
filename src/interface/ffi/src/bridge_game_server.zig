@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+//
 // Gossamer — Game Server Admin Bridge FFI
 //
 // Exports C-ABI symbols consumed by the Ephapax __ffi() intrinsic.

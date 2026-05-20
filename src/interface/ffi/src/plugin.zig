@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+//
 // Gossamer Plugin System — Dynamic Loading via dlopen/dlsym/dlclose
 //
 // Plugins are shared libraries (.so/.dylib/.dll) loaded at runtime.

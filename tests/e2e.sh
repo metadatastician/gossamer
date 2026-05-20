@@ -105,13 +105,32 @@ echo ""
 bold "Section 3: CLI build"
 
 if [ -f "$CLI_DIR/build.zig" ]; then
-    if (cd "$CLI_DIR" && zig build 2>/dev/null); then
+    if (cd "$CLI_DIR" && zig build); then
         pass "Gossamer CLI builds"
     else
         fail_test "Gossamer CLI build failed"
     fi
 else
     skip_test "CLI" "cli/build.zig not found"
+fi
+
+# ─── Section 3b: Launcher prerequisite — libwasmtime headers + lib ────────
+#
+# The wasm-host launcher (cli/launcher) links libwasmtime via system
+# search. The build.zig also runs the Ephapax compiler to produce
+# cli.wasm, so a full `zig build` of the launcher needs both libwasmtime
+# AND the ephapax binary on PATH. CI only installs libwasmtime today
+# (release-tarball install in .github/workflows/e2e.yml); the ephapax
+# integration is a separate follow-up.
+#
+# We assert the libwasmtime headers + library are present so the
+# install-gate failure mode is reported here rather than as an opaque
+# linker error from a future launcher CI job.
+if [ -f /usr/local/include/wasmtime.h ] && \
+   ( [ -f /usr/local/lib/libwasmtime.so ] || [ -f /usr/local/lib/libwasmtime.dylib ] ); then
+    pass "libwasmtime C-API installed (launcher prerequisite)"
+else
+    skip_test "libwasmtime" "not installed; launcher CI deferred"
 fi
 echo ""
 
@@ -148,10 +167,12 @@ else
     pass "No @panic in FFI production code"
 fi
 
-# No believe_me in Idris2 ABI
+# No believe_me in Idris2 ABI — exclude doc-comment lines ("||| ...") and
+# line comments ("-- ...") so the test only flags real code uses.
 ABI_DIR="src/interface/abi"
 if [ -d "$ABI_DIR" ]; then
-    DANGEROUS=$(grep -rn 'believe_me\|assert_total' "$ABI_DIR/" 2>/dev/null || true)
+    DANGEROUS=$(grep -rn 'believe_me\|assert_total' "$ABI_DIR/" 2>/dev/null \
+        | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(\|\|\||--)' || true)
     if [ -n "$DANGEROUS" ]; then
         fail_test "Dangerous Idris2 patterns in ABI"
     else
@@ -161,15 +182,15 @@ else
     skip_test "ABI safety" "src/interface/abi/ not found"
 fi
 
-# SPDX headers
+# SPDX headers — check every FFI source, not a 20-file sample.
 MISSING=0
-for f in $(find "$FFI_DIR/src/" -name "*.zig" 2>/dev/null | head -20); do
+while IFS= read -r f; do
     if ! head -3 "$f" | grep -q "SPDX"; then
         MISSING=$((MISSING + 1))
     fi
-done
+done < <(find "$FFI_DIR/src/" -name "*.zig" 2>/dev/null)
 if [ "$MISSING" -eq 0 ]; then
-    pass "SPDX headers present (sampled FFI sources)"
+    pass "SPDX headers present (all FFI sources)"
 else
     fail_test "$MISSING FFI files missing SPDX headers"
 fi
