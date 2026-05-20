@@ -109,6 +109,21 @@ fn writeCStringToGuest(env: *launcher.HostEnv, src: ?[*:0]const u8, buf_ptr: i32
     return @intCast(slice.len);
 }
 
+/// Resolve an Ephapax String handle (single i32) to a host byte slice.
+/// String layout in linear memory (from ephapax-wasm gen_string_new):
+///   handle      = i32 pointer to an 8-byte header
+///   header[0..4]= data pointer (i32)
+///   header[4..8]= length        (i32, little-endian)
+/// The data itself lives elsewhere in linear memory; this returns a
+/// borrowed slice over it that remains valid until the guest mutates
+/// or frees the string.
+fn ephStringSlice(env: *launcher.HostEnv, handle: i32) ?[]u8 {
+    const header = launcher.guestSlice(env, handle, 8) orelse return null;
+    const data_ptr = std.mem.readInt(i32, header[0..4], .little);
+    const data_len = std.mem.readInt(i32, header[4..8], .little);
+    return launcher.guestSlice(env, data_ptr, data_len);
+}
+
 inline fn argI32(args: [*c]const c.wasmtime_val_t, idx: usize) i32 {
     return args[idx].of.i32;
 }
@@ -528,6 +543,54 @@ fn bCapToken(env_raw: ?*anyopaque, _: ?*c.wasmtime_caller_t, args: [*c]const c.w
 }
 
 //==============================================================================
+// Ephapax-String-aware helpers (resolve guest String handle via memory)
+//==============================================================================
+
+/// env::say_string(string_handle: i32) -> ()
+/// Print an Ephapax String to stderr. The argument is a single i32 —
+/// the Ephapax String handle — which we walk through guest memory to
+/// reach the actual bytes. Mirrors the baseline env::print_string but
+/// takes the high-level String type so .eph code can call it with a
+/// literal: `say_string("hello")`.
+fn bSayString(env_raw: ?*anyopaque, _: ?*c.wasmtime_caller_t, args: [*c]const c.wasmtime_val_t, _: usize, _: [*c]c.wasmtime_val_t, _: usize) callconv(.c) ?*c.wasm_trap_t {
+    const env: *launcher.HostEnv = @alignCast(@ptrCast(env_raw orelse return null));
+    const slice = ephStringSlice(env, argI32(args, 0)) orelse return null;
+    std.debug.print("{s}", .{slice});
+    return null;
+}
+
+/// env::argv_eq_string(idx: i32, literal: String) -> i32
+/// Returns 1 if argv[idx] equals the literal byte-for-byte, 0 otherwise.
+/// Unblocks subcommand-name dispatch from .eph: rather than match by
+/// argv_count, the guest can now do
+///   if argv_eq_string(1, "dev") == 1 then runDev(...) else ...
+fn bArgvEqString(env_raw: ?*anyopaque, _: ?*c.wasmtime_caller_t, args: [*c]const c.wasmtime_val_t, _: usize, results: [*c]c.wasmtime_val_t, _: usize) callconv(.c) ?*c.wasm_trap_t {
+    const env: *launcher.HostEnv = @alignCast(@ptrCast(env_raw orelse return null));
+    const idx = argI32(args, 0);
+    if (idx < 0 or idx >= env.argv.len) {
+        retI32(results, 0);
+        return null;
+    }
+    const literal = ephStringSlice(env, argI32(args, 1)) orelse {
+        retI32(results, 0);
+        return null;
+    };
+    const arg = env.argv[@intCast(idx)];
+    retI32(results, if (std.mem.eql(u8, arg, literal)) 1 else 0);
+    return null;
+}
+
+/// env::i64_is_zero(n: i64) -> i32
+/// Returns 1 if n == 0, 0 otherwise. Works around v2-grammar Ephapax's
+/// lack of i64 literals (`some_i64 == 0` won't typecheck because the
+/// literal 0 is always i32). Lets the guest check cap_token results,
+/// opaque-handle nullability, etc.
+fn bI64IsZero(_: ?*anyopaque, _: ?*c.wasmtime_caller_t, args: [*c]const c.wasmtime_val_t, _: usize, results: [*c]c.wasmtime_val_t, _: usize) callconv(.c) ?*c.wasm_trap_t {
+    retI32(results, if (argI64(args, 0) == 0) 1 else 0);
+    return null;
+}
+
+//==============================================================================
 // Imports table — registered into the wasmtime linker by main.zig
 //==============================================================================
 
@@ -579,6 +642,11 @@ pub const Imports = [_]launcher.ImportSpec{
 
     // Capability tokens
     .{ .name = "cap_token", .params = &.{I32}, .results = &.{I64}, .callback = &bCapToken },
+
+    // Ephapax-String-aware helpers
+    .{ .name = "say_string", .params = &.{I32}, .results = &.{}, .callback = &bSayString },
+    .{ .name = "argv_eq_string", .params = &.{ I32, I32 }, .results = &.{I32}, .callback = &bArgvEqString },
+    .{ .name = "i64_is_zero", .params = &.{I64}, .results = &.{I32}, .callback = &bI64IsZero },
 };
 
 /// Eager-grant the baseline capability tokens at launcher startup. The
