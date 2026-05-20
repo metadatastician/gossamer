@@ -15,7 +15,6 @@
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 const std = @import("std");
-const file_watcher = @import("file_watcher.zig");
 
 //==============================================================================
 // I/O helpers (Zig 0.15 — File.writeAll + fmt.bufPrint)
@@ -336,26 +335,22 @@ fn cmdDev(allocator: std.mem.Allocator, config: Config, config_data: []const u8)
     out("  \x1b[32m✓\x1b[0m Loading: {s}\n\n", .{config.dev_url});
     _ = gossamer_navigate(handle, url_z);
 
-    // Start the hot-reload file watcher.
-    // Parses the optional `build.watch` section from gossamer.conf.json,
-    // falling back to watching `frontendDist` with default extensions.
-    const watch_config = file_watcher.parseWatchConfig(config_data, config.frontend_dist);
-    var watcher: ?file_watcher.WatcherHandle = null;
-    if (watch_config.path_count > 0) {
-        watcher = file_watcher.start(handle, watch_config) catch blk: {
-            out("  \x1b[33m!\x1b[0m Hot reload watcher failed to start\n", .{});
-            break :blk null;
-        };
-        if (watcher != null) {
-            out("  \x1b[32m✓\x1b[0m Hot reload watcher active", .{});
-            out(" ({d} path(s), debounce {d}ms)\n", .{ watch_config.path_count, watch_config.debounce_ms });
-        }
+    // Start the hot-reload file watcher via libgossamer's C-ABI exports.
+    // libgossamer parses the optional `build.watch` section from
+    // gossamer.conf.json itself, falling back to watching `frontendDist`
+    // with default extensions.
+    const config_json_z = try allocator.dupeZ(u8, config_data);
+    defer allocator.free(config_json_z);
+    const frontend_z = try allocator.dupeZ(u8, config.frontend_dist);
+    defer allocator.free(frontend_z);
+
+    const watcher: ?*anyopaque = gossamer_watcher_start(handle, config_json_z, frontend_z);
+    if (watcher == null) {
+        out("  \x1b[33m!\x1b[0m Hot reload watcher failed to start\n", .{});
+    } else {
+        out("  \x1b[32m✓\x1b[0m Hot reload watcher active\n", .{});
     }
-    defer {
-        if (watcher) |w| {
-            file_watcher.stop(w);
-        }
-    }
+    defer gossamer_watcher_stop(watcher);
 
     gossamer_run(handle);
     out("\n  \x1b[2mWindow closed.\x1b[0m\n", .{});

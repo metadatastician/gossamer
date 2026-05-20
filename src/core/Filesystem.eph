@@ -45,3 +45,19 @@ fn listDir(path: String, capToken: I64): I64 =
 // FFI: gossamer_fs_remove(path, cap_token) -> result
 fn remove(path: String, capToken: I64): I32 =
   __ffi("gossamer_fs_remove", path, capToken)
+
+// Create a directory and any missing parent directories (mkdir -p).
+// Idempotent — returns 0 when the directory already exists.
+// Requires a valid filesystem capability token with write scope.
+// Returns 0 (ok) or non-zero error code.
+// FFI: gossamer_fs_mkdir_p(path, cap_token) -> result
+fn mkdirP(path: String, capToken: I64): I32 =
+  __ffi("gossamer_fs_mkdir_p", path, capToken)
+
+// Copy a file from src to dst, overwriting dst if it exists. The parent
+// directory of dst must already exist — call mkdirP first if needed.
+// Requires a valid filesystem capability token with write scope.
+// Returns 0 (ok) or non-zero error code.
+// FFI: gossamer_fs_copy_file(src, dst, cap_token) -> result
+fn copyFile(src: String, dst: String, capToken: I64): I32 =
+  __ffi("gossamer_fs_copy_file", src, dst, capToken)

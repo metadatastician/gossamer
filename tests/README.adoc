@@ -1,4 +1,62 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
 = Tests
-Full test suite for gossamer, organised by category.
-Subdirectories: `unit/` (capability, dialog, guard-mode, IPC, result-code), `e2e/` (webview lifecycle), `property/` (contract-based property tests), `bench/` (startup and throughput benchmarks), and `aspect/` (cross-cutting security aspect tests).
+
+Gossamer's test suites, organised by language per the project rule
+(Idris2 = ABI tests, Zig = FFI / unit / e2e / bench, Ephapax = apps).
+
+== Idris2 ABI tests — `tests/idris2/`
+
+Native Idris2 tests against `gossamer-abi`. Six suites, ported 1:1 from
+the previous TypeScript / Deno-FFI suite:
+
+* `ResultCodeTest.idr`   — Result enum, round-trip, errorDescription, GuardMode, Platform
+* `GuardModeTest.idr`    — requireOpen / requireUnguarded, window constraints, async IPC slots
+* `CapabilityTest.idr`   — grant / check / revoke / resourceKind / activeCount
+* `IPCTest.idr`          — channel open / bind / dispatch / close + message routing
+* `ContractsTest.idr`    — property tests (LCG PRNG, 50–200 iterations per invariant)
+* `SecurityTest.idr`     — IPC + shell + filesystem + webview-title + capability hardening
+
+Harness:
+
+* `Test/Spec.idr`        — minimal assertEq / assertNotEq / assertTrue / runTestSuite
+* `Main.idr`             — aggregating runner; append new suites here
+
+Run:
+
+[source,bash]
+----
+just test-abi          # installs gossamer-abi, builds tests, runs runner
+----
+
+== Zig FFI tests — `src/interface/ffi/test/`
+
+Native Zig tests for FFI surface + e2e + bench:
+
+* `integration_test.zig`       — headless FFI integration tests (existing)
+* `display_test.zig`           — display-server FFI tests (existing)
+* `dialog_test.zig`            — Dialog mock + filter parser (ported)
+* `webview_lifecycle_test.zig` — webview state machine + mocked FFI (ported)
+* `gossamer_bench.zig`         — core ops microbenchmarks (ported)
+* `startup_bench.zig`          — startup-path microbenchmarks (ported)
+
+Run:
+
+[source,bash]
+----
+just test-integration   # existing FFI integration tests
+just test-zig-unit      # ported unit / e2e tests (no display required)
+just test-zig-bench     # benchmarks (with -OReleaseFast)
+just test-display       # display-required tests (X11 / Wayland / Xvfb)
+----
+
+== End-to-end smoke — `tests/e2e.sh`
+
+Higher-level harness that builds libgossamer, runs Zig tests, checks symbol
+exports, and verifies safety aspects. Invoke via `just e2e` or `bash tests/e2e.sh`.
+
+== Run everything
+
+[source,bash]
+----
+just test               # rolls up all of the above
+----

@@ -74,14 +74,21 @@ comptime {
     _ = @import("plugin.zig");
 }
 
-// Default channel handlers (gossamer_channel_register_defaults).
-// 28 handlers (27 window/group/transmute/debug/groove + 1 shell-exec)
-// migrated from cli/src/main.zig so libgossamer can register them
-// automatically when a channel opens. Means the Ephapax-wasm CLI doesn't
-// have to bridge them through wasm — they're available as defaults the
-// moment gossamer_channel_open succeeds.
+// Hot-reload file watcher (gossamer_watcher_start, gossamer_watcher_stop).
+// Polling watcher with g_idle_add marshalling to the GTK main thread.
+// Relocated from cli/src/file_watcher.zig so any libgossamer consumer —
+// native Zig CLI, future Ephapax-wasm CLI behind a host launcher, or
+// third-party embedders — can use the same hot-reload path.
 comptime {
-    _ = @import("ipc_handlers.zig");
+    _ = @import("file_watcher.zig");
+}
+
+// Conf FFI functions (gossamer_conf_load + get_string/int/bool/has + free).
+// Real JSON loader for gossamer.conf.json, replacing the hand-rolled
+// string-scan parser previously living in cli/src/main.zig. Exposed via
+// dotted-path lookup so callers target nested keys explicitly.
+comptime {
+    _ = @import("conf.zig");
 }
 
 // Version information — bump on each release
