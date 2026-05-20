@@ -3,107 +3,142 @@
 //
 // Gossamer CLI — typed-wasm entry point loaded by gossamer-launcher.
 //
-// Phase #15 step 2 — demonstrates that the v2-grammar Ephapax surface
-// is rich enough to drive real CLI dispatch through the launcher's
-// host imports. The actual subcommand bodies still live in libgossamer
-// behind the FFI bridges added in Phase 14a; this module is the
-// orchestration layer.
+// Phase #15 step 2 (extended with the string-bridge follow-up).
+// Demonstrates that v2-grammar Ephapax can drive real CLI dispatch
+// through the launcher's host imports, INCLUDING subcommand-name
+// matching against argv[0] (argv visible to the guest, after the
+// launcher trims its own binary and the wasm path).
 //
-// Subcommand selection by argv_count (rather than argv[1] string match)
-// because v2-grammar Ephapax doesn't yet expose linear-memory reads to
-// user code — extracting bytes from an argv buffer for string comparison
-// requires runtime helpers that aren't surfaced at the source level.
-// Once the stdlib gains a `bytes_to_string` or `string_eq` helper, the
-// dispatcher swaps to the conventional argv[1] match on
-// "dev"|"build"|"run"|... in a follow-up.
+// The subcommand bodies still print status integers rather than
+// actually opening webviews — that next step needs more libgossamer
+// bridges wired through (gossamer_run blocks the wasm thread which
+// requires careful integration with the GTK event loop and is its
+// own design question). What this module proves end-to-end:
+//
+//   1. argv[0] subcommand name matching via env::argv_eq_string,
+//      passing Ephapax String literals across the FFI boundary.
+//   2. Sum-type pattern matching across 7 distinct branches.
+//   3. Side-effecting host calls (say_string, print_i32, FFI into
+//      libgossamer's groove discovery).
+//   4. Capability-token liveness via env::cap_token + env::i64_is_zero
+//      (works around v2 grammar's lack of i64 literal comparison).
 
 module GossamerCli
 
 // ── Host imports ─────────────────────────────────────────────────────────
 //
-// Every name below maps to a wasmtime_func_callback_t in the launcher
-// (see cli/launcher/src/main.zig + cli/launcher/src/bridges.zig). Five
-// baseline imports come from 14a.5a; Argv extern from 14a.1; the rest
-// from 14a.5b.
+// String-aware helpers (say_string, argv_eq_string, i64_is_zero) come
+// from the launcher follow-up to 14a.5b. Everything else from the
+// original 14a.5a/5b surface.
 
 extern "env" {
+  // Baseline + diagnostics
   fn print_i32(n: I32): Unit
+  fn say_string(s: String): Unit
+
+  // argv
   fn argv_count(): I32
-  fn argv_arg_len(idx: I32): I32
+  fn argv_eq_string(idx: I32, literal: String): I32
+
+  // Capabilities
+  fn cap_token(kind: I32): I64
+  fn i64_is_zero(n: I64): I32
+
+  // libgossamer
   fn gossamer_groove_discover(): I32
-  fn gossamer_groove_status(target_id: I32): I32
 }
 
-// Capability liveness check is deferred to a follow-up. The launcher's
-// env::cap_token returns I64 (because u64 tokens are too wide for I32),
-// but v2-grammar Ephapax has no I64 literal — integer literals always
-// parse as I32 unless they exceed i32::MAX, which a "compare token to
-// zero" can't express. Workarounds: (a) add an env::i64_is_zero helper
-// in the launcher, (b) widen the host return to I32 (loses information),
-// (c) wait for v2-grammar to gain an i64 literal suffix. Picking (a)
-// when we revisit token-passing for the real subcommand bodies.
-
-// ── Subcommand classification (argv-count based) ─────────────────────────
+// ── Subcommand classification ───────────────────────────────────────────
 
 pub data Subcommand =
   | NoArg
-  | InfoOrVersion
-  | DevOrRunOrBuild
-  | Init
+  | Version
+  | Info
+  | Dev
+  | Build
+  | Run
   | Bundle
-  | TooMany
+  | Init
+  | Unknown
 
-fn classify(n: I32): Subcommand =
-  if n == 0 then NoArg
-  else if n == 1 then InfoOrVersion
-  else if n == 2 then DevOrRunOrBuild
-  else if n == 3 then Init
-  else if n == 4 then Bundle
-  else TooMany
+// argv visible to the guest: position 0 is the user-supplied subcommand
+// (launcher strips its own argv[0] and the wasm path before handing
+// guest_argv to the wasm). If no subcommand at all, classify as NoArg.
+fn classify(): Subcommand =
+  if argv_count() == 0 then NoArg
+  else if argv_eq_string(0, "version") == 1 then Version
+  else if argv_eq_string(0, "info") == 1 then Info
+  else if argv_eq_string(0, "dev") == 1 then Dev
+  else if argv_eq_string(0, "build") == 1 then Build
+  else if argv_eq_string(0, "run") == 1 then Run
+  else if argv_eq_string(0, "bundle") == 1 then Bundle
+  else if argv_eq_string(0, "init") == 1 then Init
+  else Unknown
 
-// Subcommand status code for downstream tools. The launcher (or a
-// scripting harness around it) can probe these to decide whether the
-// guest dispatched correctly. Stable indices, do not renumber.
+// ── Per-subcommand status code (stable contract for harness) ─────────────
+
 fn dispatchCode(s: Subcommand): I32 =
   match s of
-    | NoArg            => 100
-    | InfoOrVersion    => 200
-    | DevOrRunOrBuild  => 300
-    | Init             => 400
-    | Bundle           => 500
-    | TooMany          => 900
+    | NoArg   => 100
+    | Version => 110
+    | Info    => 120
+    | Dev     => 200
+    | Build   => 300
+    | Run     => 400
+    | Bundle  => 500
+    | Init    => 600
+    | Unknown => 900
   end
 
-// ── Groove discovery (real FFI call into libgossamer) ───────────────────
+// ── Per-subcommand banner (calls into launcher's say_string) ─────────────
 //
-// Proves the 14a.5b bridge surface is reachable from Ephapax. Always
-// returns the count of grooves visible to libgossamer at startup — a
-// liveness check that doesn't depend on the user's gossamer.conf.json.
+// Subcommand bodies are still stubs at this stage — they print a
+// recognisable banner so a script harness can confirm dispatch reached
+// the right arm. Real cmdDev / cmdBuild / cmdRun bodies follow once
+// the gossamer_create_ex / gossamer_run integration with the wasm
+// event-loop story is settled.
 
-fn grooveProbe(): I32 = gossamer_groove_discover()
+fn announce(s: Subcommand): Unit =
+  match s of
+    | NoArg   => say_string("gossamer: no subcommand (run `gossamer info` for help)")
+    | Version => say_string("gossamer version (typed-wasm guest)")
+    | Info    => say_string("gossamer info: typed-wasm guest reporting in")
+    | Dev     => say_string("gossamer dev: would start webview + watcher (stub)")
+    | Build   => say_string("gossamer build: would run beforeBuildCommand (stub)")
+    | Run     => say_string("gossamer run: would load built frontend in webview (stub)")
+    | Bundle  => say_string("gossamer bundle: would assemble deb package (stub)")
+    | Init    => say_string("gossamer init: would create gossamer.conf.json (stub)")
+    | Unknown => say_string("gossamer: unknown subcommand")
+  end
 
-// ── Composite status ─────────────────────────────────────────────────────
-//
-// Encodes two signals into a single i32:
-//   100s digit:  dispatch code (subcommand class)
-//   10s+1s:      groove count clamped to 0..99
-//
-// e.g. argv=["dev"] (2 args) with 1 groove -> 301
-//      argv=[] (no args) with 0 grooves    -> 100
-//
-// Cheap to decode from outside and exercises every reachable host
-// call path that does not involve I64 comparison.
+// ── Liveness signals ─────────────────────────────────────────────────────
 
-fn statusCode(): I32 =
-  let dispatch       : I32 = dispatchCode(classify(argv_count()))
-  let groove_raw     : I32 = grooveProbe()
-  let groove_clamped : I32 = if groove_raw > 99 then 99 else groove_raw
-  dispatch + groove_clamped
+fn grooveCount(): I32 = gossamer_groove_discover()
+
+// FileSystem capability (kind=0) liveness — uses env::i64_is_zero to
+// sidestep v2-grammar's lack of an i64 literal. Returns 1 (granted)
+// or 0 (missing).
+fn capsLive(): I32 =
+  let fs_token : I64 = cap_token(0)
+  if i64_is_zero(fs_token) == 1 then 0 else 1
+
+// ── Composite status code ────────────────────────────────────────────────
+//
+// Three digits encoded as:
+//   dispatch / 10  + (grooves clamped 0..9) * 10  + caps
+// e.g. argv=["dev"] with 2 grooves and caps OK -> 221
+//      argv=[] no grooves no caps              -> 100
+
+fn statusCode(s: Subcommand): I32 =
+  let d        : I32 = dispatchCode(s)
+  let g_raw    : I32 = grooveCount()
+  let g_clamp  : I32 = if g_raw > 9 then 9 else g_raw
+  let c        : I32 = capsLive()
+  d + (g_clamp * 10) + c
 
 // ── Entry point ──────────────────────────────────────────────────────────
-//
-// Prints the composite status integer and returns. The launcher's
-// env::print_i32 writes it to stderr followed by a newline; a wrapper
-// script or test harness reads it back to verify dispatch.
 
-fn main(): Unit = print_i32(statusCode())
+fn main(): Unit =
+  let s : Subcommand = classify()
+  let _ : Unit = announce(s)
+  print_i32(statusCode(s))
