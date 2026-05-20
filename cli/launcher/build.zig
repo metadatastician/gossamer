@@ -60,13 +60,37 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(exe);
 
-    // Run step — passes args through after `--`:
-    //   zig build run -- /path/to/cli.wasm dev
+    //--- Compile cli.wasm from ../src/Main.eph via the ephapax toolchain.
+    //
+    // The path to the ephapax binary defaults to `ephapax` on PATH but
+    // can be overridden via the EPHAPAX env var for dev work where the
+    // compiler lives in a sibling repo checkout (typical workflow:
+    //   EPHAPAX=$HOME/dev/repos/ephapax/target/debug/ephapax zig build
+    // ). Output lands at zig-out/share/gossamer/cli.wasm so the install
+    // step picks it up under the standard prefix layout.
+    const ephapax_bin = std.process.getEnvVarOwned(b.allocator, "EPHAPAX") catch
+        b.allocator.dupe(u8, "ephapax") catch unreachable;
+    const compile_wasm = b.addSystemCommand(&.{ ephapax_bin, "compile" });
+    compile_wasm.addFileArg(b.path("../src/Main.eph"));
+    compile_wasm.addArg("-o");
+    const wasm_out = compile_wasm.addOutputFileArg("cli.wasm");
+    const install_wasm = b.addInstallFileWithDir(wasm_out, .{ .custom = "share/gossamer" }, "cli.wasm");
+    b.getInstallStep().dependOn(&install_wasm.step);
+
+    // Run step — passes args through after `--`. With no args it falls
+    // back to discovering cli.wasm via the launcher's search order:
+    //   zig build run                 # runs the installed cli.wasm
+    //   zig build run -- one two      # passes args to the discovered wasm
+    //   zig build run -- /path.wasm   # explicit wasm path (override)
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
+    // Make the run step see the freshly-built cli.wasm by setting
+    // GOSSAMER_WASM to the install location. The launcher's discovery
+    // logic checks this env var first.
+    run_cmd.setEnvironmentVariable("GOSSAMER_WASM", b.getInstallPath(.{ .custom = "share/gossamer" }, "cli.wasm"));
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }
-    const run_step = b.step("run", "Run gossamer-launcher (pass args after --)");
+    const run_step = b.step("run", "Run gossamer-launcher against the installed cli.wasm");
     run_step.dependOn(&run_cmd.step);
 }

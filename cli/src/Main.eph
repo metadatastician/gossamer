@@ -1,0 +1,31 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+//
+// Gossamer CLI — Phase 14a.5c placeholder.
+//
+// This is the wasm entry point the gossamer-launcher loads at runtime
+// once the launcher is renamed to `gossamer` (which #15 does). For now
+// it's a placeholder that proves the build pipeline:
+//
+//   ephapax compile cli/src/Main.eph -o cli.wasm
+//   gossamer-launcher cli.wasm
+//
+// On run it calls argv_count() and prints the integer back via the
+// baseline env::print_i32 host import. The real CLI surface — dev /
+// build / bundle / run / init / info — lands in #15 once the v2
+// grammar supports enough of the patterns the existing cli/src/main.zig
+// needs (string slicing, conf-handle lifetimes, etc).
+//
+// Imports below are deliberately a subset of what the launcher provides
+// (5 baseline + 29 libgossamer bridges from 14a.5b). The full set is in
+// cli/launcher/src/bridges.zig — adding new ones here is just a matter
+// of declaring the matching extern "env" fn.
+
+module GossamerCli
+
+extern "env" {
+  fn print_i32(n: I32): Unit
+  fn argv_count(): I32
+}
+
+fn main(): Unit = print_i32(argv_count())
