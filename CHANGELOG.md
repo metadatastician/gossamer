@@ -11,6 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Conf — real JSON loader for `gossamer.conf.json` (Phase 14a.4, #27)**: Replaces the hand-rolled string-scan parser in `cli/src/main.zig` (`parseConfig` + `extractStringField/IntField/BoolField`) with a `std.json`-backed loader exposed through libgossamer
+  - `src/interface/ffi/src/conf.zig` — six exports, all capability-gated on FileSystem (kind=0): `gossamer_conf_load(path, cap_token) -> opaque*`, `gossamer_conf_get_string(conf*, dotted_path) -> *char | null`, `gossamer_conf_get_int(conf*, path, default) -> i64`, `gossamer_conf_get_bool(conf*, path, default) -> i32`, `gossamer_conf_has(conf*, path) -> i32`, `gossamer_conf_free(conf*) -> void`.
+  - Dotted-path lookup so callers target nested keys explicitly: `productName` (top-level), `build.devUrl` (nested), `app.windows.0.width` (array element). Fixes the old scanner's "first match wins" bug where a key like `title` matched at the wrong nesting level.
+  - Memory model: `get_string` returns null-terminated dupes tracked in `string_dupes` and freed en-masse by `gossamer_conf_free` — C callers never free individual strings.
+  - `src/core/Conf.eph` wrapper added in the legacy `__ffi(...)` style consistent with sibling modules.
+  - Unblocks the Ephapax-wasm CLI port's config-reading path without a JSON parser inside the guest.
+
+- **Shell + filesystem FFI (Phase 14a.3, #26)**: Four capability-gated exports the Ephapax-wasm CLI port needs that libgossamer didn't expose
+  - `src/interface/ffi/src/shell.zig` (new) — `gossamer_shell_spawn(command, cap_token) -> opaque*` runs a process in the background via `/bin/sh -c` (POSIX) or `cmd /c` (Windows); `gossamer_shell_kill(opaque*, cap_token) -> Result` sends SIGTERM / `TerminateProcess`, waits for exit, frees the wrapper (idempotent on null). Capability: Shell (kind=2).
+  - `src/interface/ffi/src/filesystem.zig` (extended) — `gossamer_fs_mkdir_p(path, cap_token) -> Result` recursive mkdir treating "already exists" as success; `gossamer_fs_copy_file(src, dst, cap_token) -> Result` overwrites `dst`, parent of `dst` must already exist. Capability: FileSystem (kind=0).
+  - Ephapax wrappers added in `src/core/ShellExec.eph` (`spawn` / `spawnKill`) and `src/core/Filesystem.eph` (`mkdirP` / `copyFile`) in the legacy `__ffi(...)` style consistent with sibling modules; the v2-grammar rewrite of these files is its own concern.
+  - Consumers in the CLI port: `cmdDev` swaps the inline `runShellCommandBackground` + `std.process.Child.kill` defer for `shell.spawn` / `spawnKill`; `cmdBundle` uses `fs.mkdirP` + `fs.copyFile` to lay out `target/bundle/deb/DEBIAN/`.
+
 - **Plugin system (Phase 6)**: Dynamic loading of `.so`/`.dylib`/`.dll` extensions at runtime
   - `src/interface/ffi/src/plugin.zig`: `GossamerVtable` (9-function restricted API), dlopen/dlsym/dlclose lifecycle, 64-slot plugin registry
   - `gossamer_plugin_load(handle, path)` → plugin_id, `gossamer_plugin_unload(plugin_id)`, `gossamer_plugin_list()` → JSON
