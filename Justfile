@@ -215,8 +215,28 @@ test-conformance:
 test-integration:
     cd src/interface/ffi && zig test test/integration_test.zig
 
+# Run Zig unit / e2e tests ported from TypeScript (no display, no FFI required)
+test-zig-unit:
+    cd src/interface/ffi && zig test test/dialog_test.zig
+    cd src/interface/ffi && zig test test/webview_lifecycle_test.zig
+
+# Run Zig benchmarks (ReleaseFast for realistic numbers — printed to stderr)
+test-zig-bench:
+    cd src/interface/ffi && zig test -OReleaseFast test/gossamer_bench.zig
+    cd src/interface/ffi && zig test -OReleaseFast test/startup_bench.zig
+
+# Run Idris2 ABI tests (installs the library locally, builds and runs the test executable)
+test-abi:
+    #!/usr/bin/env bash
+    set -e
+    # idris2 on this host has a stale baked-in prefix; locate the real libdir via the binary
+    export IDRIS2_PREFIX="$(dirname "$(dirname "$(command -v idris2)")")"
+    idris2 --install gossamer-abi.ipkg
+    idris2 --build   gossamer-abi-tests.ipkg
+    ./build/exec/gossamer-abi-tests
+
 # Run all tests
-test: test-ffi test-integration test-conformance
+test: test-ffi test-integration test-zig-unit test-conformance test-abi
 
 # ═══════════════════════════════════════════════════════════════
 # Clean

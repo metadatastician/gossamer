@@ -1,0 +1,39 @@
+-- SPDX-License-Identifier: PMPL-1.0-or-later
+-- Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+--
+-- Gossamer ABI test suite — Idris2 package.
+--
+-- This package depends on gossamer-abi (the formal ABI spec). Before building
+-- this test package, install the ABI package once:
+--
+--   idris2 --install gossamer-abi.ipkg
+--   idris2 --build   gossamer-abi-tests.ipkg
+--   ./build/exec/gossamer-abi-tests
+--
+-- The Justfile target `test-abi` wraps this dance.
+
+package gossamer-abi-tests
+
+version = 0.1.0
+
+authors = "Jonathan D.A. Jewell"
+
+brief = "Idris2 test suite for the Gossamer ABI"
+
+sourcedir = "tests/idris2"
+
+depends = base
+        , gossamer-abi
+
+modules = Test.Spec
+        , ResultCodeTest
+        , GuardModeTest
+        , CapabilityTest
+        , IPCTest
+        , ContractsTest
+        , SecurityTest
+        , Main
+
+main = Main
+
+executable = "gossamer-abi-tests"
