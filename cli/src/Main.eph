@@ -10,10 +10,13 @@
 // launcher trims its own binary and the wasm path).
 //
 // The subcommand bodies still print status integers rather than
-// actually opening webviews — that next step needs more libgossamer
-// bridges wired through (gossamer_run blocks the wasm thread which
-// requires careful integration with the GTK event loop and is its
-// own design question). What this module proves end-to-end:
+// actually opening webviews — that's #42 (Phase 14b body port).
+//
+// The previous "gossamer_run blocks the wasm thread" question is
+// resolved: launcher + bridges are already the correct integration.
+// See cli/launcher/docs/GTK-BLOCKING-DESIGN.adoc for the rationale.
+//
+// What this module proves end-to-end:
 //
 //   1. argv[0] subcommand name matching via env::argv_eq_string,
 //      passing Ephapax String literals across the FFI boundary.
