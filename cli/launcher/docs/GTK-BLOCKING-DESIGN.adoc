@@ -1,0 +1,119 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= gossamer_run, the GTK main loop, and wasmtime host bridges
+:toc:
+:toc-placement: preamble
+:icons: font
+
+This document closes the design question flagged in
+`cli/src/Main.eph:13-16` ("`gossamer_run` blocks the wasm thread which
+requires careful integration with the GTK event loop and is its own
+design question") for the Phase 14b CLI port.
+
+Short answer: **the existing single-threaded launcher + synchronous
+host-import bridge are already the correct integration**. The original
+comment was written when the bridges were not yet wired through;
+post-14a.5b/5c the call chain has no architectural gap.
+
+== Invariants we have to satisfy
+
+. GTK requires that `gtk_init` and `gtk_main` run on the same thread,
+  conventionally the OS process main thread.
+. wasmtime's `wasmtime_func_call` is synchronous and runs guest code on
+  the *caller's* thread.
+. Ephapax compiles to wasm32-unknown-unknown; the resulting guest is
+  single-threaded.
+. `gossamer_run` is implemented as `c.gtk_main()` in
+  `src/interface/ffi/src/webview_gtk.zig:259` and blocks until the
+  window is destroyed.
+
+== Actual call chain (after 14a.5b/5c)
+
+[source]
+----
+process main thread
+  └── launcher main()              (cli/launcher/src/main.zig:302)
+        └── wasmtime_func_call     (cli/launcher/src/main.zig:446)
+              └── guest GossamerCli.main()    (cli/src/Main.eph:141)
+                    └── env::gossamer_run    (host import)
+                          └── bRun           (cli/launcher/src/bridges.zig:270)
+                                └── gossamer_run(handle)
+                                      └── gtk_main()   ← blocks here
+----
+
+Every step in this chain executes on the same OS thread (the launcher
+process's main thread). When `gtk_main()` blocks, the launcher's main
+thread sits inside the GTK loop with wasmtime's call stack frame
+underneath. This satisfies invariant 1 (gtk_init and gtk_main share a
+thread) because `gtk_init_check` was called on the same thread earlier
+in the same stack via `gossamer_create_ex`.
+
+== Why this works
+
+. The launcher is single-threaded by design (no `pthread_create`, no
+  worker pool for host imports). The `HostEnv` in `main.zig:47-60` is
+  a per-instance value, not a shared structure, so we don't need locks
+  around it.
+. wasmtime host imports execute synchronously in the guest's call
+  context. `bRun` (`bridges.zig:270`) is a thin shim that immediately
+  calls into Zig's `gossamer_run`; there is no thread crossing.
+. GTK's worker-thread-to-main-thread marshalling is internal to
+  libgossamer (see `webview_gtk.zig:488,636,696` for the g_idle_add
+  pattern) and is independent of how the loop was entered. From GTK's
+  point of view it doesn't matter whether `c.gtk_main()` was called
+  from a plain C program or from a wasm guest via wasmtime — only that
+  it's the same thread that called `gtk_init`.
+
+== What the guest must NOT do
+
+. Call `env::gossamer_run` more than once per process. The launcher
+  exposes the function but the underlying `c.gtk_main()` is
+  single-entry: re-entering it from inside another `gtk_main` is
+  undefined behaviour.
+. Spawn additional wasm instances that also call `env::gossamer_run`.
+  The launcher's single-instance design (one `wasmtime_instance_t`
+  per `main` invocation) already prevents this at the wasm layer.
+. Try to call wasmtime APIs from a host import. This is forbidden by
+  wasmtime regardless of GTK, and our bridges already avoid it.
+
+== Subcommands that exercise `env::gossamer_run`
+
+The Phase 14b port (#42) will route the following subcommands through
+this path:
+
+* `gossamer dev`   — webview + watcher → calls `gossamer_run`, blocks
+  until window closes
+* `gossamer run`   — webview only      → same, blocks until window
+  closes
+
+The remaining subcommands (`build`, `bundle`, `init`, `info`,
+`version`) never enter the GTK loop and so are unaffected by this
+design question.
+
+== Decision
+
+* **No launcher arch change required.**
+* **No threading change required.**
+* Comment in `cli/src/Main.eph:13-16` is stale and will be amended in
+  this PR to point at this document instead.
+* Phase 14b subcommand-body port (#42) can proceed to wire
+  `cmdDev` / `cmdRun` via `gossamer_create_ex` →
+  `gossamer_channel_register_defaults` → `gossamer_navigate` →
+  `gossamer_run` without any new infrastructure.
+
+== Open follow-ups (out of scope for #43)
+
+. Decide whether to expose a non-blocking `gossamer_quit` host import
+  to the guest so future subcommands can request a clean shutdown
+  from inside the loop. (Not needed for the initial port; the
+  destroy-signal handler in `webview_gtk.zig:135` covers the user-
+  initiated close.)
+. Decide whether to add a launcher CLI flag for headless runs (skip
+  `gossamer_run`) once we have a use case beyond `dev`/`run`.
+
+References:
+* `cli/src/Main.eph` — guest dispatcher
+* `cli/launcher/src/main.zig:302` — launcher entry point
+* `cli/launcher/src/bridges.zig:270` — `bRun` host import
+* `src/interface/ffi/src/webview_gtk.zig:259` — `gtk_main()` site
+* `src/interface/ffi/src/main.zig:619` — `gossamer_run` export
