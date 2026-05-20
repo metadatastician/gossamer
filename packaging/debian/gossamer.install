@@ -5,5 +5,6 @@
 # Format: <source path>  <destination directory (relative to package root)>
 
 src/interface/ffi/zig-out/lib/libgossamer.so  usr/lib/
-cli/zig-out/bin/gossamer  usr/bin/
+cli/launcher/zig-out/bin/gossamer-launcher  usr/bin/
+cli/launcher/zig-out/share/gossamer/cli.wasm  usr/share/gossamer/
 generated/abi/gossamer.h  usr/include/gossamer/

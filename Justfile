@@ -54,6 +54,17 @@ build-cli: build-ffi
 build-cli-release: build-ffi-release
     cd cli && zig build -Doptimize=ReleaseSafe
 
+# Build the gossamer-launcher (wasmtime host) + cli.wasm. Replaces the
+# legacy Zig CLI once Phase 14b body-port (#42) lands. The launcher build
+# invokes ephapax to compile cli/src/Main.eph → cli.wasm in the same
+# `zig build` step, so EPHAPAX must point at a working compiler.
+build-launcher: build-ffi
+    cd cli/launcher && EPHAPAX="{{ephapax}}" zig build
+
+# Release-mode launcher + cli.wasm (used by packaging recipes).
+build-launcher-release: build-ffi-release
+    cd cli/launcher && EPHAPAX="{{ephapax}}" zig build -Doptimize=ReleaseSafe
+
 # Build everything (FFI + CLI + check)
 build: build-ffi build-cli check
 
@@ -250,11 +261,17 @@ clean:
 # Development
 # ═══════════════════════════════════════════════════════════════
 
-# Install the gossamer CLI to ~/.local/bin
-install: build-cli
-    mkdir -p ~/.local/bin
-    cp cli/zig-out/bin/gossamer ~/.local/bin/gossamer
-    @echo "  ✓ Installed gossamer to ~/.local/bin/gossamer"
+# Install the gossamer CLI to ~/.local/bin (launcher + cli.wasm)
+#
+# Lays the artefacts out so the launcher's install-prefix-relative
+# discovery (<exe_dir>/../share/gossamer/cli.wasm) finds the wasm at
+# runtime — see cli/launcher/src/main.zig:266.
+install: build-launcher
+    mkdir -p ~/.local/bin ~/.local/share/gossamer
+    cp cli/launcher/zig-out/bin/gossamer-launcher ~/.local/bin/gossamer
+    cp cli/launcher/zig-out/share/gossamer/cli.wasm ~/.local/share/gossamer/cli.wasm
+    @echo "  ✓ Installed gossamer (launcher) to ~/.local/bin/gossamer"
+    @echo "  ✓ Installed cli.wasm to ~/.local/share/gossamer/cli.wasm"
 
 # Show exported FFI symbols
 symbols:
@@ -411,11 +428,11 @@ tour:
 # ═══════════════════════════════════════════════════════════════
 
 # Build .deb package for Debian/Ubuntu
-package-deb: build-ffi-release build-cli-release
+package-deb: build-ffi-release build-launcher-release
     dpkg-buildpackage -b --no-sign --build-dir=packaging/debian
 
 # Build .rpm package for Fedora/RHEL
-package-rpm: build-ffi-release build-cli-release
+package-rpm: build-ffi-release build-launcher-release
     rpmbuild -bb packaging/rpm/gossamer.spec
 
 # Build Flatpak bundle
