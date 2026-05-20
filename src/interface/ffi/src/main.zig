@@ -74,6 +74,15 @@ comptime {
     _ = @import("plugin.zig");
 }
 
+// Hot-reload file watcher (gossamer_watcher_start, gossamer_watcher_stop).
+// Polling watcher with g_idle_add marshalling to the GTK main thread.
+// Relocated from cli/src/file_watcher.zig so any libgossamer consumer —
+// native Zig CLI, future Ephapax-wasm CLI behind a host launcher, or
+// third-party embedders — can use the same hot-reload path.
+comptime {
+    _ = @import("file_watcher.zig");
+}
+
 // Version information — bump on each release
 const VERSION = "0.3.0";
 const BUILD_INFO = "Gossamer " ++ VERSION ++ " built with Zig " ++ @import("builtin").zig_version_string;
