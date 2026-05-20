@@ -83,6 +83,14 @@ comptime {
     _ = @import("file_watcher.zig");
 }
 
+// Conf FFI functions (gossamer_conf_load + get_string/int/bool/has + free).
+// Real JSON loader for gossamer.conf.json, replacing the hand-rolled
+// string-scan parser previously living in cli/src/main.zig. Exposed via
+// dotted-path lookup so callers target nested keys explicitly.
+comptime {
+    _ = @import("conf.zig");
+}
+
 // Version information — bump on each release
 const VERSION = "0.3.0";
 const BUILD_INFO = "Gossamer " ++ VERSION ++ " built with Zig " ++ @import("builtin").zig_version_string;
