@@ -263,6 +263,42 @@ fn defineImports(
 // Entry point
 //==============================================================================
 
+/// Discover cli.wasm via the standard install-prefix search.
+///
+/// Priority:
+///   1. $GOSSAMER_WASM env var (explicit override).
+///   2. <exe_dir>/../share/gossamer/cli.wasm  (install-prefix-relative).
+///   3. /usr/local/share/gossamer/cli.wasm
+///   4. /usr/share/gossamer/cli.wasm
+///
+/// Caller owns the returned slice. Returns null if no candidate exists.
+fn findCliWasm(allocator: std.mem.Allocator) ?[]u8 {
+    if (std.process.getEnvVarOwned(allocator, "GOSSAMER_WASM")) |env_path| {
+        std.fs.cwd().access(env_path, .{}) catch {
+            allocator.free(env_path);
+            return null;
+        };
+        return env_path;
+    } else |_| {}
+
+    // Resolve <exe_dir>/../share/gossamer/cli.wasm
+    if (std.fs.selfExeDirPathAlloc(allocator)) |exe_dir| {
+        defer allocator.free(exe_dir);
+        const candidate = std.fs.path.join(allocator, &.{ exe_dir, "..", "share", "gossamer", "cli.wasm" }) catch null;
+        if (candidate) |p| {
+            if (std.fs.cwd().access(p, .{})) |_| return p else |_| allocator.free(p);
+        }
+    } else |_| {}
+
+    for ([_][]const u8{
+        "/usr/local/share/gossamer/cli.wasm",
+        "/usr/share/gossamer/cli.wasm",
+    }) |p| {
+        if (std.fs.cwd().access(p, .{})) |_| return allocator.dupe(u8, p) catch null else |_| {}
+    }
+    return null;
+}
+
 pub fn main() !u8 {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -271,26 +307,44 @@ pub fn main() !u8 {
     const all_args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, all_args);
 
-    if (all_args.len < 2) {
+    // Resolve the cli.wasm path. An argv-supplied .wasm overrides
+    // discovery (development workflow: smoke-test arbitrary modules).
+    // Otherwise, fall back to GOSSAMER_WASM / install-prefix / system
+    // share paths in that order.
+    var owned_wasm_path: ?[]u8 = null;
+    defer if (owned_wasm_path) |p| allocator.free(p);
+
+    const explicit_wasm: ?[]const u8 = if (all_args.len >= 2 and std.mem.endsWith(u8, all_args[1], ".wasm")) all_args[1] else null;
+    const wasm_path: []const u8 = blk: {
+        if (explicit_wasm) |p| break :blk p;
+        if (findCliWasm(allocator)) |p| {
+            owned_wasm_path = p;
+            break :blk p;
+        }
         std.debug.print(
-            \\Usage: gossamer-launcher <cli.wasm> [args...]
+            \\gossamer-launcher: no cli.wasm found.
             \\
-            \\MVP host for typed-wasm Ephapax CLIs. Loads the given .wasm
-            \\module, provides the 5 baseline env:: imports, and invokes
-            \\its `main` export with the trailing args available via the
-            \\argv host functions.
+            \\Searched:
+            \\  $GOSSAMER_WASM           (unset / unreadable)
+            \\  <exe_dir>/../share/gossamer/cli.wasm
+            \\  /usr/local/share/gossamer/cli.wasm
+            \\  /usr/share/gossamer/cli.wasm
+            \\
+            \\Install via `zig build install` or pass a .wasm path
+            \\explicitly: gossamer-launcher /path/to/cli.wasm [args...]
             \\
             \\
         , .{});
         return 1;
-    }
+    };
 
-    const wasm_path = all_args[1];
-    // argv visible to the guest: drop argv[0] (the launcher path) and
-    // argv[1] (the wasm path). What remains is the user's real intent.
+    // argv visible to the guest: drop argv[0] (the launcher path) and,
+    // if argv[1] was an explicit wasm path, also drop that. What
+    // remains is the user's real intent.
+    const skip_count: usize = if (explicit_wasm != null) 2 else 1;
     var guest_argv: std.ArrayListUnmanaged([]const u8) = .empty;
     defer guest_argv.deinit(allocator);
-    for (all_args[2..]) |a| {
+    for (all_args[skip_count..]) |a| {
         try guest_argv.append(allocator, a);
     }
 

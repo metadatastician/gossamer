@@ -162,10 +162,63 @@ wasm-tools parse src/hello-bridges.wat -o hello-bridges.wasm
 Expected: libgossamer's version string (e.g. `0.3.0`) printed via the
 guest's `print_string`.
 
+== Phase 14a.5c — build integration + cli.wasm discovery (this PR)
+
+`cli/launcher/build.zig` now invokes `ephapax compile` on the
+placeholder `cli/src/Main.eph`, producing `zig-out/share/gossamer/cli.wasm`
+as part of the standard install step.
+
+The launcher discovers `cli.wasm` at runtime via a priority order:
+
+[cols="1,2"]
+|===
+| Priority | Path
+
+| 1 (override)
+| `$GOSSAMER_WASM` env var
+
+| 2 (install-prefix-relative)
+| `<exe_dir>/../share/gossamer/cli.wasm`
+
+| 3 (system fallback)
+| `/usr/local/share/gossamer/cli.wasm`
+
+| 4 (system fallback)
+| `/usr/share/gossamer/cli.wasm`
+|===
+
+Explicit `gossamer-launcher /path/to/foo.wasm` still works as before
+(MVP smoke-test workflow); argv\[1] that ends in `.wasm` is treated as
+the override.
+
+Build workflow:
+
+[source,sh]
+----
+# Use a dev-build of ephapax instead of one on PATH:
+export EPHAPAX=$HOME/dev/repos/ephapax/target/debug/ephapax
+
+cd cli/launcher
+zig build install --prefix /usr/local         # writes:
+                                              #   /usr/local/bin/gossamer-launcher
+                                              #   /usr/local/share/gossamer/cli.wasm
+
+gossamer-launcher                             # discovers and runs cli.wasm
+gossamer-launcher dev                         # passes `dev` to the guest
+zig build run -- dev                          # same, via build step
+----
+
+The placeholder `cli/src/Main.eph` is a stub that calls `argv_count()`
+and prints the integer via `env::print_i32`. Real CLI logic — the dev /
+build / bundle / run / init / info subcommands — lands in #15 once v2
+grammar covers the patterns the existing `cli/src/main.zig` needs.
+
 == What's NOT in MVP
 
-* Compiling `cli.wasm` from an `.eph` source — 14a.5c.
-* Discovery of `cli.wasm` at `/usr/share/gossamer/` — 14a.5c.
+* Replacing `gossamer` (the native binary built from `cli/src/main.zig`)
+  with the launcher — happens in #15 once the IPC handler migration
+  inside libgossamer lands. Until then the launcher installs as
+  `gossamer-launcher` alongside the existing `gossamer`.
 * Moving the 27 IPC handlers out of cli/src/main.zig into libgossamer —
   separate refactor.
 
