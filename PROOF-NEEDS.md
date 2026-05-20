@@ -14,7 +14,9 @@
 - `src/interface/abi/ResourceCleanup.idr` — Resource cleanup on teardown proofs ✅
 - `src/interface/abi/WindowStateMachine.idr` — Window state machine correctness (GS1) ✅ NEW 2026-04-11
 - `src/interface/abi/IPCDispatch.idr` — IPC handler type safety, 25 handlers (GS2) ✅ NEW 2026-04-11
-- No `believe_me`, `sorry`, `postulate`, or `assert_total` in ABI layer
+- **All 13 ABI modules above are now wired into `gossamer-abi.ipkg` and pass `idris2 0.8.0 --typecheck` cleanly** (2026-05-20, `standards#131` close-out). Prior to `gossamer#22` / `#36` / `#40` / `#41`, several modules were excluded from the ipkg and had never been built — their PROOF-NEEDS ✅ markers reflected an unverified posture; build is now the oracle.
+- **One class-J axiom**: `Gossamer.ABI.PanelIsolation.stringNotEqCommut` — sanctioned principled assumption over the Idris2 backend primitive `prim__eq_String` (content-symmetry on every supported backend; cannot be derived inside Idris2). `%unsafe`-annotated, `believe_me ()`-bodied, documented at the use site. Same trust posture as boj-server's `Boj.SafetyLemmas.charEqSym` and four sibling axioms over String / Char primitives. See "Class-J axioms (trusted base)" section below.
+- No other `believe_me`, `sorry`, `postulate`, or `assert_total` in the ABI layer.
 - Zig FFI layer in `src/interface/ffi/`
 
 ## What needs proving
@@ -32,3 +34,27 @@
 
 ## Priority
 - **LOW** — 7 of 8 proof requirements completed. Only extension loading safety remains, blocked on Ephapax module system completion.
+
+## Class-J axioms (trusted base)
+
+This repo has one class-J axiom, sanctioned and documented:
+
+| Axiom | Module | Justification | Soundness oracle |
+|---|---|---|---|
+| `stringNotEqCommut` | `Gossamer.ABI.PanelIsolation` | Commutativity of `prim__eq_String`: the Idris2 backend primitive for `String == String`. Holds on every supported backend (Chez, Racket, Node, JS — all dispatch to native string-equal which is content-symmetric). Cannot be derived inside Idris2 (opaque primitive with no constructors / induction principle). | Per-backend property-test validation (deferred to the backend-assurance harness once ported from boj-server's `project_boj_server_backend_assurance_harness`). |
+
+The axiom is `%unsafe`-marked and the function body is `believe_me ()` — explicit, named, audited; **not unproven debt**. Sites that depend on it: `PanelIsolation.distinctSym`.
+
+**Reduce-the-trusted-base path**: when gossamer adopts the backend-assurance harness, `stringNotEqCommut` can be promoted from class-J axiom to a backend-verified theorem via runtime correspondence tests against the primitive.
+
+## Discharge ledger (2026-05-20, standards#131 close-out)
+
+| Module | Discharged in | State |
+|---|---|---|
+| GrooveTermination | [gossamer#36](https://github.com/hyperpolymath/gossamer/pull/36) | **MERGED** |
+| LayoutStability | [gossamer#40](https://github.com/hyperpolymath/gossamer/pull/40) | **MERGED** |
+| IPCIntegrity | [gossamer#40](https://github.com/hyperpolymath/gossamer/pull/40) | **MERGED** |
+| PanelIsolation (+ class-J axiom) | [gossamer#41](https://github.com/hyperpolymath/gossamer/pull/41) | open, ready, idris2 ✓ 13/13 local |
+| ResourceCleanup | [gossamer#41](https://github.com/hyperpolymath/gossamer/pull/41) | same branch as #41 |
+
+**Lesson memorialised**: the OWED notes carried in the original gossamer#22 deferred-list misdiagnosed the root cause on every one of the four deferred items. The notes named `choose` / theorem restatement / axiom-vs-refactor; the actual fixes were `module-qualify the names` / `reorder + 0-quantity-mark + add accessors` / `import + capitalise the typo` / `class-J axiom` (the last one was right by accident). **Build is the only oracle for proof-bearing code; comment-only notes from never-built modules are hints, not specs.**
