@@ -22,12 +22,12 @@ just hello
 just test
 
 # Benchmark core operations
-deno bench --allow-env tests/bench/
+just test-zig-bench
 ```
 
 ## Configuration Files
 
-- **deno.json** — Deno tasks and dependencies (test, bench, lint tasks)
+- **gossamer-abi.ipkg / gossamer-abi-tests.ipkg** — Idris2 ABI package and its test runner
 - **flake.nix** — Nix development environment (fallback to guix.scm)
 - **guix.scm** — Primary Guix package definition for reproducible dev env
 - **gossamer.conf.json** — Runtime config: window size, IPC protocol, CSP, capabilities, sandbox

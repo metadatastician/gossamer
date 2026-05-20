@@ -30,6 +30,8 @@ modules = Test.Spec
         , GuardModeTest
         , CapabilityTest
         , IPCTest
+        , ContractsTest
+        , SecurityTest
         , Main
 
 main = Main

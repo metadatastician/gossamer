@@ -17,8 +17,13 @@ import ResultCodeTest
 import GuardModeTest
 import CapabilityTest
 import IPCTest
+import ContractsTest
+import SecurityTest
 
-%default total
+-- `covering` rather than `total` because SecurityTest's HTML sanitiser
+-- is partial (non-structurally-recursive) — the looseness travels up through
+-- the suites list and main.
+%default covering
 
 ||| All ABI test suites — append new ports here.
 suites : List (String, List TestCase)
@@ -27,6 +32,8 @@ suites =
   , (GuardModeTest.suiteName,  GuardModeTest.tests)
   , (CapabilityTest.suiteName, CapabilityTest.tests)
   , (IPCTest.suiteName,        IPCTest.tests)
+  , (ContractsTest.suiteName,  ContractsTest.tests)
+  , (SecurityTest.suiteName,   SecurityTest.tests)
   ]
 
 runEach : List (String, List TestCase) -> Nat -> Nat -> IO (Nat, Nat)

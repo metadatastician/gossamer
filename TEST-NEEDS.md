@@ -46,5 +46,5 @@
 ## Run Tests
 
 ```bash
-deno test --no-check tests/
+just test
 ```
