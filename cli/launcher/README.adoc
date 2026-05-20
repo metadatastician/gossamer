@@ -100,13 +100,74 @@ argument (no newline separation — the hello-world doesn't bother).
   or the buffer overflows the guest's memory.
 |===
 
+== Phase 14a.5b — libgossamer bridges (this PR)
+
+`bridges.zig` adds 29 `env::gossamer_*` host imports that trampoline guest
+wasm calls into libgossamer's native C ABI. Plus 1 `env::cap_token(kind)`
+for the guest to read pre-granted capability tokens.
+
+[cols="1m,2"]
+|===
+| Family | Symbols bridged
+
+| String-out (size-write into buffer)
+| `gossamer_version_to`, `gossamer_build_info_to`, `gossamer_last_error_to`
+
+| Webview lifecycle
+| `gossamer_create_ex`, `gossamer_navigate`, `gossamer_load_html`,
+  `gossamer_channel_open`, `gossamer_set_csp`, `gossamer_set_title`,
+  `gossamer_registry_add`, `gossamer_run`
+
+| Groove
+| `gossamer_groove_discover`, `gossamer_groove_status`
+
+| Watcher
+| `gossamer_watcher_start`, `gossamer_watcher_stop`
+
+| Shell
+| `gossamer_shell_spawn`, `gossamer_shell_kill`
+
+| Filesystem
+| `gossamer_fs_read_text`, `gossamer_fs_write_text`, `gossamer_fs_exists`,
+  `gossamer_fs_mkdir_p`, `gossamer_fs_copy_file`
+
+| Conf
+| `gossamer_conf_load`, `gossamer_conf_get_string`,
+  `gossamer_conf_get_int`, `gossamer_conf_get_bool`, `gossamer_conf_has`,
+  `gossamer_conf_free`
+
+| Capability tokens
+| `cap_token`
+|===
+
+The launcher eager-grants tokens for ResourceKind 0 (FileSystem), 1 (Network)
+and 2 (Shell) at startup via `bridges.grantCaps`. The guest reads them via
+`env::cap_token(kind)` rather than calling `gossamer_cap_grant` itself.
+Notification/Tray/Clipboard caps are deferred.
+
+The 27 IPC bridge handlers (`window_minimize`, `group_create`, `transmute`,
+etc. — `gossamer_channel_bind` callbacks today in `cli/src/main.zig`) do NOT
+bridge through wasm. They live native-side and the guest just opens the
+channel. A separate follow-up moves them into libgossamer's
+`gossamer_channel_open` so the legacy native CLI can deprecate cleanly.
+
+Additional smoke test for 14a.5b:
+
+[source,sh]
+----
+wasm-tools parse src/hello-bridges.wat -o hello-bridges.wasm
+./zig-out/bin/gossamer-launcher hello-bridges.wasm
+----
+
+Expected: libgossamer's version string (e.g. `0.3.0`) printed via the
+guest's `print_string`.
+
 == What's NOT in MVP
 
-* The ~80 `gossamer_*` symbols (window controls, IPC, conf, shell, fs,
-  watcher, …) — those come in 14a.5b.
-* Capability grants at startup — also 14a.5b.
-* Building `cli.wasm` from an `.eph` source — 14a.5c.
+* Compiling `cli.wasm` from an `.eph` source — 14a.5c.
 * Discovery of `cli.wasm` at `/usr/share/gossamer/` — 14a.5c.
+* Moving the 27 IPC handlers out of cli/src/main.zig into libgossamer —
+  separate refactor.
 
 == Tracking
 
