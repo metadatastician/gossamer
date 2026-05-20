@@ -21,6 +21,29 @@
 ||| 4. Determinism: the same inputs always produce the same result.
 |||
 ||| Zero believe_me. All proofs are constructive.
+|||
+||| ## Relationship with `Gossamer.ABI.Groove`
+|||
+||| `Gossamer.ABI.Groove` models the runtime handshake at the
+||| network-protocol level: 6 states (`HSIdle` … `HSConnected` / `HSRejected`)
+||| connected by 7 `HandshakeTransition`s, with termination established via
+||| a strictly-decreasing rank function (`handshakeRank`).
+|||
+||| This module proves the **bounded-length** termination property in
+||| a complementary, trace-based style: 6 abstract states
+||| (`Init` … `Connected` / `Rejected`) connected by 6 `TermStep`s, with
+||| termination established by exhaustive case analysis on a closed-form
+||| `TermTrace` (every path has length ≤ 4). The two models are not
+||| isomorphic — Groove distinguishes `HSProbing` / `HSManifestReceived` /
+||| `HSCapabilityCheck` while this proof collapses them to `ManifestSent` /
+||| `Replied`. Both abstractions are sound; this one is the right tool for
+||| the bounded-length argument and the no-escalation / determinism
+||| corollaries.
+|||
+||| To avoid namespace ambiguity with Groove's `HandshakeState` /
+||| `connectedIsTerminal` / `rejectedIsTerminal`, the symbols local to
+||| this proof carry a `Term` prefix (`TermState`, `TermStep`, `TermTrace`,
+||| `termConnectedTerminal`, `termRejectedTerminal`, ...).
 
 module Gossamer.ABI.GrooveTermination
 
@@ -34,53 +57,56 @@ import Data.List.Elem
 %default total
 
 --------------------------------------------------------------------------------
--- Handshake States
+-- Handshake States (termination-proof abstraction)
 --------------------------------------------------------------------------------
 
-||| States of the Groove handshake protocol.
+||| States of the Groove handshake protocol — termination-proof abstraction.
 ||| The protocol is a strict sequence — no loops, no backward transitions.
+|||
+||| Distinct from `Gossamer.ABI.Groove.HandshakeState` (the runtime model);
+||| see the moduledoc for the relationship.
 public export
-data HandshakeState : Type where
+data TermState : Type where
   ||| Initial state — no messages exchanged yet.
-  Init       : HandshakeState
+  Init       : TermState
   ||| Initiator has sent its manifest.
-  ManifestSent : HandshakeState
+  ManifestSent : TermState
   ||| Responder has checked compatibility and replied.
-  Replied    : HandshakeState
+  Replied    : TermState
   ||| Initiator has verified mutual compatibility.
-  Verified   : HandshakeState
+  Verified   : TermState
   ||| Terminal: connection established.
-  Connected  : HandshakeState
+  Connected  : TermState
   ||| Terminal: handshake rejected (incompatible).
-  Rejected   : HandshakeState
+  Rejected   : TermState
 
 ||| Valid transitions in the handshake protocol.
 ||| Each constructor witnesses a single step. There are exactly 4 possible
 ||| steps from Init to a terminal state, proving bounded execution.
 public export
-data HandshakeStep : HandshakeState -> HandshakeState -> Type where
+data TermStep : TermState -> TermState -> Type where
   ||| Step 1: Initiator sends manifest.
-  SendManifest   : HandshakeStep Init ManifestSent
+  SendManifest   : TermStep Init ManifestSent
   ||| Step 2a: Responder accepts (requirements satisfied).
-  AcceptReply    : HandshakeStep ManifestSent Replied
+  AcceptReply    : TermStep ManifestSent Replied
   ||| Step 2b: Responder rejects (requirements not satisfied).
-  RejectReply    : HandshakeStep ManifestSent Rejected
+  RejectReply    : TermStep ManifestSent Rejected
   ||| Step 3a: Initiator verifies mutual compatibility.
-  VerifyMutual   : HandshakeStep Replied Verified
+  VerifyMutual   : TermStep Replied Verified
   ||| Step 3b: Initiator finds incompatibility.
-  RejectMutual   : HandshakeStep Replied Rejected
+  RejectMutual   : TermStep Replied Rejected
   ||| Step 4: Verified handshake establishes connection.
-  Establish      : HandshakeStep Verified Connected
+  Establish      : TermStep Verified Connected
 
 ||| Proof that Connected is a terminal state — no valid step from it.
 public export
-connectedIsTerminal : HandshakeStep Connected s -> Void
-connectedIsTerminal _ impossible
+termConnectedTerminal : TermStep Connected s -> Void
+termConnectedTerminal _ impossible
 
 ||| Proof that Rejected is a terminal state — no valid step from it.
 public export
-rejectedIsTerminal : HandshakeStep Rejected s -> Void
-rejectedIsTerminal _ impossible
+termRejectedTerminal : TermStep Rejected s -> Void
+termRejectedTerminal _ impossible
 
 --------------------------------------------------------------------------------
 -- Handshake Trace (Execution History)
@@ -89,17 +115,17 @@ rejectedIsTerminal _ impossible
 ||| A trace of handshake steps from state `start` to state `end`.
 ||| The length of the trace is bounded by construction — at most 4 steps.
 public export
-data HandshakeTrace : HandshakeState -> HandshakeState -> Type where
+data TermTrace : TermState -> TermState -> Type where
   ||| Zero steps: already at the target state.
-  Done : HandshakeTrace s s
+  Done : TermTrace s s
   ||| One step followed by more steps.
-  Step : HandshakeStep s mid -> HandshakeTrace mid end -> HandshakeTrace s end
+  Step : TermStep s mid -> TermTrace mid end -> TermTrace s end
 
 ||| Count the number of steps in a trace.
 public export
-traceLength : HandshakeTrace s e -> Nat
-traceLength Done = 0
-traceLength (Step _ rest) = S (traceLength rest)
+termLength : TermTrace s e -> Nat
+termLength Done = 0
+termLength (Step _ rest) = S (termLength rest)
 
 --------------------------------------------------------------------------------
 -- Termination Proof
@@ -107,76 +133,87 @@ traceLength (Step _ rest) = S (traceLength rest)
 
 ||| A complete handshake trace from Init to a terminal state.
 public export
-data CompletedHandshake : Type where
+data TermCompleted : Type where
   ||| Handshake succeeded — connection established.
-  Success : HandshakeTrace Init Connected -> CompletedHandshake
+  TermSuccess : TermTrace Init Connected -> TermCompleted
   ||| Handshake failed — rejected at some point.
-  Failure : HandshakeTrace Init Rejected -> CompletedHandshake
+  TermFailure : TermTrace Init Rejected -> TermCompleted
 
 ||| The successful handshake path: Init -> ManifestSent -> Replied -> Verified -> Connected.
 ||| Exactly 4 steps.
 public export
-successPath : HandshakeTrace Init Connected
-successPath = Step SendManifest
-            $ Step AcceptReply
-            $ Step VerifyMutual
-            $ Step Establish
-            $ Done
+termSuccessPath : TermTrace Init Connected
+termSuccessPath = Step SendManifest
+                $ Step AcceptReply
+                $ Step VerifyMutual
+                $ Step Establish
+                $ Done
 
 ||| Rejection at responder: Init -> ManifestSent -> Rejected.
 ||| Exactly 2 steps.
 public export
-rejectAtResponder : HandshakeTrace Init Rejected
-rejectAtResponder = Step SendManifest
-                  $ Step RejectReply
-                  $ Done
+termRejectAtResponder : TermTrace Init Rejected
+termRejectAtResponder = Step SendManifest
+                      $ Step RejectReply
+                      $ Done
 
 ||| Rejection at initiator verification: Init -> ManifestSent -> Replied -> Rejected.
 ||| Exactly 3 steps.
 public export
-rejectAtVerify : HandshakeTrace Init Rejected
-rejectAtVerify = Step SendManifest
-               $ Step AcceptReply
-               $ Step RejectMutual
-               $ Done
+termRejectAtVerify : TermTrace Init Rejected
+termRejectAtVerify = Step SendManifest
+                   $ Step AcceptReply
+                   $ Step RejectMutual
+                   $ Done
 
 ||| Proof: the successful handshake takes exactly 4 steps.
 public export
-successIs4Steps : traceLength GrooveTermination.successPath = 4
-successIs4Steps = Refl
+termSuccessIs4Steps : termLength GrooveTermination.termSuccessPath = 4
+termSuccessIs4Steps = Refl
 
 ||| Proof: responder rejection takes exactly 2 steps.
 public export
-responderRejectIs2Steps : traceLength GrooveTermination.rejectAtResponder = 2
-responderRejectIs2Steps = Refl
+termResponderRejectIs2Steps : termLength GrooveTermination.termRejectAtResponder = 2
+termResponderRejectIs2Steps = Refl
 
 ||| Proof: initiator rejection takes exactly 3 steps.
 public export
-verifyRejectIs3Steps : traceLength GrooveTermination.rejectAtVerify = 3
-verifyRejectIs3Steps = Refl
+termVerifyRejectIs3Steps : termLength GrooveTermination.termRejectAtVerify = 3
+termVerifyRejectIs3Steps = Refl
 
 ||| Proof: ALL possible handshake paths terminate in at most 4 steps.
 ||| This is proved by exhaustive case analysis — the 3 possible paths
 ||| have lengths 4, 2, and 3 respectively.
 ||| Length of a completed handshake's trace (top-level so it can appear
-||| in `allPathsBounded`'s type — a `where` block cannot, which was the
+||| in `termAllPathsBounded`'s type — a `where` block cannot, which was the
 ||| original parse failure).
 public export
-completedLength : CompletedHandshake -> Nat
-completedLength (Success trace) = traceLength trace
-completedLength (Failure trace) = traceLength trace
+termCompletedLength : TermCompleted -> Nat
+termCompletedLength (TermSuccess trace) = termLength trace
+termCompletedLength (TermFailure trace) = termLength trace
 
 public export
-allPathsBounded : (h : CompletedHandshake) -> LTE (completedLength h) 4
-allPathsBounded (Success trace) = boundSuccess trace
+termAllPathsBounded : (h : TermCompleted) -> LTE (termCompletedLength h) 4
+termAllPathsBounded (TermSuccess trace) = boundSuccess trace
   where
-    boundSuccess : (t : HandshakeTrace Init Connected) -> LTE (traceLength t) 4
+    boundSuccess : (t : TermTrace Init Connected) -> LTE (termLength t) 4
     boundSuccess (Step SendManifest (Step AcceptReply (Step VerifyMutual (Step Establish Done)))) = LTESucc (LTESucc (LTESucc (LTESucc LTEZero)))
-allPathsBounded (Failure trace) = boundFailure trace
+    -- Reject branches cannot end at Connected: Rejected has no outgoing
+    -- TermStep (`termRejectedTerminal`), so any `TermTrace Rejected Connected`
+    -- is uninhabited. Impossible clauses make the coverage explicit.
+    boundSuccess (Step SendManifest (Step RejectReply Done)) impossible
+    boundSuccess (Step SendManifest (Step RejectReply (Step _ _))) impossible
+    boundSuccess (Step SendManifest (Step AcceptReply (Step RejectMutual Done))) impossible
+    boundSuccess (Step SendManifest (Step AcceptReply (Step RejectMutual (Step _ _)))) impossible
+termAllPathsBounded (TermFailure trace) = boundFailure trace
   where
-    boundFailure : (t : HandshakeTrace Init Rejected) -> LTE (traceLength t) 4
+    boundFailure : (t : TermTrace Init Rejected) -> LTE (termLength t) 4
     boundFailure (Step SendManifest (Step RejectReply Done)) = LTESucc (LTESucc LTEZero)
     boundFailure (Step SendManifest (Step AcceptReply (Step RejectMutual Done))) = LTESucc (LTESucc (LTESucc LTEZero))
+    -- Establish ends at Connected, not Rejected: any `TermTrace Connected
+    -- Rejected` is uninhabited (`termConnectedTerminal`).
+    boundFailure (Step SendManifest (Step AcceptReply (Step VerifyMutual (Step Establish Done)))) impossible
+    boundFailure (Step SendManifest (Step AcceptReply (Step VerifyMutual (Step Establish (Step _ _))))) impossible
 
 --------------------------------------------------------------------------------
 -- No Privilege Escalation
