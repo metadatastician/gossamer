@@ -123,6 +123,32 @@ Gossamer is backed by formal research. The type system and its guarantees are ma
 
 _Gossamer: A Linearly-Typed Webview Shell with Provable Resource Safety_ — link:docs/whitepapers/gossamer-arxiv-paper.tex[paper source]
 
+== Formal verification
+
+Gossamer's ABI is written in Idris2 with the proof obligations audited in
+`PROOF-NEEDS.md`. Headline posture (as of `standards#131` close-out, 2026-05-20):
+
+* *All 13 ABI proof modules build green.* `gossamer-abi.ipkg`
+  `idris2 0.8.0 --typecheck` passes 13/13 with `%default total`. Modules:
+  `Types`, `Layout`, `Foreign`, `Groove`, `CapabilityAuthenticity`,
+  `IPCDispatch`, `HandleLinearity`, `WindowStateMachine`,
+  `GrooveTermination`, `LayoutStability`, `IPCIntegrity`,
+  `PanelIsolation`, `ResourceCleanup`. Discharge ledger in `PROOF-NEEDS.md`.
+
+* *One `believe_me` invocation*, isolated in
+  `src/interface/abi/PanelIsolation.idr` (`stringNotEqCommut`), class (J) —
+  a *principled assumption*, not unproven debt. It axiomatises the
+  commutativity of Idris2 0.8.0's opaque `prim__eq_String` primitive
+  (content-symmetric on every supported backend — Chez, Racket, Node, JS —
+  but not derivable in-language). Same trust posture as boj-server's
+  `Boj.SafetyLemmas` axioms over Char/String primitives. Reduction path:
+  external backend-assurance evidence (property-test harness against the
+  primitive), not constructive in-language proof.
+
+* *No other unproven obligations remain in the audited surface.* The full
+  per-site rationale + reduce-the-trusted-base path are tracked in
+  `PROOF-NEEDS.md` ("Class-J axioms (trusted base)" section).
+
 == License
 
 PMPL-1.0-or-later — Copyright (c) 2026 Jonathan D.A. Jewell
