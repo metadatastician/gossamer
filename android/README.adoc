@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = Android
 Android platform target for gossamer.
 Contains the native Android source tree used to build the linearly-typed webview shell on Android, consuming the Idris2 ABI and Zig FFI layers.

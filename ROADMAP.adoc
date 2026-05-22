@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = Gossamer Webview Shell — Roadmap
 
 Gossamer is a linearly-typed webview shell built in Ephapax with Idris2 ABI

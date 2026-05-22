@@ -1,6 +1,6 @@
 {
   "$schema": "https://panll.dev/schemas/panel/v1.json",
-  "spdx": "PMPL-1.0-or-later",
+  "spdx": "MPL-2.0",
   "id": "game-server-admin",
   "title": "Game Server Admin",
   "description": "Remote game server settings panel — auto-detects config format (XML/INI/JSON) and renders appropriate controls. Changes are applied live via SSH and containers are restarted automatically.",

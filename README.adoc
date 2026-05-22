@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // SPDX-FileCopyrightText: 2025-2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 
 = Gossamer
@@ -151,4 +151,4 @@ Gossamer's ABI is written in Idris2 with the proof obligations audited in
 
 == License
 
-PMPL-1.0-or-later — Copyright (c) 2026 Jonathan D.A. Jewell
+MPL-2.0 — Copyright (c) 2026 Jonathan D.A. Jewell

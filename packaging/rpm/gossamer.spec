@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
 # RPM spec file for the Gossamer webview shell framework.
@@ -10,7 +10,7 @@ Version:        0.3.0
 Release:        1%{?dist}
 Summary:        Linearly-typed webview shell framework with provable resource safety
 
-License:        PMPL-1.0-or-later
+License:        MPL-2.0
 URL:            https://github.com/hyperpolymath/gossamer
 
 # The source tree is the repository itself; rpmbuild is expected to be run

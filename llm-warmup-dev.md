@@ -3,7 +3,7 @@
 ## Identity
 
 Gossamer — Linearly-typed webview shell framework. Ephapax backend,
-Idris2 ABI, Zig FFI. License: PMPL-1.0-or-later.
+Idris2 ABI, Zig FFI. License: MPL-2.0.
 Author: Jonathan D.A. Jewell. Status: v0.2 development.
 
 ## Architecture

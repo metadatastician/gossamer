@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
 # META.a2ml — Project meta-level information
@@ -11,7 +11,7 @@ last-updated = "2026-03-23"
 [project-info]
 type = "library"  # library | binary | monorepo | service | website
 languages = ["zig", "idris2", "ephapax", "rescript", "rust"]
-license = "PMPL-1.0-or-later"
+license = "MPL-2.0"
 author = "Jonathan D.A. Jewell (hyperpolymath)"
 
 [architecture-decisions]

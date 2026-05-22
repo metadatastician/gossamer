@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = Configs
 Nickel configuration schemas and default values for gossamer runtime configuration.
 `config.ncl` defines the canonical schema; it is evaluated at build time to produce the JSON configs consumed by the gossamer binary.

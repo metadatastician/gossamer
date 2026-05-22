@@ -9,7 +9,7 @@ version: 0.1.0
 date-released: 2026-03-22
 url: "https://github.com/hyperpolymath/gossamer"
 repository-code: "https://github.com/hyperpolymath/gossamer"
-license: PMPL-1.0-or-later
+license: MPL-2.0
 keywords:
   - "rsr"
   - "formal-verification"

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = Scripts
 Developer and build utility scripts for gossamer.
 Includes desktop integration installation (`install-desktop.sh`), Markdown-to-HTML conversion (`md-to-html.awk`), a Zig-based static site build runner (`ssg-build-runner.zig`), a template substitution helper (`template-sub.awk`), and a headless-display test wrapper (`test-with-display.sh`).

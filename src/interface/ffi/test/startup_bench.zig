@@ -1,5 +1,5 @@
 // Gossamer Startup Benchmarks
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 //
 // Ported 1:1 from tests/bench/startup_bench.ts. Same harness shape as

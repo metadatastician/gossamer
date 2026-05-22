@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = Deploy
 Deployment artefacts and infrastructure-as-code for gossamer release pipelines.
 Place container orchestration files, cloud deployment manifests, and release automation scripts here as the project matures.

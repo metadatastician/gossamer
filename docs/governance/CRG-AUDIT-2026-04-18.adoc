@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 
 = Gossamer — CRG Audit (2026-04-18)
@@ -84,7 +84,7 @@ Publication requires B+. Long alpha is discipline, not shame.
 
 | SPDX headers on source
 | PRESENT on sampled files
-| `PMPL-1.0-or-later` declared
+| `MPL-2.0` declared
 
 | `Containerfile` (not `Dockerfile`)
 | PRESENT; *zero* `Dockerfile*` at any depth
