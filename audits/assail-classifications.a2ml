@@ -1,0 +1,158 @@
+;; SPDX-License-Identifier: MPL-2.0
+;; Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+;;
+;; Assail Classifications — gossamer
+
+(assail-classifications
+  (metadata
+    (version "1.0.0")
+    (project "gossamer")
+    (last-updated "2026-05-26")
+    (entries 24)
+    (status "active"))
+
+  (classification
+    (file "src/interface/ffi/src/webview_gtk.zig")
+    (category "UnsafeCode")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "Zig FFI bridge for the gossamer interface layer (WebKit GTK webview, CSP enforcement). Each unsafe block is an extern call across the Zig→C boundary."))
+  (classification
+    (file "src/interface/ffi/src/webview_gtk.zig")
+    (category "UnsafeFFI")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "Zig FFI bridge for the gossamer interface layer (WebKit GTK webview, CSP enforcement). Each unsafe block is an extern call across the Zig→C boundary."))
+  (classification
+    (file "src/interface/ffi/src/csp.zig")
+    (category "UnsafeCode")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "Zig FFI bridge for the gossamer interface layer (WebKit GTK webview, CSP enforcement). Each unsafe block is an extern call across the Zig→C boundary."))
+  (classification
+    (file "src/interface/ffi/src/csp.zig")
+    (category "UnsafeFFI")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "Zig FFI bridge for the gossamer interface layer (WebKit GTK webview, CSP enforcement). Each unsafe block is an extern call across the Zig→C boundary."))
+  (classification
+    (file "src/interface/ffi/src/plugin.zig")
+    (category "UnsafeCode")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "Zig FFI bridge for the gossamer interface layer (WebKit GTK webview, CSP enforcement). Each unsafe block is an extern call across the Zig→C boundary."))
+  (classification
+    (file "src/interface/ffi/src/main.zig")
+    (category "UnsafeCode")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "Zig FFI bridge for the gossamer interface layer (WebKit GTK webview, CSP enforcement). Each unsafe block is an extern call across the Zig→C boundary."))
+  (classification
+    (file "src/interface/ffi/src/dialog.zig")
+    (category "UnsafeCode")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "Zig FFI bridge for the gossamer interface layer (WebKit GTK webview, CSP enforcement). Each unsafe block is an extern call across the Zig→C boundary."))
+  (classification
+    (file "src/interface/ffi/src/dialog.zig")
+    (category "UnsafeFFI")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "Zig FFI bridge for the gossamer interface layer (WebKit GTK webview, CSP enforcement). Each unsafe block is an extern call across the Zig→C boundary."))
+  (classification
+    (file "src/interface/ffi/src/webview_cocoa.zig")
+    (category "UnsafeCode")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "Zig FFI bridge for the gossamer interface layer (WebKit GTK webview, CSP enforcement). Each unsafe block is an extern call across the Zig→C boundary."))
+  (classification
+    (file "src/interface/ffi/src/webview_cocoa.zig")
+    (category "UnsafeFFI")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "Zig FFI bridge for the gossamer interface layer (WebKit GTK webview, CSP enforcement). Each unsafe block is an extern call across the Zig→C boundary."))
+  (classification
+    (file "src/interface/ffi/src/clipboard.zig")
+    (category "UnsafeCode")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "Zig FFI bridge for the gossamer interface layer (WebKit GTK webview, CSP enforcement). Each unsafe block is an extern call across the Zig→C boundary."))
+  (classification
+    (file "src/interface/ffi/src/clipboard.zig")
+    (category "UnsafeFFI")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "Zig FFI bridge for the gossamer interface layer (WebKit GTK webview, CSP enforcement). Each unsafe block is an extern call across the Zig→C boundary."))
+  (classification
+    (file "src/interface/ffi/src/webview_ios.zig")
+    (category "UnsafeCode")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "Zig FFI bridge for the gossamer interface layer (WebKit GTK webview, CSP enforcement). Each unsafe block is an extern call across the Zig→C boundary."))
+  (classification
+    (file "src/interface/ffi/src/webview_ios.zig")
+    (category "UnsafeFFI")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "Zig FFI bridge for the gossamer interface layer (WebKit GTK webview, CSP enforcement). Each unsafe block is an extern call across the Zig→C boundary."))
+  (classification
+    (file "src/interface/ffi/src/ssg.zig")
+    (category "UnsafeCode")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "Zig FFI bridge for the gossamer interface layer (WebKit GTK webview, CSP enforcement). Each unsafe block is an extern call across the Zig→C boundary."))
+  (classification
+    (file "src/interface/ffi/src/file_watcher.zig")
+    (category "UnsafeCode")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "Zig FFI bridge for the gossamer interface layer (WebKit GTK webview, CSP enforcement). Each unsafe block is an extern call across the Zig→C boundary."))
+  (classification
+    (file "src/interface/ffi/src/file_watcher.zig")
+    (category "UnsafeFFI")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "Zig FFI bridge for the gossamer interface layer (WebKit GTK webview, CSP enforcement). Each unsafe block is an extern call across the Zig→C boundary."))
+  (classification
+    (file "src/interface/ffi/src/groove.zig")
+    (category "UnsafeCode")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "Zig FFI bridge for the gossamer interface layer (WebKit GTK webview, CSP enforcement). Each unsafe block is an extern call across the Zig→C boundary."))
+  (classification
+    (file "src/interface/ffi/src/ipc_handlers.zig")
+    (category "UnsafeCode")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "Zig FFI bridge for the gossamer interface layer (WebKit GTK webview, CSP enforcement). Each unsafe block is an extern call across the Zig→C boundary."))
+  (classification
+    (file "src/interface/ffi/src/webview_win32.zig")
+    (category "UnsafeCode")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "Zig FFI bridge for the gossamer interface layer (WebKit GTK webview, CSP enforcement). Each unsafe block is an extern call across the Zig→C boundary."))
+  (classification
+    (file "src/interface/ffi/src/tray.zig")
+    (category "UnsafeCode")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "Zig FFI bridge for the gossamer interface layer (WebKit GTK webview, CSP enforcement). Each unsafe block is an extern call across the Zig→C boundary."))
+  (classification
+    (file "src/interface/ffi/src/tray.zig")
+    (category "UnsafeFFI")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "Zig FFI bridge for the gossamer interface layer (WebKit GTK webview, CSP enforcement). Each unsafe block is an extern call across the Zig→C boundary."))
+  (classification
+    (file "src/interface/ffi/src/conf.zig")
+    (category "UnsafeCode")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "Zig FFI bridge for the gossamer interface layer (WebKit GTK webview, CSP enforcement). Each unsafe block is an extern call across the Zig→C boundary."))
+  (classification
+    (file "src/interface/ffi/src/shell.zig")
+    (category "UnsafeCode")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "Zig FFI bridge for the gossamer interface layer (WebKit GTK webview, CSP enforcement). Each unsafe block is an extern call across the Zig→C boundary."))
+)
