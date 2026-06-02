@@ -1,0 +1,61 @@
+package io.gossamer;
+
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.util.Log;
+
+/**
+ * GossamerReceiver — native-driven BroadcastReceiver.
+ *
+ * A receiver is constructed per-broadcast and discarded after onReceive
+ * returns. onReceive forwards the Intent action to a native handler
+ * (registered via gossamer_receiver_bind, keyed by action) and executes the
+ * returned directive. See android_receiver.zig.
+ *
+ * Directive verbs (one "verb\targ" per line):
+ *   startService            <fully.qualified.ClassName>
+ *   startForegroundService  <fully.qualified.ClassName>
+ *   log                     <text>
+ */
+public class GossamerReceiver extends BroadcastReceiver {
+
+    static {
+        System.loadLibrary("gossamer");
+    }
+
+    private native String nativeOnReceive(String action, String extras);
+
+    @Override
+    public void onReceive(Context context, Intent intent) {
+        String action = (intent != null) ? intent.getAction() : null;
+        if (action == null) {
+            return;
+        }
+        String directive = nativeOnReceive(action, "{}");
+        if (directive == null) {
+            return;
+        }
+        for (String line : directive.split("\n")) {
+            int tab = line.indexOf('\t');
+            if (tab < 0) {
+                continue;
+            }
+            String verb = line.substring(0, tab);
+            String arg = line.substring(tab + 1);
+            switch (verb) {
+                case "startService":
+                    context.startService(new Intent().setClassName(context, arg));
+                    break;
+                case "startForegroundService":
+                    context.startForegroundService(new Intent().setClassName(context, arg));
+                    break;
+                case "log":
+                    Log.i("Gossamer", arg);
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+}

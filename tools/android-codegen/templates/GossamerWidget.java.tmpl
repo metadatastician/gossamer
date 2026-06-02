@@ -1,0 +1,174 @@
+package io.gossamer;
+
+import android.app.PendingIntent;
+import android.appwidget.AppWidgetManager;
+import android.appwidget.AppWidgetProvider;
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.Intent;
+import android.view.View;
+import android.widget.RemoteViews;
+
+/**
+ * GossamerWidget — native-driven AppWidgetProvider.
+ *
+ * RemoteViews can only be built JVM-side, so the native handler (registered via
+ * gossamer_widget_bind) returns a RENDER DIRECTIVE this class applies. See
+ * android_widget.zig.
+ *
+ * Render directive (one record per line):
+ *   layout <layoutEntryName>                  (required; resolves R.layout.*)
+ *   view   <viewEntryName> text     <string>  (setTextViewText)
+ *   view   <viewEntryName> progress <0..100>  (setProgressBar, max 100)
+ *   view   <viewEntryName> show|hide          (View.VISIBLE / View.GONE)
+ *   click  <viewEntryName> service  <ClassName>     (tap starts a service)
+ *   click  <viewEntryName> activity <ClassName>     (tap opens an activity)
+ *   click  <viewEntryName> action   <intentAction>  (tap broadcasts to this provider)
+ *
+ * View/layout names are resource ENTRY names resolved against the app package,
+ * so this shim carries no compiled R constants.
+ */
+public class GossamerWidget extends AppWidgetProvider {
+
+    static {
+        System.loadLibrary("gossamer");
+    }
+
+    private native String nativeOnUpdate(String idsJson);
+    private native void nativeOnEnabled();
+    private native void nativeOnDisabled();
+    private native String nativeOnReceive(String action);
+
+    @Override
+    public void onEnabled(Context context) {
+        nativeOnEnabled();
+    }
+
+    @Override
+    public void onDisabled(Context context) {
+        nativeOnDisabled();
+    }
+
+    @Override
+    public void onUpdate(Context context, AppWidgetManager manager, int[] ids) {
+        String directive = nativeOnUpdate(idsToJson(ids));
+        RemoteViews views = build(context, directive);
+        if (views != null) {
+            for (int id : ids) {
+                manager.updateAppWidget(id, views);
+            }
+        }
+    }
+
+    @Override
+    public void onReceive(Context context, Intent intent) {
+        super.onReceive(context, intent);
+        String action = (intent != null) ? intent.getAction() : null;
+        if (action == null || AppWidgetManager.ACTION_APPWIDGET_UPDATE.equals(action)) {
+            return; // periodic updates are handled by onUpdate
+        }
+        // Let native react to the custom action (e.g. toggle a service)...
+        String directive = nativeOnReceive(action);
+        if (directive != null) {
+            applyActions(context, directive);
+        }
+        // ...then re-render every instance.
+        AppWidgetManager manager = AppWidgetManager.getInstance(context);
+        int[] ids = manager.getAppWidgetIds(new ComponentName(context, getClass()));
+        onUpdate(context, manager, ids);
+    }
+
+    private RemoteViews build(Context context, String directive) {
+        if (directive == null || directive.isEmpty()) {
+            return null;
+        }
+        String pkg = context.getPackageName();
+        RemoteViews views = null;
+        for (String line : directive.split("\n")) {
+            String[] f = line.split("\t");
+            if (views == null) {
+                if (f.length >= 2 && f[0].equals("layout")) {
+                    int layoutId = context.getResources().getIdentifier(f[1], "layout", pkg);
+                    if (layoutId == 0) {
+                        return null;
+                    }
+                    views = new RemoteViews(pkg, layoutId);
+                }
+                continue;
+            }
+            if (f[0].equals("view") && f.length >= 3) {
+                int viewId = context.getResources().getIdentifier(f[1], "id", pkg);
+                if (viewId == 0) {
+                    continue;
+                }
+                String op = f[2];
+                String val = (f.length >= 4) ? f[3] : "";
+                switch (op) {
+                    case "text":
+                        views.setTextViewText(viewId, val);
+                        break;
+                    case "progress":
+                        views.setProgressBar(viewId, 100, parseIntSafe(val), false);
+                        break;
+                    case "show":
+                        views.setViewVisibility(viewId, View.VISIBLE);
+                        break;
+                    case "hide":
+                        views.setViewVisibility(viewId, View.GONE);
+                        break;
+                    default:
+                        break;
+                }
+            } else if (f[0].equals("click") && f.length >= 4) {
+                int viewId = context.getResources().getIdentifier(f[1], "id", pkg);
+                if (viewId != 0) {
+                    views.setOnClickPendingIntent(viewId, pendingFor(context, f[2], f[3], viewId));
+                }
+            }
+        }
+        return views;
+    }
+
+    /** Reserved hook for action directives that change app state before re-render. */
+    private void applyActions(Context context, String directive) {
+        // Currently the native handler performs state changes itself; this is a
+        // forward-compatibility seam for verbs that must run JVM-side.
+    }
+
+    private PendingIntent pendingFor(Context context, String kind, String target, int code) {
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE;
+        switch (kind) {
+            case "service": {
+                Intent i = new Intent().setClassName(context, target);
+                return PendingIntent.getForegroundService(context, code, i, flags);
+            }
+            case "activity": {
+                Intent i = new Intent().setClassName(context, target).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                return PendingIntent.getActivity(context, code, i, flags);
+            }
+            default: { // "action" -> broadcast back to this provider
+                Intent i = new Intent(context, getClass()).setAction(target);
+                return PendingIntent.getBroadcast(context, code, i, flags);
+            }
+        }
+    }
+
+    private static int parseIntSafe(String s) {
+        try {
+            return Integer.parseInt(s);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private static String idsToJson(int[] ids) {
+        StringBuilder sb = new StringBuilder("{\"ids\":[");
+        for (int i = 0; i < ids.length; i++) {
+            if (i > 0) {
+                sb.append(',');
+            }
+            sb.append(ids[i]);
+        }
+        return sb.append("]}").toString();
+    }
+}

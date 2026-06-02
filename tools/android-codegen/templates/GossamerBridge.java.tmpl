@@ -1,0 +1,29 @@
+package io.gossamer;
+
+import android.webkit.JavascriptInterface;
+
+/**
+ * GossamerBridge — JavaScript interface exposed to the WebView.
+ *
+ * window.GossamerBridge.postMessage(json) forwards the IPC message to the
+ * native layer via nativePostMessage(), which dispatches to the bound handler
+ * and replies through window.__gossamer_callbacks via evaluateJavascript().
+ *
+ * nativePostMessage is an INSTANCE native method to match
+ * Java_io_gossamer_GossamerBridge_nativePostMessage in webview_android.zig.
+ */
+public final class GossamerBridge {
+
+    public native void nativePostMessage(String message);
+
+    /**
+     * Message shape: {"id":"abc","name":"command","payload":"{...}"}.
+     */
+    @JavascriptInterface
+    public void postMessage(String message) {
+        if (message == null || message.isEmpty()) {
+            return;
+        }
+        nativePostMessage(message);
+    }
+}
