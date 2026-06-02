@@ -1,0 +1,194 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+//
+// Gossamer.affine — AffineScript bindings to the Gossamer webview shell's IPC
+// bridge. Migrated from bindings/rescript/src/Gossamer.res as part of the
+// estate ReScript -> AffineScript migration (standards#252).
+//
+// The JavaScript bridge is injected by libgossamer when a channel opens,
+// exposing `window.__gossamer_invoke(name, payload)` and `window.__gossamer_on`.
+// Each `extern fn` below is lowered by the Deno-ESM backend (codegen_deno.ml)
+// to a `window.__gossamer_invoke("<command>", {args})` round-trip — the same
+// async-extern shape as stdlib `Http.http_request` over `globalThis.fetch`.
+// The host round-trip is `Async`; IPC is an `IO` effect, so every signature
+// that crosses the bridge carries `/ { IO, Async }` and the effect row stays
+// honest end to end.
+//
+// Two faithful adaptations from the ReScript original:
+//   1. ReScript's single polymorphic `invoke: (string, 'a) => promise<'b>` is
+//      replaced by per-command typed externs. AffineScript's kind system does
+//      not admit a fully-polymorphic boundary primitive (only prelude
+//      `Option`/`Result` are sound generic carriers — stdlib/future.affine),
+//      and per-command typed externs are sounder and more idiomatic
+//      (cf. Http.get / Http.post).
+//   2. ReScript nested `module Dialog = { ... }` namespaces become flat,
+//      prefixed names (`dialog_open`, `fs_read_text_file`, ...): AffineScript
+//      is one module per file, so the prefix carries the namespace.
+
+module Gossamer;
+
+// `Option` is a prelude built-in type; its constructors come from prelude.
+use prelude::{Option, Some, None};
+
+// ---------------------------------------------------------------------------
+// Runtime detection + version/build info
+// ---------------------------------------------------------------------------
+
+/// True iff `window.__gossamer_invoke` is present in this webview.
+pub extern fn is_available() -> Bool / { IO };
+
+/// The Gossamer library version string.
+pub extern fn version() -> String / { IO, Async };
+
+/// The Gossamer build-info string.
+pub extern fn build_info() -> String / { IO, Async };
+
+/// Currently-inflight async IPC calls (0..256) — back-pressure diagnostics.
+pub extern fn async_inflight_count() -> Int / { IO, Async };
+
+// ---------------------------------------------------------------------------
+// Dialog — file open/save dialogs
+// ---------------------------------------------------------------------------
+
+/// File filter for dialog boxes.
+pub type DialogFilter = {
+  name: String,
+  extensions: [String]
+}
+
+/// Options for an open-file dialog. Absent fields use host defaults.
+pub type DialogOpenOptions = {
+  title: Option<String>,
+  filters: Option<[DialogFilter]>,
+  multiple: Option<Bool>,
+  directory: Option<Bool>,
+  default_path: Option<String>
+}
+
+/// Options for a save-file dialog.
+pub type DialogSaveOptions = {
+  title: Option<String>,
+  filters: Option<[DialogFilter]>,
+  default_path: Option<String>
+}
+
+// Returns the selected path(s) as a JSON string, or None when cancelled.
+pub extern fn dialog_open(opts: DialogOpenOptions) -> Option<String> / { IO, Async };
+
+/// Open a save dialog. Returns the selected path, or None when cancelled.
+pub extern fn dialog_save(opts: DialogSaveOptions) -> Option<String> / { IO, Async };
+
+/// Open a directory picker. Returns the selected directory, or None.
+pub fn dialog_open_directory(opts: DialogOpenOptions) -> Option<String> / { IO, Async } {
+  dialog_open(#{ title: opts.title,
+                 filters: opts.filters,
+                 multiple: opts.multiple,
+                 directory: Some(true),
+                 default_path: opts.default_path })
+}
+
+// ---------------------------------------------------------------------------
+// Fs — read/write files
+// ---------------------------------------------------------------------------
+
+/// Read a text file from the local filesystem.
+pub extern fn fs_read_text_file(path: String) -> String / { IO, Async };
+
+/// Write a text file to the local filesystem.
+pub extern fn fs_write_text_file(path: String, contents: String) -> Unit / { IO, Async };
+
+/// True iff the file exists.
+pub extern fn fs_exists(path: String) -> Bool / { IO, Async };
+
+// Read a binary file as a base64-encoded string (decoded host-side to bytes).
+pub extern fn fs_read_binary_file(path: String) -> String / { IO, Async };
+
+// ---------------------------------------------------------------------------
+// Shell — spawn commands
+// ---------------------------------------------------------------------------
+
+/// Result of a shell command execution.
+pub type ShellCommandOutput = {
+  stdout: String,
+  stderr: String,
+  code: Int
+}
+
+/// Execute a shell command and return its output.
+pub extern fn shell_execute(program: String, args: [String]) -> ShellCommandOutput / { IO, Async };
+
+/// Open a path or URL with the system's default handler.
+pub extern fn shell_open_url(url: String) -> Unit / { IO, Async };
+
+// ---------------------------------------------------------------------------
+// Capability — linear capability tokens
+// ---------------------------------------------------------------------------
+
+/// Resource kinds matching Gossamer.ABI.Types.ResourceKind (ordinals 0..5).
+pub type CapResourceKind =
+  | FileSystem
+  | Network
+  | Shell
+  | Clipboard
+  | Notification
+  | Tray
+
+/// An opaque capability token. Must be revoked when no longer needed.
+pub type CapToken = { id: Float }
+
+/// Request a capability token for the given resource kind.
+pub extern fn cap_grant(kind: CapResourceKind) -> CapToken / { IO, Async };
+
+/// True iff the capability token is still valid.
+pub extern fn cap_check(t: CapToken) -> Bool / { IO, Async };
+
+/// Revoke a capability token. After this the token is consumed.
+pub extern fn cap_revoke(t: CapToken) -> Unit / { IO, Async };
+
+// ---------------------------------------------------------------------------
+// Window — webview window management
+// ---------------------------------------------------------------------------
+
+/// Set the window title.
+pub extern fn window_set_title(title: String) -> Unit / { IO, Async };
+
+/// Resize the window.
+pub extern fn window_resize(width: Int, height: Int) -> Unit / { IO, Async };
+
+/// Navigate the webview to a URL.
+pub extern fn window_navigate(url: String) -> Unit / { IO, Async };
+
+/// Evaluate JavaScript in the webview context.
+pub extern fn window_eval(js: String) -> Unit / { IO, Async };
+
+// ---------------------------------------------------------------------------
+// Event — streaming IPC (backend -> frontend push)
+// ---------------------------------------------------------------------------
+
+/// Register a listener for backend-pushed events. Returns an unsubscribe thunk
+/// that removes the listener when called. The callback receives the event
+/// payload as a JSON string.
+pub extern fn event_on(event_name: String, callback: String -> Unit) -> (Unit -> Unit) / { IO };
+
+// ---------------------------------------------------------------------------
+// Security — CSP enforcement
+// ---------------------------------------------------------------------------
+
+/// Apply a Content-Security-Policy to the webview via IPC.
+pub extern fn security_set_csp(csp: String) -> Unit / { IO, Async };
+
+// ---------------------------------------------------------------------------
+// Tray — system tray management
+// ---------------------------------------------------------------------------
+
+/// Create a system tray icon with tooltip. Returns the tray handle id.
+pub extern fn tray_create(tooltip: String) -> Float / { IO, Async };
+
+/// Add a menu item to the tray.
+pub extern fn tray_add_item(label: String, item_id: Int) -> Unit / { IO, Async };
+
+/// Set the tray icon by theme name.
+pub extern fn tray_set_icon(icon_name: String) -> Unit / { IO, Async };
+
+/// Show a desktop notification.
+pub extern fn tray_notify(title: String, body: String) -> Unit / { IO, Async };

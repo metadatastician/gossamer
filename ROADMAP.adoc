@@ -112,18 +112,40 @@ Mobile platforms using platform-native webviews.
 * [ ] Push notification integration
 * [ ] Safe area insets handling
 
-=== Android (webview_android.zig) — Partially Implemented
+=== Android — WebView + native component hosts (2026-06-02)
 
-* [x] JNI type definitions and entry points
-* [x] GossamerActivity native init/destroy via JNI_OnLoad
-* [x] WebviewState with JNI references
-* [x] jni_NewObject for GossamerBridge constructor (fixed from CallObjectMethod, 2026-04-03)
-* [x] nativeInit accepts and caches screen_width/screen_height params
-* [ ] JNI FindClass / GetMethodID / CallVoidMethod for WebView operations
-* [ ] loadData / loadUrl / evaluateJavascript via JNI
-* [ ] addJavascriptInterface for IPC bridge
-* [ ] Android NDK build integration
-* [ ] Gradle project scaffolding for Java launcher
+WebView shell:
+
+* [x] Real JNI binding (`jni.zig`): JNINativeInterface vtable, `...A`-variant
+  calls, cached JavaVM for thread attach, global refs. (Replaces the previous
+  `extern fn jni_*` symbols that were defined nowhere — the bridge now links.)
+* [x] Platform dispatch routes Android by `abi == .android` (was falling through
+  to GTK); `build.zig` links NDK `log`/`android`, skips WebKitGTK.
+* [x] loadDataWithBaseURL / loadUrl / evaluateJavascript / setTitle via JNI
+* [x] GossamerActivity nativeInit(Activity, WebView, int, int) / nativeDestroy
+* [x] GossamerBridge `@JavascriptInterface` IPC (single registration)
+
+Native non-UI components — `gossamer-android-services` companion (issue #71,
+owner-signed-off subclass model):
+
+* [x] Four abstract Java base classes apps extend (`final` lifecycle) under
+  `android/gossamer-android-services/src/main/java/io/gossamer/`:
+  `services/GossamerForegroundService` (Service + SensorEventListener),
+  `services/GossamerBootReceiver`, `services/GossamerAppWidgetProvider`, and
+  `GossamerActivity` extended with an `onIntentReceived` hook
+* [x] `services_android.zig`: independent `ServiceHandle` + the
+  `Java_io_gossamer_services_*` JNI exports; app native core plugs in via the
+  `gossamer_android_register_*` callback registry (apps never touch JNI)
+* [x] Config / widget-state as JSON; sensors as primitive `int[]`
+* [x] Idris2 lifecycle proofs (`Gossamer.ABI.AndroidComponents`): terminal
+  teardown, dispatch-only-while-live, Service as a LinearHandle
+* [x] Host-runnable native tests (`zig build test-android` + dedicated workflow)
+
+Remaining (tracked as issues):
+
+* [ ] NDK CI runner: build `libgossamer.so` per ABI + emulator smoke test
+* [ ] APK/AAB assembly + signing (aapt2/d8/r8/apksigner, gradle-free)
+* [ ] Ephapax region-calculus modelling of long-lived Service handles
 
 == Phase 4 — Production (v1.0.0)
 

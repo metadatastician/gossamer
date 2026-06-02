@@ -1,0 +1,47 @@
+# SPDX-License-Identifier: MPL-2.0
+# Android component-host logic tests — runs the pure-Zig registry/dispatch/
+# JSON/directive tests for the JNI binding and the Service/Receiver/Widget
+# hosts (src/interface/ffi/src/{jni,android_*}.zig).
+#
+# These are deliberately NOT folded into the E2E `zig build test` gate: that
+# gate runs under `2>/dev/null`, which hides Zig compile errors. This workflow
+# runs `zig build test-android` with visible output so failures are debuggable.
+# Non-blocking by design (no device/NDK needed — the modules are pure Zig).
+
+name: Android Component Tests
+
+on:
+  pull_request:
+    branches: ['**']
+    paths:
+      - 'src/interface/ffi/**'
+      - '.github/workflows/android.yml'
+  push:
+    branches: [main, master]
+    paths:
+      - 'src/interface/ffi/**'
+      - '.github/workflows/android.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-tests:
+    name: zig build test-android
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@abea47f85e598557f500fa1fd2ab7464fcb39406  # v2
+        with:
+          version: 0.15.2
+
+      - name: Run Android component host tests
+        run: cd src/interface/ffi && zig build test-android

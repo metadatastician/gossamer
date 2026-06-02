@@ -66,6 +66,10 @@ extern fn gossamer_set_csp(handle: u64, csp: [*:0]const u8) c_int;
 extern fn gossamer_registry_add(handle: u64) u32;
 extern fn gossamer_groove_discover() u32;
 extern fn gossamer_groove_status(target_id: u32) u32;
+// Hot-reload file watcher (implemented in file_watcher.zig). The watcher handle
+// is an opaque pointer owned by libgossamer; null means "failed to start".
+extern fn gossamer_watcher_start(handle: u64, config_json: [*:0]const u8, frontend_dist: [*:0]const u8) ?*anyopaque;
+extern fn gossamer_watcher_stop(opaque_handle: ?*anyopaque) void;
 
 const AppMode = enum {
     gui,
