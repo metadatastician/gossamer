@@ -50,6 +50,11 @@ pub const jthrowable = jobject;
 pub const jmethodID = ?*anyopaque;
 /// `jfieldID` — opaque field identifier.
 pub const jfieldID = ?*anyopaque;
+/// `jarray` — reference to any Java array (base of the typed array refs).
+pub const jarray = jobject;
+/// `jfloatArray` — reference to a Java `float[]` (e.g. `SensorEvent.values`).
+/// Like every typed array reference in JNI it is just a `jobject`.
+pub const jfloatArray = jarray;
 
 /// JNI primitive scalar types (NDK `jni.h`).
 pub const jint = i32;
@@ -129,6 +134,17 @@ const Ord = struct {
     const NewStringUTF: usize = 167;
     const GetStringUTFChars: usize = 169;
     const ReleaseStringUTFChars: usize = 170;
+    // Array access — needed by the sensor path (Java hands `float[]` values).
+    // The `Get<T>ArrayElements` / `Release<T>ArrayElements` blocks are GROUPED BY
+    // OPERATION then ordered Boolean,Byte,Char,Short,Int,Long,Float,Double, so the
+    // Float slot sits 6 past the start of its block — NOT adjacent to the Byte
+    // slot. (Verified field-by-field against the canonical JNINativeInterface_
+    // table: Get block starts at 183 → Float = 189; Release block starts at 191 →
+    // Float = 197. Do not "simplify" these to 184/192: those are the *Byte*
+    // variants, and reading f32 sensor samples through them corrupts the data.)
+    const GetArrayLength: usize = 171;
+    const GetFloatArrayElements: usize = 189;
+    const ReleaseFloatArrayElements: usize = 197;
     const GetJavaVM: usize = 219;
     const ExceptionCheck: usize = 228;
 };
@@ -214,6 +230,33 @@ pub fn getStringUTFChars(env: JNIEnv, s: jstring) ?[*:0]const u8 {
 pub fn releaseStringUTFChars(env: JNIEnv, s: jstring, chars: [*:0]const u8) void {
     const F = *const fn (JNIEnv, jstring, [*:0]const u8) callconv(.c) void;
     slot(env, Ord.ReleaseStringUTFChars, F)(env, s, chars);
+}
+
+/// Release mode for the `Release<T>ArrayElements` calls.
+/// `JNI_ABORT` frees the carrier buffer WITHOUT copying changes back — the
+/// correct, cheapest choice when native only read the array (the sensor path).
+pub const JNI_COMMIT: jint = 1;
+pub const JNI_ABORT: jint = 2;
+
+/// `(*env)->GetArrayLength(env, array)` — element count of any Java array.
+pub fn getArrayLength(env: JNIEnv, array: jarray) jsize {
+    const F = *const fn (JNIEnv, jarray) callconv(.c) jsize;
+    return slot(env, Ord.GetArrayLength, F)(env, array);
+}
+
+/// `(*env)->GetFloatArrayElements(env, array, isCopy)` — borrow a `float[]`'s
+/// backing store as a C pointer. Caller MUST pair every successful (non-null)
+/// call with `releaseFloatArrayElements`. `isCopy` is passed null (unused here).
+pub fn getFloatArrayElements(env: JNIEnv, array: jfloatArray) ?[*]jfloat {
+    const F = *const fn (JNIEnv, jfloatArray, ?*jboolean) callconv(.c) ?[*]jfloat;
+    return slot(env, Ord.GetFloatArrayElements, F)(env, array, null);
+}
+
+/// `(*env)->ReleaseFloatArrayElements(env, array, elems, mode)`.
+/// Defaults the read-only sensor path to `JNI_ABORT` (no copy-back).
+pub fn releaseFloatArrayElements(env: JNIEnv, array: jfloatArray, elems: [*]jfloat, mode: jint) void {
+    const F = *const fn (JNIEnv, jfloatArray, [*]jfloat, jint) callconv(.c) void;
+    slot(env, Ord.ReleaseFloatArrayElements, F)(env, array, elems, mode);
 }
 
 /// `(*env)->NewGlobalRef(env, o)` — promote a local ref to a process-global ref.
@@ -337,13 +380,22 @@ test "ordinals are monotonic and within the JNI table" {
         Ord.NewObjectA,     Ord.GetObjectClass,  Ord.GetMethodID,
         Ord.CallObjectMethodA, Ord.CallVoidMethodA, Ord.GetStaticMethodID,
         Ord.CallStaticVoidMethodA, Ord.NewStringUTF, Ord.GetStringUTFChars,
-        Ord.ReleaseStringUTFChars, Ord.GetJavaVM, Ord.ExceptionCheck,
+        Ord.ReleaseStringUTFChars, Ord.GetArrayLength, Ord.GetFloatArrayElements,
+        Ord.ReleaseFloatArrayElements, Ord.GetJavaVM, Ord.ExceptionCheck,
     };
     for (ords) |o| try std.testing.expect(o <= 232);
     // A couple of fixed relationships from the spec (…Method / …MethodV / …MethodA
     // are consecutive triples), used here as a transcription self-check.
     try std.testing.expectEqual(Ord.CallVoidMethodA, @as(usize, 63));
     try std.testing.expectEqual(Ord.CallStaticVoidMethodA, @as(usize, 143));
+    // The typed-array Get/Release blocks are 8-wide and Float is the 7th entry
+    // (index 6). Pin Float exactly so it can never silently drift onto the Byte
+    // slot (a -5 error that still type-checks but corrupts sensor reads).
+    try std.testing.expectEqual(Ord.GetArrayLength, @as(usize, 171));
+    try std.testing.expectEqual(Ord.GetFloatArrayElements, @as(usize, 189));
+    try std.testing.expectEqual(Ord.ReleaseFloatArrayElements, @as(usize, 197));
+    // Release block sits exactly 8 slots past the Get block (one full T-width).
+    try std.testing.expectEqual(@as(usize, 8), Ord.ReleaseFloatArrayElements - Ord.GetFloatArrayElements);
 }
 
 test "every JNI wrapper type-checks on the host (compiled, not invoked)" {
@@ -360,6 +412,7 @@ test "every JNI wrapper type-checks on the host (compiled, not invoked)" {
         &deleteGlobalRef,  &exceptionCheck,     &exceptionClear,
         &clearPendingException, &getJavaVM,      &getEnv,
         &attachCurrentThread, &detachCurrentThread,
+        &getArrayLength,   &getFloatArrayElements, &releaseFloatArrayElements,
     };
     // Constructing `refs` already takes the address of each wrapper, which
     // forces its analysis; the loop just keeps `refs` used.

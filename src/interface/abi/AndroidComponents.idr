@@ -80,7 +80,7 @@ longLivedNotTransient ServiceIsLongLived x = case x of {}
 public export
 data SvcState = SvcCreated | SvcStarted | SvcDestroyed
 
-||| Service lifecycle operations (the JNI entry points in android_service.zig).
+||| Service lifecycle operations (the JNI entry points in services_android.zig).
 public export
 data SvcOp = OnCreate | OnStartCommand | OnDestroy
 
@@ -240,55 +240,54 @@ destroyedIsConsumed : svcToHandleState SvcDestroyed = Consumed
 destroyedIsConsumed = Refl
 
 --------------------------------------------------------------------------------
--- FFI: handler registration (implemented in android_*.zig)
+-- FFI: native callback registration (implemented in services_android.zig)
 --------------------------------------------------------------------------------
+--
+-- The #71 companion uses the subclass model: the JVM-side base classes
+-- (io.gossamer.services.*) own the Android contracts, and the app's native core
+-- (Rust/Zig) plugs in by registering plain C callbacks at JNI_OnLoad. gossamer
+-- owns every JNI call. Each callback is a raw C function pointer (Bits64); the
+-- concrete handler is supplied by the app, so these declarations fix only the C
+-- symbol and arity. The foreground-Service handle threaded to the callbacks is
+-- the independent ServiceHandle modelled above.
 
-||| Bind a handler for a Service lifecycle event ("onCreate" | "onStartCommand"
-||| | "onDestroy"). The callback and user-data pointers are passed as raw
-||| Bits64 values: the concrete handler is supplied by the app's Rust/Zig layer,
-||| and this declaration fixes the C arity and symbol. Returns a BindResult code
-||| (0 = ok, 1 = error, 2 = invalid_param, 3 = out_of_memory) — the low four
-||| Result codes, recoverable via Types.resultFromInt.
+||| Register the foreground-Service callbacks: create, startCommand, destroy,
+||| sensorEvent (four raw C function pointers).
 export
-%foreign "C:gossamer_service_bind, libgossamer"
-prim__serviceBind : String -> Bits64 -> Bits64 -> PrimIO Int
+%foreign "C:gossamer_android_register_service_callbacks, libgossamer"
+prim__registerServiceCallbacks : Bits64 -> Bits64 -> Bits64 -> Bits64 -> PrimIO ()
 
-||| Bind a handler for a BroadcastReceiver Intent action.
+||| Register the AppWidget callbacks: fetchState, handleAction.
 export
-%foreign "C:gossamer_receiver_bind, libgossamer"
-prim__receiverBind : String -> Bits64 -> Bits64 -> PrimIO Int
+%foreign "C:gossamer_android_register_widget_callbacks, libgossamer"
+prim__registerWidgetCallbacks : Bits64 -> Bits64 -> PrimIO ()
 
-||| Bind a handler for a widget event ("onUpdate" | "onEnabled" | "onDisabled")
-||| or a custom widget action string.
+||| Register the boot-receiver shouldRestart predicate callback.
 export
-%foreign "C:gossamer_widget_bind, libgossamer"
-prim__widgetBind : String -> Bits64 -> Bits64 -> PrimIO Int
+%foreign "C:gossamer_android_register_boot_callback, libgossamer"
+prim__registerBootCallback : Bits64 -> PrimIO ()
 
-||| Decode a bind result code into the shared Result type.
-public export
-bindResult : Int -> Result
-bindResult 0 = Ok
-bindResult 2 = InvalidParam
-bindResult 3 = OutOfMemory
-bindResult _ = Error
-
-||| Safe wrapper: bind a Service handler, returning Ok or the failure Result.
+||| Register the Activity intent callback.
 export
-serviceBind : (event : String) -> (callback : Bits64) -> (userData : Bits64) -> IO Result
-serviceBind event cb ud = do
-  code <- primIO (prim__serviceBind event cb ud)
-  pure (bindResult code)
+%foreign "C:gossamer_android_register_intent_callback, libgossamer"
+prim__registerIntentCallback : Bits64 -> PrimIO ()
 
-||| Safe wrapper: bind a Receiver handler for an Intent action.
+||| Safe wrapper: register the foreground-Service native callbacks.
 export
-receiverBind : (action : String) -> (callback : Bits64) -> (userData : Bits64) -> IO Result
-receiverBind action cb ud = do
-  code <- primIO (prim__receiverBind action cb ud)
-  pure (bindResult code)
+registerServiceCallbacks : (create : Bits64) -> (start : Bits64) -> (destroy : Bits64) -> (sensor : Bits64) -> IO ()
+registerServiceCallbacks c s d sn = primIO (prim__registerServiceCallbacks c s d sn)
 
-||| Safe wrapper: bind a Widget handler.
+||| Safe wrapper: register the AppWidget native callbacks.
 export
-widgetBind : (event : String) -> (callback : Bits64) -> (userData : Bits64) -> IO Result
-widgetBind event cb ud = do
-  code <- primIO (prim__widgetBind event cb ud)
-  pure (bindResult code)
+registerWidgetCallbacks : (fetchState : Bits64) -> (handleAction : Bits64) -> IO ()
+registerWidgetCallbacks f h = primIO (prim__registerWidgetCallbacks f h)
+
+||| Safe wrapper: register the boot-receiver callback.
+export
+registerBootCallback : (shouldRestart : Bits64) -> IO ()
+registerBootCallback sr = primIO (prim__registerBootCallback sr)
+
+||| Safe wrapper: register the Activity intent callback.
+export
+registerIntentCallback : (onIntent : Bits64) -> IO ()
+registerIntentCallback oi = primIO (prim__registerIntentCallback oi)

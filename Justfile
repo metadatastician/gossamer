@@ -159,20 +159,16 @@ build-freebsd:
 build-all-platforms: build-ffi build-macos-x64 build-macos-arm build-windows build-linux-arm build-linux-riscv
     @echo "Built for: linux-x64, macos-x64, macos-arm64, windows-x64, linux-arm64, linux-riscv64"
 
-# ─── Android ───────────────────────────────────────────────────
-# Regenerate the JVM-bytecode shims + manifest skeleton (android/gossamer-generated/).
-# This is the ONLY supported way to change android/gossamer-generated/ — edit the
-# templates in tools/android-codegen/templates/ and re-run this.
-android-gen package="com.example.app" label="Gossamer App" launcher=".MainActivity" widgetinfo="@xml/gossamer_widget_info":
-    zig run tools/android-codegen/codegen.zig -- "{{package}}" "{{label}}" "{{launcher}}" "{{widgetinfo}}"
-
-# Run the host-runnable Android component logic tests (no NDK needed).
+# ─── Android (gossamer-android-services companion, issue #71) ───
+# Run the host-runnable Android native logic tests (jni.zig + services_android.zig;
+# no NDK needed). The on-device JNI paths are validated on an emulator (issue #67).
 android-test:
     cd src/interface/ffi && zig build test-android
 
 # Cross-compile libgossamer.so for every Android ABI (requires ANDROID_NDK_HOME).
-# Produces a jniLibs-style tree the app bundles. The JNI WebView backend and the
-# Service/Receiver/Widget hosts are selected automatically for *-android targets.
+# Produces a jniLibs tree the consuming app bundles. The JNI WebView backend and
+# the service/receiver/widget native host are selected automatically for
+# *-android targets.
 android-build:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -183,10 +179,10 @@ android-build:
     for tgt in "${!ABI[@]}"; do
         echo "==> $tgt (${ABI[$tgt]})"
         ( cd src/interface/ffi && zig build -Dtarget="$tgt" -Doptimize=ReleaseSafe )
-        mkdir -p "android/gossamer-generated/src/main/jniLibs/${ABI[$tgt]}"
-        cp "src/interface/ffi/zig-out/lib/libgossamer.so" "android/gossamer-generated/src/main/jniLibs/${ABI[$tgt]}/" 2>/dev/null || true
+        mkdir -p "android/gossamer-android-services/src/main/jniLibs/${ABI[$tgt]}"
+        cp "src/interface/ffi/zig-out/lib/libgossamer.so" "android/gossamer-android-services/src/main/jniLibs/${ABI[$tgt]}/" 2>/dev/null || true
     done
-    @echo "Android .so built for: arm64-v8a, x86_64, armeabi-v7a (see android/gossamer-generated/src/main/jniLibs/)"
+    @echo "Android .so built for: arm64-v8a, x86_64, armeabi-v7a (see android/gossamer-android-services/src/main/jniLibs/)"
 
 # Show supported platform targets
 platforms:

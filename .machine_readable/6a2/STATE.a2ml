@@ -196,3 +196,20 @@ depends-on = ["ephapax", "idris2", "zig", "webkitgtk"]
 #             Remaining (raised as issues): NDK CI build + emulator smoke test;
 #             APK/AAB + signing pipeline; Ephapax region modelling of long-lived
 #             Service handles. Phase 5 70 -> 82.
+# 2026-06-02: Pivot to the owner-signed-off #71 design (gossamer-android-services
+#             companion). PR #70 reworked from the directive/generated-shim model
+#             to a SUBCLASS base-class model (owner pick "Replace, same branch"):
+#             [1] REMOVED the directive layer (android_components/service/receiver/
+#                 widget.zig + gossamer-generated/ + tools/android-codegen).
+#             [2] KEPT jni.zig (extended with float-array access for sensors),
+#                 build.zig android support, and the Idris lifecycle proofs.
+#             [3] NEW: four abstract Java base classes apps extend (~5-20 LoC) under
+#                 android/gossamer-android-services/src/main/java/io/gossamer/ —
+#                 GossamerForegroundService/BootReceiver/AppWidgetProvider (services
+#                 pkg) + GossamerActivity onIntentReceived hook. `final` lifecycle.
+#             [4] NEW: services_android.zig — independent ServiceHandle + the
+#                 Java_io_gossamer_services_* JNI exports; app native core registers
+#                 callbacks via gossamer_android_register_* (apps never touch JNI).
+#             [5] AndroidComponents.idr foreign decls swapped bind->register ABI.
+#             Java javac-verified clean vs Android stubs; symbol parity Java<->Zig
+#             checked. Unblocks neurophone#97 sub-PRs #3-#9.

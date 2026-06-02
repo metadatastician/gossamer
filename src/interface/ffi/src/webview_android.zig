@@ -29,17 +29,14 @@
 
 const std = @import("std");
 const jni = @import("jni.zig");
-const comp = @import("android_components.zig");
 
-// Force the non-UI component hosts (Service/Receiver/Widget) and their
-// `gossamer_*_bind` exports into the Android image. They are reachable only
-// through this platform module, so referencing them here is what makes their
-// `export fn`s part of libgossamer.so on Android — and only on Android.
-// (A `///` doc comment cannot attach to a comptime block — must be `//`.)
+// Force the non-UI component host (Service/Receiver/Widget/Intent JNI exports
+// from services_android.zig) into the Android image. It is reachable only
+// through this platform module, so referencing it here is what makes its
+// `export fn Java_io_gossamer_services_*` symbols part of libgossamer.so on
+// Android — and only on Android.
 comptime {
-    _ = @import("android_service.zig");
-    _ = @import("android_receiver.zig");
-    _ = @import("android_widget.zig");
+    _ = @import("services_android.zig");
 }
 
 /// Platform-specific webview state for Android.
@@ -316,9 +313,9 @@ export fn Java_io_gossamer_GossamerBridge_nativePostMessage(
     defer jni.releaseStringUTFChars(env, msg, msg_chars);
     const msg_slice = std.mem.span(msg_chars);
 
-    const id = comp.extractJsonField(msg_slice, "id") orelse return;
-    const name = comp.extractJsonField(msg_slice, "name") orelse return;
-    const payload = comp.extractJsonField(msg_slice, "payload") orelse "";
+    const id = extractJsonField(msg_slice, "id") orelse return;
+    const name = extractJsonField(msg_slice, "name") orelse return;
+    const payload = extractJsonField(msg_slice, "payload") orelse "";
 
     const entry = handle.bindings.get(name) orelse {
         sendIPCError(handle, id, "No handler bound for command");
@@ -379,9 +376,23 @@ fn escapeForJS(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     return result.toOwnedSlice(allocator);
 }
 
-//==============================================================================
-// JNI Entry Points (Activity lifecycle)
-//==============================================================================
+/// Extract a string field from a flat `{"key":"value", ...}` JSON object.
+/// Minimal by design — the IPC envelopes gossamer emits are flat and
+/// machine-generated, so a full JSON parser is unnecessary at this boundary.
+fn extractJsonField(json: []const u8, key: []const u8) ?[]const u8 {
+    const allocator = std.heap.c_allocator;
+    const search = std.fmt.allocPrint(allocator, "\"{s}\":\"", .{key}) catch return null;
+    defer allocator.free(search);
+    const start_idx = std.mem.indexOf(u8, json, search) orelse return null;
+    const value_start = start_idx + search.len;
+    var i: usize = value_start;
+    while (i < json.len) : (i += 1) {
+        if (json[i] == '"' and (i == 0 or json[i - 1] != '\\')) {
+            return json[value_start..i];
+        }
+    }
+    return null;
+}
 
 /// Cached references set by the Java launcher at nativeInit.
 var android_jni_env: ?jni.JNIEnv = null;

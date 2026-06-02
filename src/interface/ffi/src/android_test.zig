@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 //
-// Gossamer — Android component host test aggregator
+// Gossamer — Android native test aggregator
 //
-// The Android JNI binding (jni.zig) and the non-UI component hosts
-// (android_components / android_service / android_receiver / android_widget)
-// are written in pure Zig with no Android headers, so their dispatch,
-// registry, JSON-event and directive logic is HOST-RUNNABLE. This aggregator
-// pulls those files' `test` blocks into `zig build test-android`, so the
-// component contract is exercised on a normal CI runner — no phone, no NDK.
+// The JNI binding (jni.zig) and the service/receiver/widget native host
+// (services_android.zig) are pure Zig with no Android headers, so their
+// handle/registry/JSON logic is HOST-RUNNABLE. This aggregator pulls those
+// files' `test` blocks into `zig build test-android`, so the #71 companion
+// contract is exercised on a normal CI runner — no phone, no NDK.
 //
 // It lives in src/ (not test/) on purpose: Zig 0.15 forbids a module from
 // importing files outside its own root directory, so a test/ aggregator cannot
@@ -22,8 +21,5 @@
 
 test {
     _ = @import("jni.zig");
-    _ = @import("android_components.zig");
-    _ = @import("android_service.zig");
-    _ = @import("android_receiver.zig");
-    _ = @import("android_widget.zig");
+    _ = @import("services_android.zig");
 }

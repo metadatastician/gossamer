@@ -129,4 +129,4 @@ build/
 dist/
 
 # Android per-ABI native build outputs (produced by `just android-build`)
-android/gossamer-generated/src/main/jniLibs/
+android/gossamer-android-services/src/main/jniLibs/

@@ -1,0 +1,219 @@
+// SPDX-License-Identifier: MPL-2.0
+= gossamer-android-services
+:toc: macro
+
+Four abstract Java base classes that turn gossamer's non-UI Android components
+(foreground `Service`, boot `BroadcastReceiver`, home-screen `AppWidgetProvider`)
+plus the WebView `Activity` into reusable, subclass-once capabilities. This is
+the OWNER-SIGNED-OFF *subclass base-class model* of gossamer issue #71.
+
+A downstream app (e.g. neurophone) *extends* these classes with ~5-20 lines each
+and keeps its logic in its own pure Rust/Zig/Idris core. gossamer owns every line
+of JNI; the app never sees `JNIEnv`. The native side lives in
+`src/interface/ffi/src/services_android.zig` (which reuses the real JNI binding
+`src/interface/ffi/src/jni.zig`). See
+`docs/architecture/android-components.adoc` for the full design, the JNI calling
+convention, the linearity model, and the "ready-to-depend-on" checklist.
+
+NOTE: This is the only place hand-authored Java is permitted in the estate: it
+lives under the `android/**/src/**/*.java` carve-out at
+`src/main/java/io/gossamer/`. There is no hand-authored Kotlin anywhere, and
+these base classes are *not* generated — they are authored once here as a
+library.
+
+toc::[]
+
+== The four base classes
+
+[cols="2,3"]
+|===
+| `io.gossamer.services.GossamerForegroundService` | `extends Service implements SensorEventListener`. Long-running foreground service; owns an independent native `ServiceHandle` (a `long`).
+| `io.gossamer.services.GossamerBootReceiver`       | `extends BroadcastReceiver`. Restarts the service on `BOOT_COMPLETED` / `LOCKED_BOOT_COMPLETED`.
+| `io.gossamer.services.GossamerAppWidgetProvider`  | `extends AppWidgetProvider`. Home-screen widget; native supplies state JSON, the subclass assembles the `RemoteViews`.
+| `io.gossamer.GossamerActivity`                    | WebView host (existing, extended with an `onIntentReceived(Intent)` hook).
+|===
+
+Lifecycle methods (`onCreate`, `onStartCommand`, `onDestroy`, `onReceive`,
+`onUpdate`, `onNewIntent`) are `final` on the base classes: the JVM owns the
+lifecycle and delegates each step to native through the handle/registry. The one
+deliberately non-`final` method is
+`GossamerForegroundService.onSensorChanged`, so a subclass may pre-filter or
+down-sample before calling `super`.
+
+== The subclass pattern
+
+The override surface is tiny and fixed.
+
+.GossamerForegroundService — required + optional overrides
+[cols="2,3"]
+|===
+| `Notification createForegroundNotification()` | *required* — the ongoing notification
+| `String getChannelId()`                       | *required* — notification channel id
+| `int getNotificationId()`                     | *required* — stable `startForeground` id
+| `String getNativeConfig()`                    | optional, default `"{}"` — JSON config for the native service
+| `int[] getSubscribedSensors()`                | optional, default empty — `Sensor.TYPE_*` values
+| `int getSensorSamplingRate()`                 | optional, default `SENSOR_DELAY_GAME`
+| `String getWakeLockTag()`                     | optional, default `null` (no wake lock)
+| `void onSensorChanged(SensorEvent)`           | optional (non-`final`) — pre-filter, then `super`
+|===
+
+[source,java]
+----
+public final class NeurophoneRuntimeService extends GossamerForegroundService {
+    private static final String CHANNEL_ID = "neurophone_runtime";
+    private static final int NOTIFICATION_ID = 0x4E50;
+
+    @Override protected Notification createForegroundNotification() {
+        return new Notification.Builder(this, CHANNEL_ID)
+            .setContentTitle("NeuroPhone").setContentText("Listening")
+            .setSmallIcon(R.drawable.ic_stat_run).setOngoing(true).build();
+    }
+    @Override protected String getChannelId()     { return CHANNEL_ID; }
+    @Override protected int    getNotificationId(){ return NOTIFICATION_ID; }
+    @Override protected int[]  getSubscribedSensors() {
+        return new int[] { Sensor.TYPE_ACCELEROMETER, Sensor.TYPE_GYROSCOPE };
+    }
+}
+----
+
+.GossamerBootReceiver
+[source,java]
+----
+public final class NeurophoneBootReceiver extends GossamerBootReceiver {
+    @Override protected Class<?> getServiceClass() {
+        return NeurophoneRuntimeService.class;
+    }
+}
+----
+
+.GossamerAppWidgetProvider
+[source,java]
+----
+public final class NeurophoneAppWidget extends GossamerAppWidgetProvider {
+    @Override protected int    getWidgetLayout() { return R.layout.neurophone_widget; }
+    @Override protected String getActionPrefix(){ return "ai.neurophone.widget."; }
+    @Override protected void renderWidget(RemoteViews v, String stateJson, int id) {
+        v.setTextViewText(R.id.widget_state, field(stateJson, "state"));
+    }
+}
+----
+
+The app's behaviour plugs in *below* JNI: the app's core registers
+process-global callbacks at `JNI_OnLoad`
+(`gossamer_android_register_service_callbacks`,
+`gossamer_android_register_widget_callbacks`,
+`gossamer_android_register_boot_callback`,
+`gossamer_android_register_intent_callback`). The app never writes a `native`
+method or an `export fn`.
+
+== JSON conventions
+
+Config and widget state cross the JNI boundary as JSON strings. The schemas are
+*app-defined and documented by the app*; gossamer treats them as opaque strings.
+
+* *Service config* — `getNativeConfig()` returns a JSON object passed to
+  `nativeServiceCreate`. Default `"{}"` (empty object = no config). Example:
+  `{"sampleRateHz":50,"model":"salience-v3"}`.
+* *Widget state* — `nativeFetchWidgetState(Context)` returns a JSON object the
+  subclass parses in `renderWidget` (or `null` = no state). Example:
+  `{"state":"Running","salience":42}`.
+* *Sensors* are the deliberate exception: samples are forwarded as primitives
+  (`nativeSensorEvent(handle, type, float[] values, timestampNs, accuracy)`) to
+  avoid per-sample JSON allocation on a hot path; the subscription set is a
+  primitive `int[]`.
+
+== AndroidManifest declarations a consuming app needs
+
+A consuming app declares its *own subclasses* (not the gossamer base classes) in
+its manifest. Minimal shape:
+
+[source,xml]
+----
+<!-- Foreground service host. -->
+<service
+    android:name=".NeurophoneRuntimeService"
+    android:exported="false"
+    android:foregroundServiceType="dataSync" />
+
+<!-- Boot receiver. -->
+<receiver
+    android:name=".NeurophoneBootReceiver"
+    android:enabled="true"
+    android:exported="true">
+    <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+    </intent-filter>
+</receiver>
+
+<!-- Home-screen widget. The app supplies the provider-info XML. -->
+<receiver
+    android:name=".NeurophoneAppWidget"
+    android:exported="true">
+    <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+    </intent-filter>
+    <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/neurophone_widget_info" />
+</receiver>
+----
+
+The WebView `Activity` is declared as usual (`.MainActivity extends
+io.gossamer.GossamerActivity`, with the `MAIN`/`LAUNCHER` intent filter).
+
+== Permissions
+
+[cols="2,3"]
+|===
+| `FOREGROUND_SERVICE`            | run a foreground service (all SDK levels ≥ 26)
+| `FOREGROUND_SERVICE_DATA_SYNC`  | the `dataSync` foreground-service type (SDK 34+)
+| `POST_NOTIFICATIONS`            | show the ongoing notification (SDK 33+ runtime grant)
+| `RECEIVE_BOOT_COMPLETED`        | receive boot broadcasts for the boot receiver
+| `WAKE_LOCK`                     | only if the service overrides `getWakeLockTag()`
+| sensor permissions              | as required by the subscribed sensors (e.g. `HIGH_SAMPLING_RATE_SENSORS` for >200 Hz; `BODY_SENSORS`/`ACTIVITY_RECOGNITION` for the relevant sensor families)
+|===
+
+[source,xml]
+----
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+<uses-permission android:name="android.permission.WAKE_LOCK" />
+<!-- plus the sensor permission(s) your getSubscribedSensors() requires -->
+----
+
+== Gradle module layout
+
+This directory is an Android *library module*. The app depends on it and ships
+gossamer's native library alongside it as per-ABI `jniLibs`.
+
+[source]
+----
+android/gossamer-android-services/
+  src/main/
+    java/io/gossamer/
+      GossamerActivity.java
+      GossamerBridge.java
+      services/
+        GossamerForegroundService.java
+        GossamerBootReceiver.java
+        GossamerAppWidgetProvider.java
+    jniLibs/
+      arm64-v8a/libgossamer.so
+      x86_64/libgossamer.so
+      armeabi-v7a/libgossamer.so
+  tests/services/        # compile-only synthetic subclasses (not shipped)
+----
+
+`minSdk` 26, `targetSdk` 34. The three shipped ABIs are `arm64-v8a` (devices),
+`x86_64` (emulator) and `armeabi-v7a`, matching the gossamer `just android-build`
+output. Populate `jniLibs/<abi>/libgossamer.so` from that build (see the root
+`Justfile` `android-build` target). The classes call `System.loadLibrary("gossamer")`
+in a static initialiser, so the `.so` must be present for each shipped ABI.
+
+CI compiles each base class plus the synthetic subclasses under `tests/services/`
+against minimal Android API stubs; a "missing symbol" or "cannot override final
+method" error there means the boundary contract drifted (see
+`tests/services/README.adoc`).
