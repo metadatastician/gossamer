@@ -73,6 +73,7 @@ pub const PlatformError = error{
 
 /// Opaque reference to GossamerHandle from main.zig.
 const GossamerHandle = @import("main.zig").GossamerHandle;
+const ipc = @import("ipc.zig");
 
 /// Obtain a JNIEnv valid on the CURRENT thread: prefer the already-attached
 /// env, otherwise attach via the cached JavaVM. Returns null if no VM is known.
@@ -313,16 +314,22 @@ export fn Java_io_gossamer_GossamerBridge_nativePostMessage(
     defer jni.releaseStringUTFChars(env, msg, msg_chars);
     const msg_slice = std.mem.span(msg_chars);
 
-    const id = extractJsonField(msg_slice, "id") orelse return;
-    const name = extractJsonField(msg_slice, "name") orelse return;
-    const payload = extractJsonField(msg_slice, "payload") orelse "";
+    // Parse the IPC envelope (id, name, payload) with a real JSON parser.
+    const allocator = std.heap.c_allocator;
+    var parsed = ipc.parseEnvelope(allocator, msg_slice) catch return;
+    defer parsed.deinit();
+
+    const id = parsed.value.id;
+    const name = parsed.value.name;
+    if (name.len == 0) return;
+    const payload = parsed.value.payload;
 
     const entry = handle.bindings.get(name) orelse {
         sendIPCError(handle, id, "No handler bound for command");
         return;
     };
 
-    const allocator = std.heap.c_allocator;
+    // Invoke the callback with the payload
     const payload_z = allocator.dupeZ(u8, payload) catch return;
     defer allocator.free(payload_z);
     const response_ptr = entry.callback(payload_z, entry.user_data);
@@ -374,24 +381,6 @@ fn escapeForJS(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
         }
     }
     return result.toOwnedSlice(allocator);
-}
-
-/// Extract a string field from a flat `{"key":"value", ...}` JSON object.
-/// Minimal by design — the IPC envelopes gossamer emits are flat and
-/// machine-generated, so a full JSON parser is unnecessary at this boundary.
-fn extractJsonField(json: []const u8, key: []const u8) ?[]const u8 {
-    const allocator = std.heap.c_allocator;
-    const search = std.fmt.allocPrint(allocator, "\"{s}\":\"", .{key}) catch return null;
-    defer allocator.free(search);
-    const start_idx = std.mem.indexOf(u8, json, search) orelse return null;
-    const value_start = start_idx + search.len;
-    var i: usize = value_start;
-    while (i < json.len) : (i += 1) {
-        if (json[i] == '"' and (i == 0 or json[i - 1] != '\\')) {
-            return json[value_start..i];
-        }
-    }
-    return null;
 }
 
 /// Cached references set by the Java launcher at nativeInit.

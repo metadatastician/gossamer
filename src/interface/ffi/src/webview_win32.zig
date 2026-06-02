@@ -299,6 +299,7 @@ pub const PlatformError = error{
 
 /// Opaque reference to GossamerHandle from main.zig.
 const GossamerHandle = @import("main.zig").GossamerHandle;
+const ipc = @import("ipc.zig");
 
 /// Window class name (UTF-16).
 const CLASS_NAME = std.unicode.utf8ToUtf16LeStringLiteral("GossamerWindow");
@@ -1000,13 +1001,17 @@ const WebMessageHandler = extern struct {
         const utf8_len = std.unicode.utf16LeToUtf8(&utf8_buf, utf16_slice) catch return S_OK;
         const msg_slice = utf8_buf[0..utf8_len];
 
-        // Parse JSON fields
-        const id = extractJsonField(msg_slice, "id") orelse return S_OK;
-        const name = extractJsonField(msg_slice, "name") orelse {
+        // Parse the IPC envelope with a real JSON parser.
+        var parsed = ipc.parseEnvelope(allocator, msg_slice) catch return S_OK;
+        defer parsed.deinit();
+
+        const id = parsed.value.id;
+        const name = parsed.value.name;
+        if (name.len == 0) {
             sendIPCError(handle, id, "Missing 'name' field in IPC message");
             return S_OK;
-        };
-        const payload = extractJsonField(msg_slice, "payload") orelse "";
+        }
+        const payload = parsed.value.payload;
 
         // Look up the binding
         const callback = handle.bindings.get(name) orelse {
@@ -1054,22 +1059,6 @@ fn sendIPCError(handle: *GossamerHandle, id: []const u8, msg_text: []const u8) v
     ) catch return;
     defer allocator.free(js);
     eval(&handle.webview, js) catch {};
-}
-
-/// Extract a JSON string field value by key name.
-fn extractJsonField(json: []const u8, key: []const u8) ?[]const u8 {
-    const allocator = std.heap.c_allocator;
-    const search = std.fmt.allocPrint(allocator, "\"{s}\":\"", .{key}) catch return null;
-    defer allocator.free(search);
-    const start_idx = std.mem.indexOf(u8, json, search) orelse return null;
-    const value_start = start_idx + search.len;
-    var i: usize = value_start;
-    while (i < json.len) : (i += 1) {
-        if (json[i] == '"' and (i == 0 or json[i - 1] != '\\')) {
-            return json[value_start..i];
-        }
-    }
-    return null;
 }
 
 /// Escape a string for embedding inside a JavaScript double-quoted string.
