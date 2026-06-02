@@ -755,3 +755,96 @@ test "display: IPC bridge survives load_html (user script persistence)" {
     gossamer_channel_close(channel);
     gossamer_destroy(ptr);
 }
+
+//==============================================================================
+// IPC Payload Round-Trip (regression guard for the envelope-parsing fix)
+//==============================================================================
+
+// One GLib symbol, declared the same extern way as the gossamer_* surface
+// above, so the test can pump the GTK main loop without blocking in
+// gossamer_run(). Resolved at link time against glib-2.0 (linked on Linux).
+extern fn g_main_context_iteration(context: ?*anyopaque, may_block: c_int) c_int;
+
+/// Records the payload the handler actually receives, so the test can assert it
+/// survived the envelope round-trip rather than arriving as an empty object
+/// (the symptom this fix addresses).
+const Capture = struct {
+    buf: [512]u8 = undefined,
+    len: usize = 0,
+    fired: bool = false,
+};
+var capture: Capture = .{};
+
+fn echoCaptureCallback(payload: [*:0]const u8, _: ?*anyopaque) callconv(.c) [*:0]const u8 {
+    const slice = std.mem.span(payload);
+    const n = @min(slice.len, capture.buf.len);
+    @memcpy(capture.buf[0..n], slice[0..n]);
+    capture.len = n;
+    capture.fired = true;
+    return "{\"ok\":true}";
+}
+
+test "display: structured IPC payload round-trips to the handler intact" {
+    if (!displayAvailable()) {
+        std.debug.print("SKIP: no display server available\n", .{});
+        return;
+    }
+
+    capture = .{};
+
+    const handle = gossamer_create("IPC Payload", 400, 300, 1, 1, 0) orelse {
+        std.debug.print("SKIP: gossamer_create returned null\n", .{});
+        return;
+    };
+    const ptr = handleToU64(handle);
+    defer gossamer_destroy(ptr);
+
+    // Open the channel and bind BEFORE loading the page, so the bridge user
+    // script is present when the page's own script runs.
+    const channel = gossamer_channel_open(ptr);
+    try testing.expect(channel != 0);
+    defer gossamer_channel_close(channel);
+
+    const bind_result = gossamer_channel_bind(channel, "echo", &echoCaptureCallback, null);
+    try testing.expectEqual(Result.ok, bind_result);
+
+    // The page invokes "echo" with a structured payload as soon as the bridge
+    // is available, retrying briefly in case injection lags the load event.
+    const html =
+        \\<!doctype html><html><body><script>
+        \\window.addEventListener('load', function () {
+        \\  function tryInvoke(n) {
+        \\    if (typeof window.__gossamer_invoke === 'function') {
+        \\      window.__gossamer_invoke('echo', { from: 'page' });
+        \\    } else if (n > 0) {
+        \\      setTimeout(function () { tryInvoke(n - 1); }, 10);
+        \\    }
+        \\  }
+        \\  tryInvoke(200);
+        \\});
+        \\</script></body></html>
+    ;
+    try testing.expectEqual(Result.ok, gossamer_load_html(ptr, html));
+
+    // Pump the GTK main loop without blocking until the handler fires or the
+    // budget (~2s) is spent.
+    var waited: usize = 0;
+    while (!capture.fired and waited < 500) : (waited += 1) {
+        _ = g_main_context_iteration(null, 0);
+        std.Thread.sleep(4 * std.time.ns_per_ms);
+    }
+
+    if (!capture.fired) {
+        // The command name arrives intact even under the old bug, so a non-fire
+        // here means the environment (headless/slow WebKit) never delivered the
+        // message, not that the payload was corrupted. Skip rather than fail.
+        std.debug.print("SKIP: IPC handler did not fire within budget\n", .{});
+        return;
+    }
+
+    // Under the defect the payload was delivered as `{}`; the fix delivers the
+    // genuine inner JSON. Assert the field survived the envelope round-trip.
+    const got = capture.buf[0..capture.len];
+    try testing.expect(std.mem.indexOf(u8, got, "\"from\"") != null);
+    try testing.expect(std.mem.indexOf(u8, got, "\"page\"") != null);
+}
