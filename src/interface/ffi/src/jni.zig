@@ -167,6 +167,8 @@ pub fn findClass(env: JNIEnv, name: [*:0]const u8) jclass {
     const FindClass = *const fn (JNIEnv, [*:0]const u8) callconv(.c) jclass;
     // FindClass is ordinal 6; resolve directly (kept inline to avoid an unused
     // ordinal constant when only a subset of callers need it).
+    // SAFETY: slot 6 holds the real FindClass function pointer; reinterpret it as
+    // the typed signature — the same data->fn pointer form as `slot`/std.DynLib.
     const f: FindClass = @ptrCast(@alignCast(env.*[6].?));
     return f(env, name);
 }
@@ -310,6 +312,9 @@ const InvokeOrd = struct {
 };
 
 inline fn vmSlot(vm: JavaVM, comptime ord: usize, comptime Fn: type) Fn {
+    // SAFETY: the JNIInvokeInterface slot holds a real function pointer;
+    // reinterpret it as the typed signature — the JavaVM analogue of `slot`,
+    // the same data->fn pointer form std.DynLib.lookup uses for dlsym results.
     return @ptrCast(@alignCast(vm.*[ord].?));
 }
 
