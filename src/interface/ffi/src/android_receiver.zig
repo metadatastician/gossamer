@@ -87,7 +87,7 @@ test "gossamer_receiver_bind routes by action" {
     comp.resetForTest(.receiver);
     try testing.expectEqual(
         comp.BindResult.ok,
-        gossamer_receiver_bind("android.intent.action.BOOT_COMPLETED", bootHandler, null),
+        gossamer_receiver_bind("android.intent.action.BOOT_COMPLETED", &bootHandler, null),
     );
     const hit = comp.dispatch(.receiver, "android.intent.action.BOOT_COMPLETED", "{\"event\":\"onReceive\"}");
     try testing.expect(hit != null);

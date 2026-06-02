@@ -111,7 +111,7 @@ fn fgHandler(_: [*:0]const u8, _: ?*anyopaque) callconv(.c) [*:0]const u8 {
 
 test "gossamer_service_bind registers an onStartCommand handler" {
     comp.resetForTest(.service);
-    try testing.expectEqual(comp.BindResult.ok, gossamer_service_bind("onStartCommand", fgHandler, null));
+    try testing.expectEqual(comp.BindResult.ok, gossamer_service_bind("onStartCommand", &fgHandler, null));
     const out = comp.dispatch(.service, "onStartCommand", "{\"event\":\"onStartCommand\"}");
     try testing.expect(out != null);
     // The directive carries a foreground record the generated Java will apply.

@@ -217,7 +217,7 @@ fn echoHandler(_: [*:0]const u8, _: ?*anyopaque) callconv(.c) [*:0]const u8 {
 
 test "bind then dispatch invokes the registered handler" {
     resetForTest(.service);
-    try testing.expectEqual(BindResult.ok, bind(.service, "onStartCommand", echoHandler, null));
+    try testing.expectEqual(BindResult.ok, bind(.service, "onStartCommand", &echoHandler, null));
     try testing.expectEqual(@as(usize, 1), handlerCount(.service));
     const out = dispatch(.service, "onStartCommand", "{\"event\":\"onStartCommand\"}");
     try testing.expect(out != null);
@@ -231,22 +231,22 @@ test "dispatch with no binding returns null (host applies default)" {
 
 test "re-binding the same key overwrites in place (idempotent)" {
     resetForTest(.widget);
-    try testing.expectEqual(BindResult.ok, bind(.widget, "onUpdate", echoHandler, null));
-    try testing.expectEqual(BindResult.ok, bind(.widget, "onUpdate", echoHandler, null));
+    try testing.expectEqual(BindResult.ok, bind(.widget, "onUpdate", &echoHandler, null));
+    try testing.expectEqual(BindResult.ok, bind(.widget, "onUpdate", &echoHandler, null));
     try testing.expectEqual(@as(usize, 1), handlerCount(.widget));
 }
 
 test "registries are independent per component" {
     resetForTest(.service);
     resetForTest(.receiver);
-    _ = bind(.service, "onCreate", echoHandler, null);
+    _ = bind(.service, "onCreate", &echoHandler, null);
     try testing.expectEqual(@as(usize, 1), handlerCount(.service));
     try testing.expectEqual(@as(usize, 0), handlerCount(.receiver));
 }
 
 test "empty key is rejected" {
     resetForTest(.service);
-    try testing.expectEqual(BindResult.invalid_param, bind(.service, "", echoHandler, null));
+    try testing.expectEqual(BindResult.invalid_param, bind(.service, "", &echoHandler, null));
 }
 
 test "extractJsonField reads flat string fields" {

@@ -124,7 +124,7 @@ fn renderHandler(_: [*:0]const u8, _: ?*anyopaque) callconv(.c) [*:0]const u8 {
 
 test "gossamer_widget_bind onUpdate yields a render directive" {
     comp.resetForTest(.widget);
-    try testing.expectEqual(comp.BindResult.ok, gossamer_widget_bind("onUpdate", renderHandler, null));
+    try testing.expectEqual(comp.BindResult.ok, gossamer_widget_bind("onUpdate", &renderHandler, null));
     const out = comp.dispatch(.widget, "onUpdate", "{\"event\":\"onUpdate\"}");
     try testing.expect(out != null);
     const s = std.mem.span(out.?);
