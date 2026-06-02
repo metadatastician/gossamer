@@ -1,0 +1,17 @@
+{
+  "name": "@gossamer/api",
+  "version": "0.2.0",
+  "license": "MPL-2.0",
+  "description": "AffineScript bindings for the Gossamer webview shell — drop-in replacement for @tauri-apps/api",
+  "exports": "./src/Gossamer.deno.js",
+  "tasks": {
+    "build": "affinescript compile --deno-esm -o src/Gossamer.deno.js src/Gossamer.affine"
+  },
+  "publish": {
+    "include": [
+      "src/**/*.affine",
+      "src/**/*.deno.js",
+      "README.adoc"
+    ]
+  }
+}

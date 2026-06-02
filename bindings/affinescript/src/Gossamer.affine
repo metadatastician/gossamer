@@ -2,8 +2,8 @@
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 //
 // Gossamer.affine — AffineScript bindings to the Gossamer webview shell's IPC
-// bridge. Migrated from bindings/rescript/src/Gossamer.res as part of the
-// estate ReScript -> AffineScript migration (standards#252).
+// bridge. Migrated from the former ReScript binding (now retired) as part of
+// the estate ReScript -> AffineScript migration (standards#252).
 //
 // The JavaScript bridge is injected by libgossamer when a channel opens,
 // exposing `window.__gossamer_invoke(name, payload)` and `window.__gossamer_on`.

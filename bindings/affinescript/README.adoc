@@ -4,9 +4,10 @@
 
 Typed AffineScript bindings to the Gossamer webview shell's IPC bridge — the
 frontend/consumer API an app's UI uses to talk to the native shell over
-`window.__gossamer_invoke`. This is the estate-current successor to the
-ReScript bindings in `../rescript/` (ReScript is banned per the Hyperpolymath
-language policy; migration tracked under `hyperpolymath/standards#252`).
+`window.__gossamer_invoke`. This is the `@gossamer/api` package: the
+estate-current replacement for the former ReScript bindings, now retired
+(ReScript is banned per the Hyperpolymath language policy; migration tracked
+under `hyperpolymath/standards#252`).
 
 [IMPORTANT]
 ====
@@ -21,13 +22,13 @@ boundary.
 == Status
 
 * `src/Gossamer.affine` — *type-checks clean* against the AffineScript compiler
-  (`affinescript check`). Faithful 1:1 port of `../rescript/src/Gossamer.res`.
-* Pending (coordinated under standards#252, deliberately not bundled with the
-  Android work in PR #70):
-** Build/publish pipeline (the `@gossamer/api` package currently publishes the
-   ReScript `.res.js`; the AffineScript Deno-ESM codegen output needs the same
-   packaging treatment).
-** Retiring `../rescript/` once downstream consumers (e.g. IDApTIK) have moved.
+  (`affinescript check`). Faithful 1:1 port of the (now-retired) ReScript
+  binding.
+* `@gossamer/api` (MPL-2.0) publishes the AffineScript Deno-ESM output:
+  `deno task build` runs `affinescript compile --deno-esm` to (re)generate
+  `src/Gossamer.deno.js`, the package's `exports` entry (built at publish,
+  mirroring the former `.res.js` flow).
+* The former `../rescript/` binding is retired as of this cutover (standards#252).
 
 == Two faithful adaptations from the ReScript original
 

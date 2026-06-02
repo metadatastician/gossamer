@@ -140,8 +140,8 @@ the entire frontend JS heap.
   `src/interface/ffi/src/groove.zig`
 | Every inter-service boundary in the account
 
-| *ReScript bindings*
-| `bindings/rescript/` — typed frontend IPC API
+| *AffineScript bindings*
+| `bindings/affinescript/` — typed frontend IPC API (`@gossamer/api`)
 | idaptik, panll, gossamer-powered SPAs
 
 | *Stapeln containers*
@@ -200,8 +200,8 @@ toolchain. `build.zig` produces a shared library.
 `simulations/`. This is where external auditors verify the claims.
 
 | `bindings/`
-| Language bindings for Rust and ReScript — typed wrappers around the C ABI.
-`bindings/rescript/` is the recommended frontend integration path.
+| Language bindings for Rust and AffineScript — typed wrappers around the C ABI.
+`bindings/affinescript/` is the recommended frontend integration path.
 
 | `tests/`
 | 173 integration tests (v0.3.1). CI executes against real WebKitGTK on
