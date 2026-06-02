@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Frontend IPC binding migrated ReScript → AffineScript** (`@gossamer/api`, standards#252): the published package is now the AffineScript binding in `bindings/affinescript/`, type-checked with `affinescript check` and compiled to a standalone Deno-ESM module via `deno task build` (`affinescript compile --deno-esm`). ReScript is banned estate-wide; this completes gossamer's migration.
+- **Repository `LICENSE` corrected to `MPL-2.0`**: the top-level licence declared `AGPL-3.0-or-later` while all 394 source files and the `.ipkg` manifest are MPL-2.0 (gossamer is a sole-owner repo). Brought into line — the governance licence-consistency gate is now green.
+
+### Removed
+- **`bindings/rescript/` retired** (`Gossamer.res`, `rescript.json`, package manifest) — superseded by the AffineScript binding above.
+
 ### Added
 - **Android — `gossamer-android-services` companion: four shim base classes + real JNI (Phase 5, #71)**: Grows the Android target from "a WebView in an Activity" into a first-class mobile shell hosting the non-UI components, on the critical path for neurophone#97 (migrating a banned-Kotlin Android app onto gossamer). Owner-signed-off subclass model (issue #71).
   - `src/interface/ffi/src/jni.zig` (new) — a REAL JNI binding in pure Zig: models the `JNINativeInterface`/`JNIInvokeInterface` tables (ordinal-indexed), uses the `...A`-variant calls (no C varargs across the boundary), caches the `JavaVM` for thread attach, uses global refs, and reads `float[]` sensor samples via `Get/ReleaseFloatArrayElements`. The previous bridge declared `extern fn jni_*` symbols defined nowhere, so it could never link.
