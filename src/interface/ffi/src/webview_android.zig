@@ -31,10 +31,11 @@ const std = @import("std");
 const jni = @import("jni.zig");
 const comp = @import("android_components.zig");
 
-/// Force the non-UI component hosts (Service/Receiver/Widget) and their
-/// `gossamer_*_bind` exports into the Android image. They are reachable only
-/// through this platform module, so referencing them here is what makes their
-/// `export fn`s part of libgossamer.so on Android — and only on Android.
+// Force the non-UI component hosts (Service/Receiver/Widget) and their
+// `gossamer_*_bind` exports into the Android image. They are reachable only
+// through this platform module, so referencing them here is what makes their
+// `export fn`s part of libgossamer.so on Android — and only on Android.
+// (A `///` doc comment cannot attach to a comptime block — must be `//`.)
 comptime {
     _ = @import("android_service.zig");
     _ = @import("android_receiver.zig");

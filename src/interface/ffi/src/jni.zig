@@ -135,7 +135,10 @@ const Ord = struct {
 
 /// Fetch table slot `ord` from `env` and reinterpret it as function type `Fn`.
 inline fn slot(env: JNIEnv, comptime ord: usize, comptime Fn: type) Fn {
-    return @ptrCast(env.*[ord].?);
+    // SAFETY: the slot holds a real JNI function pointer; reinterpret it as the
+    // typed signature. `@ptrCast(@alignCast(...))` is the same data->fn pointer
+    // form std.DynLib.lookup uses for dlsym results.
+    return @ptrCast(@alignCast(env.*[ord].?));
 }
 
 //==============================================================================
@@ -148,7 +151,7 @@ pub fn findClass(env: JNIEnv, name: [*:0]const u8) jclass {
     const FindClass = *const fn (JNIEnv, [*:0]const u8) callconv(.c) jclass;
     // FindClass is ordinal 6; resolve directly (kept inline to avoid an unused
     // ordinal constant when only a subset of callers need it).
-    const f: FindClass = @ptrCast(env.*[6].?);
+    const f: FindClass = @ptrCast(@alignCast(env.*[6].?));
     return f(env, name);
 }
 
@@ -264,7 +267,7 @@ const InvokeOrd = struct {
 };
 
 inline fn vmSlot(vm: JavaVM, comptime ord: usize, comptime Fn: type) Fn {
-    return @ptrCast(vm.*[ord].?);
+    return @ptrCast(@alignCast(vm.*[ord].?));
 }
 
 /// `(*env)->GetJavaVM(env, &vm)` — recover the process `JavaVM` from any env.
@@ -283,7 +286,10 @@ pub fn getEnv(vm: JavaVM, version: jint) ?JNIEnv {
     const rc = vmSlot(vm, InvokeOrd.GetEnv, F)(vm, &env, version);
     if (rc != JNI_OK) return null;
     const e = env orelse return null;
-    return @ptrCast(@alignCast(e));
+    // SAFETY: GetEnv wrote a real JNIEnv* into `e`; reinterpret it as our env
+    // pointer type (cast to the non-optional target, then coerce to ?JNIEnv).
+    const j: JNIEnv = @ptrCast(@alignCast(e));
+    return j;
 }
 
 /// `(*vm)->AttachCurrentThread(vm, &env, null)` — attach a native thread so it
@@ -294,7 +300,9 @@ pub fn attachCurrentThread(vm: JavaVM) ?JNIEnv {
     const rc = vmSlot(vm, InvokeOrd.AttachCurrentThread, F)(vm, &env, null);
     if (rc != JNI_OK) return null;
     const e = env orelse return null;
-    return @ptrCast(@alignCast(e));
+    // SAFETY: AttachCurrentThread wrote a real JNIEnv* into `e`.
+    const j: JNIEnv = @ptrCast(@alignCast(e));
+    return j;
 }
 
 /// `(*vm)->DetachCurrentThread(vm)` — MUST be called before a thread that
@@ -353,7 +361,9 @@ test "every JNI wrapper type-checks on the host (compiled, not invoked)" {
         &clearPendingException, &getJavaVM,      &getEnv,
         &attachCurrentThread, &detachCurrentThread,
     };
+    // Constructing `refs` already takes the address of each wrapper, which
+    // forces its analysis; the loop just keeps `refs` used.
     inline for (refs) |r| {
-        try std.testing.expect(@intFromPtr(r) != 0);
+        _ = r;
     }
 }

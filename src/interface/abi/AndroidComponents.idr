@@ -30,7 +30,7 @@
 ||| unambiguous (terminal teardown, dispatch-only-while-live, single-consume)
 ||| and leaves the region-nesting design to that issue.
 |||
-||| Zero believe_me. All proofs are constructive.
+||| No unsafe escape hatches; every proof is constructive.
 
 module Gossamer.ABI.AndroidComponents
 
