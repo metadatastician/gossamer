@@ -172,9 +172,11 @@ pub fn build(b: *std.Build) void {
 
     // --- Android component host logic tests (host-runnable; pure Zig, no NDK) ---
     // The JNI binding and the Service/Receiver/Widget hosts are pure Zig, so
-    // their registry/dispatch/JSON/directive logic runs on the host. Wired into
-    // the default `test` step so CI exercises the component contract without a
-    // device. (The on-device JNI calls are validated separately on an emulator.)
+    // their registry/dispatch/JSON/directive logic runs on the host via
+    // `zig build test-android`. This is a SEPARATE step (not folded into the
+    // default `test`): the estate `test` gate runs under `2>/dev/null`, which
+    // hides Zig compile errors, so a dedicated workflow (.github/workflows/
+    // android.yml) runs this step with visible output instead.
     const android_test_module = b.createModule(.{
         .root_source_file = b.path("test/android_components_test.zig"),
         .target = target,
@@ -191,7 +193,6 @@ pub fn build(b: *std.Build) void {
     const run_android_tests = b.addRunArtifact(android_tests);
     const android_test_step = b.step("test-android", "Run Android component host logic tests (host-runnable, no NDK)");
     android_test_step.dependOn(&run_android_tests.step);
-    test_step.dependOn(&run_android_tests.step);
 
     // --- Android cross-compilation (requires the Android NDK) ---
     // Produces libgossamer.so for each ABI neurophone (and other downstreams)
