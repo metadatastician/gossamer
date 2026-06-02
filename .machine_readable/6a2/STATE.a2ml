@@ -213,3 +213,19 @@ depends-on = ["ephapax", "idris2", "zig", "webkitgtk"]
 #             [5] AndroidComponents.idr foreign decls swapped bind->register ABI.
 #             Java javac-verified clean vs Android stubs; symbol parity Java<->Zig
 #             checked. Unblocks neurophone#97 sub-PRs #3-#9.
+# 2026-06-02: PR #70 follow-through (toolchains installed locally: zig 0.15.2 via
+#             PyPI, idris2 0.8.0 from source, affinescript 0.1.1 via apt OCaml):
+#             [1] CLI link fix — wired ipc_handlers.zig into the FFI root main.zig
+#                 so gossamer_channel_register_defaults is exported; the native CLI
+#                 links again (pre-existing main failure; e2e §3). Symbols 123->124.
+#             [2] e2e §5 gate — honour the %unsafe pragma so the sanctioned class-J
+#                 axiom (PanelIsolation.stringNotEqCommut, standards#131) passes while
+#                 unannotated believe_me/assert_total still fail (pre-existing main).
+#             [3] jni-cast findings — all 5 vtable function-pointer casts now carry
+#                 // SAFETY: notes; .hypatia-baseline.json advisory (owner-ack); both
+#                 Advanced-Security review threads dispositioned + resolved.
+#             Local verification: tests/e2e.sh PASS=13/FAIL=0/SKIP=1; zig build +
+#             test + test-android pass; idris2 --typecheck gossamer-abi.ipkg 14/14.
+#             ReScript->AffineScript IPC-binding migration split to its own PR #73
+#             (bindings/affinescript/src/Gossamer.affine, affinescript-check clean;
+#             standards#252) to keep #70 focused on the Android #71 companion.
