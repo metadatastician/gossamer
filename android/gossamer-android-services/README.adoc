@@ -204,7 +204,7 @@ android/gossamer-android-services/
       arm64-v8a/libgossamer.so
       x86_64/libgossamer.so
       armeabi-v7a/libgossamer.so
-  tests/services/        # compile-only synthetic subclasses (not shipped)
+  src/androidTest/        # compile-only synthetic subclasses (not shipped)
 ----
 
 `minSdk` 26, `targetSdk` 34. The three shipped ABIs are `arm64-v8a` (devices),
@@ -213,7 +213,7 @@ output. Populate `jniLibs/<abi>/libgossamer.so` from that build (see the root
 `Justfile` `android-build` target). The classes call `System.loadLibrary("gossamer")`
 in a static initialiser, so the `.so` must be present for each shipped ABI.
 
-CI compiles each base class plus the synthetic subclasses under `tests/services/`
+CI compiles each base class plus the synthetic subclasses under `src/androidTest/`
 against minimal Android API stubs; a "missing symbol" or "cannot override final
 method" error there means the boundary contract drifted (see
-`tests/services/README.adoc`).
+`src/androidTest/README.adoc`).
