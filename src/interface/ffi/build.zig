@@ -29,7 +29,18 @@
 const std = @import("std");
 
 /// Link platform-specific system libraries to a module.
-fn linkPlatformLibs(module: *std.Build.Module, os: std.Target.Os.Tag) void {
+///
+/// `abi` is consulted first because an Android target reports `os == .linux`
+/// (it runs a Linux kernel) yet must NOT link GTK/WebKitGTK — its WebView and
+/// component hosts are reached entirely over JNI. The only NDK libraries the
+/// shell needs are liblog (diagnostics) and libandroid; libc is linked by the
+/// module itself.
+fn linkPlatformLibs(module: *std.Build.Module, os: std.Target.Os.Tag, abi: std.Target.Abi) void {
+    if (abi == .android) {
+        module.linkSystemLibrary("log", .{});
+        module.linkSystemLibrary("android", .{});
+        return;
+    }
     switch (os) {
         .linux, .freebsd, .openbsd, .netbsd => {
             // GTK 3 + WebKitGTK 4.1 (same across Linux and BSD)
@@ -64,6 +75,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const os = target.query.os_tag orelse builtin.os.tag;
+    const abi = target.result.abi;
 
     // Create the root module (shared between shared/static/test)
     const root_module = b.createModule(.{
@@ -73,7 +85,7 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
 
-    linkPlatformLibs(root_module, os);
+    linkPlatformLibs(root_module, os, abi);
 
     // --- Shared library (.so / .dylib / .dll) ---
     const shared_lib = b.addLibrary(.{
@@ -93,7 +105,7 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
 
-    linkPlatformLibs(static_module, os);
+    linkPlatformLibs(static_module, os, abi);
 
     const static_lib = b.addLibrary(.{
         .name = "gossamer",
@@ -111,7 +123,7 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
 
-    linkPlatformLibs(test_module, os);
+    linkPlatformLibs(test_module, os, abi);
 
     const unit_tests = b.addTest(.{
         .root_module = test_module,
@@ -136,7 +148,7 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
 
-    linkPlatformLibs(gossamer_module, os);
+    linkPlatformLibs(gossamer_module, os, abi);
 
     const display_test_module = b.createModule(.{
         .root_source_file = b.path("test/display_test.zig"),
@@ -148,7 +160,7 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    linkPlatformLibs(display_test_module, os);
+    linkPlatformLibs(display_test_module, os, abi);
 
     const display_tests = b.addTest(.{
         .root_module = display_test_module,
@@ -157,6 +169,39 @@ pub fn build(b: *std.Build) void {
     const run_display_tests = b.addRunArtifact(display_tests);
     const display_test_step = b.step("test-display", "Run Gossamer display integration tests (requires X11/Wayland/Xvfb)");
     display_test_step.dependOn(&run_display_tests.step);
+
+    // --- Android component host logic tests (host-runnable; pure Zig, no NDK) ---
+    // The JNI binding and the Service/Receiver/Widget hosts are pure Zig, so
+    // their registry/dispatch/JSON/directive logic runs on the host. Wired into
+    // the default `test` step so CI exercises the component contract without a
+    // device. (The on-device JNI calls are validated separately on an emulator.)
+    const android_test_module = b.createModule(.{
+        .root_source_file = b.path("test/android_components_test.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    // Deliberately NO linkPlatformLibs: these modules pull in neither GTK nor
+    // the NDK; keeping them library-free is what makes the tests host-runnable.
+
+    const android_tests = b.addTest(.{
+        .root_module = android_test_module,
+    });
+
+    const run_android_tests = b.addRunArtifact(android_tests);
+    const android_test_step = b.step("test-android", "Run Android component host logic tests (host-runnable, no NDK)");
+    android_test_step.dependOn(&run_android_tests.step);
+    test_step.dependOn(&run_android_tests.step);
+
+    // --- Android cross-compilation (requires the Android NDK) ---
+    // Produces libgossamer.so for each ABI neurophone (and other downstreams)
+    // ship. This is a thin wrapper over the standard target options; the
+    // per-ABI loop and jniLibs packaging live in the Justfile (`just
+    // android-build`). Selected purely so `zig build -Dtarget=<abi>-linux-android`
+    // routes through the JNI WebView backend and the component hosts.
+    //   zig build -Dtarget=aarch64-linux-android      # arm64-v8a
+    //   zig build -Dtarget=x86_64-linux-android       # x86_64 (emulator)
+    //   zig build -Dtarget=arm-linux-androideabi      # armeabi-v7a
 }
 
 const builtin = @import("builtin");
