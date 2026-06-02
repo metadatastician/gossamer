@@ -435,6 +435,7 @@ fn onDeleteEvent(_: ?*c.GtkWidget, _: ?*anyopaque, user_data: ?*anyopaque) callc
 const GossamerHandle = @import("main.zig").GossamerHandle;
 const BindingEntry = @import("main.zig").BindingEntry;
 const async_ipc = @import("main.zig").async_ipc;
+const ipc = @import("ipc.zig");
 
 /// Register the WebKitGTK script message handler for IPC dispatch.
 ///
@@ -534,20 +535,26 @@ fn onIPCMessage(
     const msg: [*:0]const u8 = @ptrCast(msg_raw);
     const msg_slice = std.mem.span(msg);
 
-    // Minimal JSON parsing: extract id, name, payload fields.
-    // Format: {"id":"...","name":"...","payload":"..."}
-    const id = extractJsonField(msg_slice, "id") orelse {
-        return; // Malformed message — no id to respond to
-    };
-    const name = extractJsonField(msg_slice, "name") orelse {
-        sendIPCError(handle, id, "Missing 'name' field in IPC message");
+    const allocator = std.heap.c_allocator;
+
+    //## Parse the outer IPC envelope with a real JSON parser.
+    // The payload field is itself a JSON string (the bridge double-encodes it);
+    // std.json unescapes it, yielding the genuine inner JSON for the handler,
+    // and reads the numeric `binary` flag.
+    var parsed = ipc.parseEnvelope(allocator, msg_slice) catch {
+        // No id is reliably recoverable from a malformed envelope; drop it.
         return;
     };
-    const payload_raw = extractJsonField(msg_slice, "payload") orelse "";
-    const binary_flag = extractJsonField(msg_slice, "binary") orelse "0";
-    const is_binary = binary_flag.len > 0 and binary_flag[0] == '1';
+    defer parsed.deinit();
 
-    const allocator = std.heap.c_allocator;
+    const id = parsed.value.id;
+    const name = parsed.value.name;
+    if (name.len == 0) {
+        sendIPCError(handle, id, "Missing 'name' field in IPC message");
+        return;
+    }
+    const payload_raw = parsed.value.payload;
+    const is_binary = parsed.value.binary != 0;
 
     // If binary flag is set, payload is base64-encoded.
     // Decode it before passing to the handler.
@@ -755,28 +762,6 @@ fn sendIPCError(handle: *GossamerHandle, id: []const u8, msg: []const u8) void {
     defer allocator.free(js);
 
     eval(&handle.webview, js) catch {};
-}
-
-/// Extract a JSON string field value by key name.
-/// Simple parser for `"key":"value"` patterns — does not handle nested objects
-/// or escaped quotes in values. Sufficient for the IPC envelope format.
-fn extractJsonField(json: []const u8, key: []const u8) ?[]const u8 {
-    // Search for "key":"
-    const allocator = std.heap.c_allocator;
-    const search = std.fmt.allocPrint(allocator, "\"{s}\":\"", .{key}) catch return null;
-    defer allocator.free(search);
-
-    const start_idx = std.mem.indexOf(u8, json, search) orelse return null;
-    const value_start = start_idx + search.len;
-
-    // Find the closing quote (handle escaped quotes)
-    var i: usize = value_start;
-    while (i < json.len) : (i += 1) {
-        if (json[i] == '"' and (i == 0 or json[i - 1] != '\\')) {
-            return json[value_start..i];
-        }
-    }
-    return null;
 }
 
 /// Escape a string for embedding inside a JavaScript double-quoted string.
