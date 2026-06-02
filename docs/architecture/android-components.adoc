@@ -1,0 +1,225 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Gossamer Android: native component hosting
+:toc: macro
+:toclevels: 3
+
+Status: *draft / Phase 5*. This document specifies how gossamer hosts the
+non-UI Android components (`Service`, `BroadcastReceiver`, `AppWidgetProvider`)
+as first-class gossamer capabilities, alongside the existing WebView `Activity`,
+and defines what a downstream app (e.g. neurophone, issue #83) must satisfy to
+ship a production Android app on gossamer.
+
+toc::[]
+
+== Problem
+
+gossamer began as a desktop webview shell and grew an Android target that hosts
+a single `WebView` inside an `Activity` over a JNI bridge. A real app needs more
+than a window: a long-running foreground `Service`, a `BroadcastReceiver` (boot,
+custom actions) and a home-screen `AppWidgetProvider`. Before this work those
+were left for each app to hand-roll in Kotlin — exactly the banned-language debt
+neurophone#83 is trying to clear.
+
+The goal: make Service / Receiver / Widget *gossamer* capabilities, so a
+downstream app writes only pure Rust/Zig/Idris handlers and ships gossamer's
+generated JVM shims unchanged.
+
+== Design principles
+
+. *gossamer owns all JNI.* The app never sees `JNIEnv`. JNI lives in
+  `src/interface/ffi/src/jni.zig` (a real `JNINativeInterface` vtable binding in
+  pure Zig) and the host modules.
+. *Handlers are the existing IPC callback shape.* A handler is
+  `fn(json) -> directive` — the same C ABI already used for webview IPC
+  (`*const fn([*:0]const u8, ?*anyopaque) callconv(.c) [*:0]const u8`). One
+  mental model for every boundary.
+. *JVM-object work stays in generated Java.* Building a `Notification` or a
+  `RemoteViews` can only happen JVM-side. The native handler returns a small
+  *directive*; the generated shim applies it. Native stays pure.
+. *The JVM shim is generated, never hand-authored* (`tools/android-codegen`,
+  output in `generated/android/`).
+. *Linear/region guarantees cross the boundary intact* (see
+  <<linearity>>).
+
+== Architecture
+
+[source]
+----
+  Android OS
+    │  instantiates by class name, drives lifecycle
+    ▼
+  generated JVM shim            native host (Zig)             app handler (Rust/Zig/Idris)
+  io.gossamer.GossamerService ──JNI──▶ android_service.zig ──▶ "onStartCommand" handler
+  io.gossamer.GossamerReceiver ─JNI──▶ android_receiver.zig ─▶ action handler
+  io.gossamer.GossamerWidget ──JNI──▶ android_widget.zig ───▶ "onUpdate" handler
+  io.gossamer.GossamerActivity ─JNI─▶ webview_android.zig ──▶ webview IPC bindings
+                                         ▲
+                                         │ gossamer_{service,receiver,widget}_bind(name, cb, user)
+                                    process-global registry (android_components.zig)
+----
+
+A component fires when there may be *no Activity and no webview alive* (a boot
+broadcast is the canonical case), so handler registration is *process-global*,
+not hung off a webview handle. Apps bind handlers once at `JNI_OnLoad`/init.
+
+== JNI calling convention
+
+* `JNIEnv` is the per-thread function table. `jni.zig` models it as
+  `*const [*]const ?*const anyopaque` and calls each entry *by its canonical
+  ordinal*, casting the slot to the real signature at the call site. Method
+  invocation uses the `...A` variants (`CallVoidMethodA`, `NewObjectA`) with a
+  `jvalue[]` array — no C varargs across the boundary (a real arm64 hazard for
+  64-bit `jlong`).
+* Native methods are mangled `Java_io_gossamer_<Class>_<method>`. Each generated
+  `native` declaration has exactly one matching `export fn` in the host module
+  (checked symbol-for-symbol).
+* Threads the JVM calls in on already carry a valid env. Native threads (the
+  webview run-loop, async workers) attach via the cached process `JavaVM`
+  (`AttachCurrentThread`/`GetEnv`) rather than reusing another thread's env —
+  `JNIEnv` is strictly thread-local.
+* Local refs the JVM hands in (Activity, WebView) are promoted to *global* refs
+  before being stored, and deleted on teardown.
+
+== Handler binding API (C ABI)
+
+[cols="2,3"]
+|===
+| `gossamer_service_bind(event, cb, user)`  | event ∈ {`onCreate`,`onStartCommand`,`onDestroy`}
+| `gossamer_receiver_bind(action, cb, user)`| keyed by Intent action (e.g. `android.intent.action.BOOT_COMPLETED`)
+| `gossamer_widget_bind(event, cb, user)`   | event ∈ {`onUpdate`,`onEnabled`,`onDisabled`} or a custom widget action
+|===
+
+All return a `BindResult` (`0 ok`, `2 invalid_param`, `3 out_of_memory`). The
+Idris2 ABI declares these in `Gossamer.ABI.AndroidComponents` with safe wrappers.
+
+== Wire formats
+
+*Inbound* (JVM → handler) is a flat JSON object, consistent with the webview IPC
+protocol; native already has a minimal field reader:
+
+[source,json]
+----
+{"event":"onStartCommand","action":"","flags":"0","startId":"1"}
+----
+
+*Outbound* (handler → JVM) is newline/tab `key\tvalue` records, so the generated
+Java parses with a four-line splitter — no JSON reader, no escaping ambiguity:
+
+.Service `onStartCommand` directive
+[source]
+----
+foreground	1
+channelId	neurophone_runtime
+title	NeuroPhone
+text	Listening
+fgType	dataSync
+sticky	1
+----
+
+.Widget `onUpdate` render directive
+[source]
+----
+layout	widget_neurophone
+view	widget_state	text	Running
+view	widget_salience	progress	42
+view	widget_salience_value	text	42%
+click	widget_toggle	action	ai.neurophone.widget.ACTION_TOGGLE
+----
+
+.Receiver `onReceive` directive
+[source]
+----
+startForegroundService	io.gossamer.GossamerService
+----
+
+Full grammar lives in the header comments of each `android_*.zig`.
+
+[[linearity]]
+== Lifecycles and linearity
+
+`Gossamer.ABI.AndroidComponents` (Idris2, `idris2 --typecheck`-gated) models each
+component as a state machine with a terminal teardown state, mirroring
+`WindowStateMachine`'s `Closed`:
+
+[cols="1,3,1"]
+|===
+| Component | States | Terminal
+| Service   | `SvcCreated → SvcStarted* → SvcDestroyed` | `SvcDestroyed`
+| Receiver  | `RcvLive → RcvComplete` (one-shot)        | `RcvComplete`
+| Widget    | `WdgEnabled → WdgDisabled` (update = borrow)| `WdgDisabled`
+|===
+
+Proved (constructively, zero `believe_me`):
+
+* *Terminal teardown* — no transition leaves the teardown state
+  (`svcDestroyedTerminal`, `rcvCompleteTerminal`, `wdgDisabledTerminal`).
+* *Dispatch only while live* — `SvcLive`/`WidgetUpdateBorrow` are uninhabited in
+  the terminal state, the type-level analogue of the runtime plugin-liveness
+  check that prevents use-after-free in the IPC dispatcher.
+* *Single-consume across the boundary* — the long-lived `Service` is a
+  `LinearHandle` over the *same* Allocated/Active/Consumed machine as the
+  webview (`LinearService`, `allocateService`, `consumeForStop`). A Service that
+  is leaked (never `onDestroy`) or torn down twice does not type-check.
+
+[NOTE]
+====
+*Open question (raised as a gossamer issue):* the deeper region-calculus
+modelling — how a long-lived, JVM-owned Service region nests with the
+shorter-lived webview region, and how cross-region references (a Service pushing
+a Widget update) are tracked under Ephapax — is *not* settled here. This
+document and `AndroidComponents.idr` prove the unambiguous parts; the
+region-nesting design is deferred to that issue rather than rushed into a
+speculative refactor.
+====
+
+[[ready]]
+== "Ready-to-depend-on" checklist
+
+What must be true for neurophone (#83) to ship a production Android app on
+gossamer-Android.
+
+=== Build tooling
+* [x] JNI binding is real (`jni.zig`) — the shell can link against the NDK.
+* [x] Platform dispatch selects the Android backend by `abi == .android`
+  (previously it fell through to GTK).
+* [x] `build.zig` links the NDK (`log`, `android`) and skips GTK for Android.
+* [x] JVM shims generated by `tools/android-codegen` into `generated/android/`.
+* [ ] CI builds `libgossamer.so` for each ABI on an NDK runner *(issue: NDK CI)*.
+* [ ] APK/AAB assembly + signing pipeline *(issue: packaging)*.
+
+=== JNI calling convention
+* [x] `...A`-variant calls; cached `JavaVM` for thread attach; global refs.
+* [x] Generated `native` ↔ Zig `export fn` symbol parity (checked).
+* [x] Handler binding ABI for Service/Receiver/Widget + webview IPC.
+
+=== Packaging / signing  *(deferred — see issues)*
+* [ ] `aapt2` resource compile, `d8`/`r8` dex, `apksigner` v2/v3.
+* [ ] `minSdk` 26, `targetSdk` 34 (matches neurophone).
+* [ ] `extractNativeLibs` + per-ABI `jniLibs/` layout.
+
+=== ABI targets
+* [x] `aarch64-linux-android` (arm64-v8a), `x86_64-linux-android` (emulator),
+  `arm-linux-androideabi` (armeabi-v7a) routed through the Android backend.
+
+=== Handler invocation paths
+* [x] From the webview: JS `postMessage` → `nativePostMessage` → IPC binding.
+* [x] From the Service: lifecycle → `gossamer_service_bind` handler.
+* [x] From the Receiver: `onReceive` → `gossamer_receiver_bind` handler.
+* [x] From the Widget: `onUpdate`/action → `gossamer_widget_bind` handler.
+* [ ] On-device validation of all four paths on an emulator *(issue: NDK CI)*.
+
+== Mapping neurophone#83
+
+[cols="2,2"]
+|===
+| neurophone (Kotlin, banned) | gossamer host
+| `MainActivity`              | subclass `io.gossamer.GossamerActivity`
+| `NeurophoneService`        | `GossamerService` + `gossamer_service_bind("onStartCommand", …)`
+| `BootReceiver`             | `GossamerReceiver` + `gossamer_receiver_bind("android.intent.action.BOOT_COMPLETED", …)`
+| `NeurophoneAppWidget`      | `GossamerWidget` + `gossamer_widget_bind("onUpdate", …)`
+| `NativeLib` (Rust/JNI)     | keep `neurophone-core` Rust; expose gossamer handlers instead of bespoke `external fun`s
+|===
+
+The sensor loop, salience computation and LLM calls stay in neurophone's Rust
+core; only the JVM glue is replaced by gossamer's generated shims + handlers.

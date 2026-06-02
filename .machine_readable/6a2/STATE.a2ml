@@ -6,7 +6,7 @@
 [metadata]
 project = "gossamer"
 version = "0.3.1"
-last-updated = "2026-05-20"
+last-updated = "2026-06-02"
 status = "active"  # active | paused | archived
 
 [project-context]
@@ -41,7 +41,7 @@ milestones = [
   { name = "Phase 2c: Streaming IPC (gossamer_emit, g_idle_add, JS/Rust/ReScript bindings)", completion = 100 },
   { name = "Phase 3: Integration tests + hot reload", completion = 100 },
   { name = "Phase 4: macOS and Windows support", completion = 100 },
-  { name = "Phase 5: Mobile (iOS and Android)", completion = 70 },
+  { name = "Phase 5: Mobile (iOS and Android)", completion = 82 },
   { name = "Phase 6: Plugin system (dlopen vtable, load/unload/list, liveness check)", completion = 100 },
 ]
 
@@ -52,7 +52,9 @@ milestones = [
 actions = [
   "arXiv submission: attempt at arxiv.org (cs.PL / cs.SE) using OU .ac.uk email — may bypass endorsement; Zenodo draft 19535676 already published as preprint",
   "IDApTIK desktop migration: replace Tauri with Gossamer for desktop builds (staging decision required)",
-  "Android NDK build integration and Gradle scaffolding for full Android support",
+  "Android: NDK CI runner to build libgossamer.so per ABI + emulator smoke test of the four handler paths",
+  "Android: APK/AAB assembly + signing pipeline (aapt2/d8/r8/apksigner, gradle-free)",
+  "Android: settle Ephapax region-calculus modelling of long-lived Service handles (cross-region Service→Widget refs)",
   "App Store packaging, code signing, and notarisation for iOS",
 ]
 
@@ -158,3 +160,39 @@ depends-on = ["ephapax", "idris2", "zig", "webkitgtk"]
 #             standards#131 CLOSED owner-authorised at the discharge point
 #             with #41 merge-pending honestly noted in the closing comment.
 #             Epic standards#124 progress: 5/12 sub-issues closed (was 4/12).
+# 2026-06-02: Android grown from "WebView in an Activity" to a first-class mobile
+#             shell hosting the non-UI components, on the critical path for
+#             neurophone#83 (migrate banned Kotlin Android app onto gossamer).
+#             [1] JNI made REAL: jni.zig models the JNINativeInterface vtable in
+#                 pure Zig (ordinal-indexed, ...A-variant calls, JavaVM thread
+#                 attach, global refs). The old `extern fn jni_*` symbols were
+#                 defined NOWHERE — the bridge could never link. webview_android.zig
+#                 rewritten onto it; fixed latent bugs (stored local refs that die
+#                 after nativeInit; double JS-interface registration).
+#             [2] Platform dispatch FIXED: main.zig selected GTK for Android
+#                 (os.tag == .linux), so webview_android.zig was dead code. Now
+#                 routed by `abi == .android`. build.zig links NDK log/android and
+#                 skips GTK for the android abi.
+#             [3] NEW native component hosts: android_service.zig (foreground
+#                 Service), android_receiver.zig (BroadcastReceiver),
+#                 android_widget.zig (AppWidgetProvider) + android_components.zig
+#                 (process-global handler registry, JSON event / kv-directive wire
+#                 formats). App-facing gossamer_{service,receiver,widget}_bind
+#                 exports reuse the webview IPC callback ABI — apps write pure
+#                 Rust/Zig/Idris handlers, never touch JNI.
+#             [4] Idris2 ABI: Gossamer.ABI.AndroidComponents — terminal-teardown
+#                 + dispatch-only-while-live proofs per component; the long-lived
+#                 Service modelled as a LinearHandle over the SAME Allocated/Active/
+#                 Consumed machine as the webview (linearity crosses the boundary).
+#                 Wired into gossamer-abi.ipkg (now 14 modules) + namespace symlink.
+#             [5] JVM shims GENERATED, not hand-authored: tools/android-codegen
+#                 emits generated/android/ (Activity/Bridge/Service/Receiver/Widget
+#                 + manifest skeleton). Hand-authored android/src Java DELETED — the
+#                 only Java in the repo is now generated. Generated Java compiles
+#                 clean against Android API stubs; every `native` decl matches a Zig
+#                 `export fn Java_*` (symbol parity checked).
+#             [6] Host-runnable Zig tests for the component registry/dispatch/parse
+#                 logic wired into `zig build test` (test-android step).
+#             Remaining (raised as issues): NDK CI build + emulator smoke test;
+#             APK/AAB + signing pipeline; Ephapax region modelling of long-lived
+#             Service handles. Phase 5 70 -> 82.

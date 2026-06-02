@@ -159,6 +159,35 @@ build-freebsd:
 build-all-platforms: build-ffi build-macos-x64 build-macos-arm build-windows build-linux-arm build-linux-riscv
     @echo "Built for: linux-x64, macos-x64, macos-arm64, windows-x64, linux-arm64, linux-riscv64"
 
+# ─── Android ───────────────────────────────────────────────────
+# Regenerate the JVM-bytecode shims + manifest skeleton (generated/android/).
+# This is the ONLY supported way to change generated/android/ — edit the
+# templates in tools/android-codegen/templates/ and re-run this.
+android-gen package="com.example.app" label="Gossamer App" launcher=".MainActivity" widgetinfo="@xml/gossamer_widget_info":
+    zig run tools/android-codegen/codegen.zig -- "{{package}}" "{{label}}" "{{launcher}}" "{{widgetinfo}}"
+
+# Run the host-runnable Android component logic tests (no NDK needed).
+android-test:
+    cd src/interface/ffi && zig build test-android
+
+# Cross-compile libgossamer.so for every Android ABI (requires ANDROID_NDK_HOME).
+# Produces a jniLibs-style tree the app bundles. The JNI WebView backend and the
+# Service/Receiver/Widget hosts are selected automatically for *-android targets.
+android-build:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    : "${ANDROID_NDK_HOME:?set ANDROID_NDK_HOME to your NDK (r26+)}"
+    declare -A ABI=( [aarch64-linux-android]=arm64-v8a \
+                     [x86_64-linux-android]=x86_64 \
+                     [arm-linux-androideabi]=armeabi-v7a )
+    for tgt in "${!ABI[@]}"; do
+        echo "==> $tgt (${ABI[$tgt]})"
+        ( cd src/interface/ffi && zig build -Dtarget="$tgt" -Doptimize=ReleaseSafe )
+        mkdir -p "generated/android/jniLibs/${ABI[$tgt]}"
+        cp "src/interface/ffi/zig-out/lib/libgossamer.so" "generated/android/jniLibs/${ABI[$tgt]}/" 2>/dev/null || true
+    done
+    @echo "Android .so built for: arm64-v8a, x86_64, armeabi-v7a (see generated/android/jniLibs/)"
+
 # Show supported platform targets
 platforms:
     @echo "=== Gossamer Supported Platforms ==="
@@ -174,9 +203,14 @@ platforms:
     @echo "  openbsd-x64    WebKitGTK         zig build -Dtarget=x86_64-openbsd"
     @echo "  netbsd-x64     WebKitGTK         zig build -Dtarget=x86_64-netbsd"
     @echo ""
-    @echo "Mobile (Phase 3 — v0.4.0+):"
-    @echo "  ios-arm64      WKWebView/UIKit   planned"
-    @echo "  android-arm64  Android WebView   planned"
+    @echo "Mobile (Phase 5):"
+    @echo "  ios-arm64        WKWebView/UIKit    zig build -Dtarget=aarch64-ios"
+    @echo "  android-arm64    Android WebView    zig build -Dtarget=aarch64-linux-android  (just android-build)"
+    @echo "  android-x86_64   Android WebView    zig build -Dtarget=x86_64-linux-android   (emulator)"
+    @echo "  android-armv7    Android WebView    zig build -Dtarget=arm-linux-androideabi"
+    @echo ""
+    @echo "  Android also hosts native Service / BroadcastReceiver / AppWidgetProvider"
+    @echo "  components — see docs/architecture/android-components.adoc."
 
 # ═══════════════════════════════════════════════════════════════
 # Run
