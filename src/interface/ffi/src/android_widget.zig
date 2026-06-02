@@ -42,10 +42,11 @@ fn dispatchWidget(env: jni.JNIEnv, key: []const u8, payload_j: jni.jstring) jni.
     }
     defer if (payload_chars) |ch| jni.releaseStringUTFChars(env, payload_j, ch);
 
-    const event_json = std.fmt.allocPrintZ(
+    const event_json = std.fmt.allocPrintSentinel(
         c_alloc,
         "{{\"event\":\"{s}\",\"payload\":{s}}}",
         .{ key, payload_slice },
+        0,
     ) catch return null;
     defer c_alloc.free(event_json);
 
@@ -88,10 +89,11 @@ export fn Java_io_gossamer_GossamerWidget_nativeOnReceive(
     defer jni.releaseStringUTFChars(env, action_j, action_chars);
     const action = std.mem.span(action_chars);
 
-    const event_json = std.fmt.allocPrintZ(
+    const event_json = std.fmt.allocPrintSentinel(
         c_alloc,
         "{{\"event\":\"onReceive\",\"action\":\"{s}\"}}",
         .{action},
+        0,
     ) catch return null;
     defer c_alloc.free(event_json);
 

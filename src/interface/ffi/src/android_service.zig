@@ -48,10 +48,11 @@ fn dispatchService(env: jni.JNIEnv, event: []const u8, action_j: jni.jstring, fl
     }
     defer if (action_chars) |ch| jni.releaseStringUTFChars(env, action_j, ch);
 
-    const event_json = std.fmt.allocPrintZ(
+    const event_json = std.fmt.allocPrintSentinel(
         c_alloc,
         "{{\"event\":\"{s}\",\"action\":\"{s}\",\"flags\":\"{d}\",\"startId\":\"{d}\"}}",
         .{ event, action_slice, flags, start_id },
+        0,
     ) catch return null;
     defer c_alloc.free(event_json);
 

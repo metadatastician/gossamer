@@ -50,10 +50,11 @@ export fn Java_io_gossamer_GossamerReceiver_nativeOnReceive(
     }
     defer if (extras_chars) |ch| jni.releaseStringUTFChars(env, extras_j, ch);
 
-    const event_json = std.fmt.allocPrintZ(
+    const event_json = std.fmt.allocPrintSentinel(
         c_alloc,
         "{{\"event\":\"onReceive\",\"action\":\"{s}\",\"extras\":{s}}}",
         .{ action, extras_slice },
+        0,
     ) catch return null;
     defer c_alloc.free(event_json);
 
