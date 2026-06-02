@@ -167,16 +167,35 @@ else
     pass "No @panic in FFI production code"
 fi
 
-# No believe_me in Idris2 ABI — exclude doc-comment lines ("||| ...") and
-# line comments ("-- ...") so the test only flags real code uses.
+# No believe_me/assert_total in Idris2 ABI, with two principled exclusions:
+#   1. doc-comment ("||| ...") and line-comment ("-- ...") lines — prose, not code;
+#   2. definitions carrying the `%unsafe` pragma — the canonical Idris2 marker for
+#      an audited escape hatch. The estate's proof convention permits exactly these
+#      as documented "class-J axioms" (principled assumptions over backend
+#      primitives), e.g. PanelIsolation.stringNotEqCommut (standards#131). The
+#      pragma attaches to the immediately-following declaration, so `unsafe` is set
+#      on `%unsafe` and cleared at the next blank line that separates top-level
+#      defs. An UNannotated believe_me/assert_total still fails the gate.
 ABI_DIR="src/interface/abi"
 if [ -d "$ABI_DIR" ]; then
-    DANGEROUS=$(grep -rn 'believe_me\|assert_total' "$ABI_DIR/" 2>/dev/null \
-        | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(\|\|\||--)' || true)
+    DANGEROUS=""
+    while IFS= read -r f; do
+        offending=$(awk '
+            /^[[:space:]]*%unsafe/ { unsafe = 1 }
+            /^[[:space:]]*$/       { unsafe = 0 }
+            {
+                if ($0 ~ /^[[:space:]]*(\|\|\||--)/) next
+                if ($0 ~ /believe_me|assert_total/ && unsafe == 0)
+                    printf "%s:%d:%s\n", FILENAME, NR, $0
+            }
+        ' "$f")
+        [ -n "$offending" ] && DANGEROUS="${DANGEROUS}${offending}"$'\n'
+    done < <(find "$ABI_DIR" -name '*.idr' 2>/dev/null)
+    DANGEROUS="$(printf '%s' "$DANGEROUS" | sed '/^$/d')"
     if [ -n "$DANGEROUS" ]; then
-        fail_test "Dangerous Idris2 patterns in ABI"
+        fail_test "Dangerous Idris2 patterns in ABI ($(printf '%s\n' "$DANGEROUS" | wc -l) unsanctioned)"
     else
-        pass "No dangerous Idris2 patterns in ABI"
+        pass "No dangerous Idris2 patterns in ABI (%unsafe class-J axioms exempt)"
     fi
 else
     skip_test "ABI safety" "src/interface/abi/ not found"

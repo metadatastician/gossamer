@@ -94,18 +94,36 @@ comptime {
     _ = @import("conf.zig");
 }
 
+// Default IPC channel handlers (gossamer_channel_register_defaults). Holds the
+// 28 window/group/transmute/debug/groove/shell-exec handlers the CLI used to
+// bind by hand; libgossamer now registers them on demand so both the native
+// CLI and the future Ephapax-wasm CLI share one implementation. Without this
+// import the export is absent from libgossamer and the CLI fails to link.
+comptime {
+    _ = @import("ipc_handlers.zig");
+}
+
 // Version information — bump on each release
 const VERSION = "0.3.0";
 const BUILD_INFO = "Gossamer " ++ VERSION ++ " built with Zig " ++ @import("builtin").zig_version_string;
 
 /// Platform-specific webview implementation.
 /// Compile-time dispatch — no runtime overhead.
-const platform = switch (builtin.os.tag) {
+///
+/// Android is detected BEFORE the os-tag switch: an Android target reports
+/// `os.tag == .linux` (it is a Linux kernel), so dispatching on os.tag alone
+/// wrongly selects the GTK backend and links WebKitGTK into an .so that can
+/// never load on a phone. The `abi == .android` guard routes it to the JNI
+/// WebView backend instead. The comptime `if` means the android import is not
+/// evaluated on non-android targets, so the desktop paths are unchanged.
+const platform = if (builtin.abi == .android)
+    @import("webview_android.zig")
+else switch (builtin.os.tag) {
     .linux, .freebsd, .openbsd, .netbsd => @import("webview_gtk.zig"),
     .macos => @import("webview_cocoa.zig"),
     .windows => @import("webview_win32.zig"),
     .ios => @import("webview_ios.zig"),
-    else => @compileError("Gossamer: unsupported platform. Supported: linux, BSD, macOS, Windows, iOS. Android requires NDK target."),
+    else => @compileError("Gossamer: unsupported platform. Supported: Linux, BSD, macOS, Windows, iOS, Android (NDK)."),
 };
 
 //==============================================================================

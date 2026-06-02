@@ -1,0 +1,36 @@
+// SPDX-License-Identifier: MPL-2.0
+= gossamer-android-services — synthetic subclass tests
+:toc: macro
+
+These three classes are *compile-only* fixtures. They are not shipped and not
+linked into any app; they exist to pin down the public override surface of the
+`gossamer-android-services` base classes (issue #71) so that an accidental
+change to a method signature, an abstract/`final` modifier, or a default-hook
+return type fails the build.
+
+== What they prove
+
+`SampleService extends GossamerForegroundService`::
+The three abstract hooks (`createForegroundNotification`, `getChannelId`,
+`getNotificationId`) are implementable from app code, and an overridable
+default (`getSubscribedSensors`) can be narrowed to a real sensor
+(`Sensor.TYPE_ACCELEROMETER`). Confirms the `final` lifecycle is inherited
+without being re-declared, and that `onSensorChanged` is left open for
+subclass pre-filtering.
+
+`SampleBootReceiver extends GossamerBootReceiver`::
+The single abstract hook `getServiceClass()` is satisfiable with a `Class<?>`
+literal, and the `final onReceive` is inherited intact.
+
+`SampleWidget extends GossamerAppWidgetProvider`::
+The abstract trio (`getWidgetLayout`, `getActionPrefix`, `renderWidget`) is
+implementable, including writing into the supplied `RemoteViews` from parsed
+native-state JSON. Confirms `onUpdate`/`onReceive` are `final` and need no
+re-implementation.
+
+== How they are checked
+
+Compiled in CI against minimal Android API stubs together with the base
+classes: every base class plus every sample subclass must `javac` clean. A
+"missing symbol" or "cannot override final method" error here means the
+boundary contract drifted.

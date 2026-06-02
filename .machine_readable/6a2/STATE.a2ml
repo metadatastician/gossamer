@@ -6,7 +6,7 @@
 [metadata]
 project = "gossamer"
 version = "0.3.1"
-last-updated = "2026-05-20"
+last-updated = "2026-06-02"
 status = "active"  # active | paused | archived
 
 [project-context]
@@ -41,7 +41,7 @@ milestones = [
   { name = "Phase 2c: Streaming IPC (gossamer_emit, g_idle_add, JS/Rust/ReScript bindings)", completion = 100 },
   { name = "Phase 3: Integration tests + hot reload", completion = 100 },
   { name = "Phase 4: macOS and Windows support", completion = 100 },
-  { name = "Phase 5: Mobile (iOS and Android)", completion = 70 },
+  { name = "Phase 5: Mobile (iOS and Android)", completion = 82 },
   { name = "Phase 6: Plugin system (dlopen vtable, load/unload/list, liveness check)", completion = 100 },
 ]
 
@@ -52,7 +52,9 @@ milestones = [
 actions = [
   "arXiv submission: attempt at arxiv.org (cs.PL / cs.SE) using OU .ac.uk email — may bypass endorsement; Zenodo draft 19535676 already published as preprint",
   "IDApTIK desktop migration: replace Tauri with Gossamer for desktop builds (staging decision required)",
-  "Android NDK build integration and Gradle scaffolding for full Android support",
+  "Android: NDK CI runner to build libgossamer.so per ABI + emulator smoke test of the four handler paths",
+  "Android: APK/AAB assembly + signing pipeline (aapt2/d8/r8/apksigner, gradle-free)",
+  "Android: settle Ephapax region-calculus modelling of long-lived Service handles (cross-region Service→Widget refs)",
   "App Store packaging, code signing, and notarisation for iOS",
 ]
 
@@ -158,3 +160,72 @@ depends-on = ["ephapax", "idris2", "zig", "webkitgtk"]
 #             standards#131 CLOSED owner-authorised at the discharge point
 #             with #41 merge-pending honestly noted in the closing comment.
 #             Epic standards#124 progress: 5/12 sub-issues closed (was 4/12).
+# 2026-06-02: Android grown from "WebView in an Activity" to a first-class mobile
+#             shell hosting the non-UI components, on the critical path for
+#             neurophone#83 (migrate banned Kotlin Android app onto gossamer).
+#             [1] JNI made REAL: jni.zig models the JNINativeInterface vtable in
+#                 pure Zig (ordinal-indexed, ...A-variant calls, JavaVM thread
+#                 attach, global refs). The old `extern fn jni_*` symbols were
+#                 defined NOWHERE — the bridge could never link. webview_android.zig
+#                 rewritten onto it; fixed latent bugs (stored local refs that die
+#                 after nativeInit; double JS-interface registration).
+#             [2] Platform dispatch FIXED: main.zig selected GTK for Android
+#                 (os.tag == .linux), so webview_android.zig was dead code. Now
+#                 routed by `abi == .android`. build.zig links NDK log/android and
+#                 skips GTK for the android abi.
+#             [3] NEW native component hosts: android_service.zig (foreground
+#                 Service), android_receiver.zig (BroadcastReceiver),
+#                 android_widget.zig (AppWidgetProvider) + android_components.zig
+#                 (process-global handler registry, JSON event / kv-directive wire
+#                 formats). App-facing gossamer_{service,receiver,widget}_bind
+#                 exports reuse the webview IPC callback ABI — apps write pure
+#                 Rust/Zig/Idris handlers, never touch JNI.
+#             [4] Idris2 ABI: Gossamer.ABI.AndroidComponents — terminal-teardown
+#                 + dispatch-only-while-live proofs per component; the long-lived
+#                 Service modelled as a LinearHandle over the SAME Allocated/Active/
+#                 Consumed machine as the webview (linearity crosses the boundary).
+#                 Wired into gossamer-abi.ipkg (now 14 modules) + namespace symlink.
+#             [5] JVM shims GENERATED, not hand-authored: tools/android-codegen
+#                 emits generated/android/ (Activity/Bridge/Service/Receiver/Widget
+#                 + manifest skeleton). Hand-authored android/src Java DELETED — the
+#                 only Java in the repo is now generated. Generated Java compiles
+#                 clean against Android API stubs; every `native` decl matches a Zig
+#                 `export fn Java_*` (symbol parity checked).
+#             [6] Host-runnable Zig tests for the component registry/dispatch/parse
+#                 logic wired into `zig build test` (test-android step).
+#             Remaining (raised as issues): NDK CI build + emulator smoke test;
+#             APK/AAB + signing pipeline; Ephapax region modelling of long-lived
+#             Service handles. Phase 5 70 -> 82.
+# 2026-06-02: Pivot to the owner-signed-off #71 design (gossamer-android-services
+#             companion). PR #70 reworked from the directive/generated-shim model
+#             to a SUBCLASS base-class model (owner pick "Replace, same branch"):
+#             [1] REMOVED the directive layer (android_components/service/receiver/
+#                 widget.zig + gossamer-generated/ + tools/android-codegen).
+#             [2] KEPT jni.zig (extended with float-array access for sensors),
+#                 build.zig android support, and the Idris lifecycle proofs.
+#             [3] NEW: four abstract Java base classes apps extend (~5-20 LoC) under
+#                 android/gossamer-android-services/src/main/java/io/gossamer/ —
+#                 GossamerForegroundService/BootReceiver/AppWidgetProvider (services
+#                 pkg) + GossamerActivity onIntentReceived hook. `final` lifecycle.
+#             [4] NEW: services_android.zig — independent ServiceHandle + the
+#                 Java_io_gossamer_services_* JNI exports; app native core registers
+#                 callbacks via gossamer_android_register_* (apps never touch JNI).
+#             [5] AndroidComponents.idr foreign decls swapped bind->register ABI.
+#             Java javac-verified clean vs Android stubs; symbol parity Java<->Zig
+#             checked. Unblocks neurophone#97 sub-PRs #3-#9.
+# 2026-06-02: PR #70 follow-through (toolchains installed locally: zig 0.15.2 via
+#             PyPI, idris2 0.8.0 from source, affinescript 0.1.1 via apt OCaml):
+#             [1] CLI link fix — wired ipc_handlers.zig into the FFI root main.zig
+#                 so gossamer_channel_register_defaults is exported; the native CLI
+#                 links again (pre-existing main failure; e2e §3). Symbols 123->124.
+#             [2] e2e §5 gate — honour the %unsafe pragma so the sanctioned class-J
+#                 axiom (PanelIsolation.stringNotEqCommut, standards#131) passes while
+#                 unannotated believe_me/assert_total still fail (pre-existing main).
+#             [3] jni-cast findings — all 5 vtable function-pointer casts now carry
+#                 // SAFETY: notes; .hypatia-baseline.json advisory (owner-ack); both
+#                 Advanced-Security review threads dispositioned + resolved.
+#             Local verification: tests/e2e.sh PASS=13/FAIL=0/SKIP=1; zig build +
+#             test + test-android pass; idris2 --typecheck gossamer-abi.ipkg 14/14.
+#             ReScript->AffineScript IPC-binding migration split to its own PR #73
+#             (bindings/affinescript/src/Gossamer.affine, affinescript-check clean;
+#             standards#252) to keep #70 focused on the Android #71 companion.
