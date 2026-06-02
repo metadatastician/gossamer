@@ -94,6 +94,15 @@ comptime {
     _ = @import("conf.zig");
 }
 
+// Default IPC channel handlers (gossamer_channel_register_defaults). Holds the
+// 28 window/group/transmute/debug/groove/shell-exec handlers the CLI used to
+// bind by hand; libgossamer now registers them on demand so both the native
+// CLI and the future Ephapax-wasm CLI share one implementation. Without this
+// import the export is absent from libgossamer and the CLI fails to link.
+comptime {
+    _ = @import("ipc_handlers.zig");
+}
+
 // Version information — bump on each release
 const VERSION = "0.3.0";
 const BUILD_INFO = "Gossamer " ++ VERSION ++ " built with Zig " ++ @import("builtin").zig_version_string;
