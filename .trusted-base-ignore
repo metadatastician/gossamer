@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: MPL-2.0
+#
+# .trusted-base-ignore — whole-path exemptions for the trusted-base
+# reduction scanner (hyperpolymath/standards scripts/check-trusted-base.sh).
+# Format mirrors .hypatia-ignore: '#' comments and blank lines are ignored;
+# every other line is a path-fragment SUBSTRING that exempts each
+# escape-hatch marker whose file path contains it.
+#
+# Idris2 *test* sources legitimately use `partial` and `assert_total`:
+# test drivers, property generators, and Eq instances over test-only data
+# are not required to be total and are not part of the production proof
+# surface / trusted base. Per-site TRUSTED:/AXIOM: annotations remain the
+# preferred mechanism for production escapes; this whole-path exemption
+# covers the test fixtures only.
+tests/idris2/
