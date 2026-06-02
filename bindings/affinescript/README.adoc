@@ -1,0 +1,59 @@
+// SPDX-License-Identifier: MPL-2.0
+= Gossamer AffineScript bindings
+:toc: macro
+
+Typed AffineScript bindings to the Gossamer webview shell's IPC bridge — the
+frontend/consumer API an app's UI uses to talk to the native shell over
+`window.__gossamer_invoke`. This is the estate-current successor to the
+ReScript bindings in `../rescript/` (ReScript is banned per the Hyperpolymath
+language policy; migration tracked under `hyperpolymath/standards#252`).
+
+[IMPORTANT]
+====
+This is the *frontend binding layer*, not the Gossamer core. The core shell is
+**Ephapax** (the `ephapax-affine` sublanguage — region-linear) with Zig FFI and
+Idris2 ABI proofs. **AffineScript is a different language from ephapax-affine**
+(separate compiler, AST, type-checker, proof story); the two share only the
+`typed-wasm` target. This binding meets the Ephapax core only at the IPC
+boundary.
+====
+
+== Status
+
+* `src/Gossamer.affine` — *type-checks clean* against the AffineScript compiler
+  (`affinescript check`). Faithful 1:1 port of `../rescript/src/Gossamer.res`.
+* Pending (coordinated under standards#252, deliberately not bundled with the
+  Android work in PR #70):
+** Build/publish pipeline (the `@gossamer/api` package currently publishes the
+   ReScript `.res.js`; the AffineScript Deno-ESM codegen output needs the same
+   packaging treatment).
+** Retiring `../rescript/` once downstream consumers (e.g. IDApTIK) have moved.
+
+== Two faithful adaptations from the ReScript original
+
+. ReScript's single polymorphic `invoke: (string, 'a) => promise<'b>` becomes
+  *per-command typed externs* (`window_set_title`, `dialog_open`, …).
+  AffineScript's kind system admits no fully-polymorphic boundary primitive
+  (only prelude `Option`/`Result` are sound generic carriers — see
+  `stdlib/future.affine`), and per-command typed externs are sounder and more
+  idiomatic (cf. stdlib `Http.get` / `Http.post`).
+. ReScript nested `module Dialog = { … }` namespaces become flat, prefixed
+  names (`dialog_open`, `fs_read_text_file`, …): AffineScript is one module per
+  file, so the prefix carries the namespace.
+
+== Async + effects
+
+Every signature that crosses the bridge carries the effect row `/ { IO, Async }`
+(IPC is `IO`; the host round-trip is `Async`). The Deno-ESM backend
+(`codegen_deno.ml`) lowers each `extern fn` to a `window.__gossamer_invoke(...)`
+round-trip and compiles `Async`-effect callers to native `async`/`await` — the
+same shape stdlib `Http.http_request` uses over `globalThis.fetch`. A
+ReScript `promise<result<T, string>>` therefore maps to an AffineScript value in
+the `Async` effect, with no promise-monad wrapper (per `stdlib/future.affine`).
+
+== Future improvement enabled by AffineScript
+
+The capability `Token` is carried here as a plain record (matching the `.res`).
+Because AffineScript is affine-typed, a follow-up can make the token *linear* so
+"must be revoked / consumed exactly once" is *type-enforced* rather than a
+doc-comment — extending Gossamer's linearity guarantee to the frontend edge.
