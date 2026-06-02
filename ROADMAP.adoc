@@ -165,7 +165,7 @@ Full-featured framework ready for production use.
 
 == Integration Targets
 
-* [ ] **IDApTIK** — Replace Tauri for desktop builds (same ReScript frontend)
+* [ ] **IDApTIK** — Replace Tauri for desktop builds (same AffineScript frontend)
 * [ ] **PanLL** — Gossamer as native panel shell
 * [ ] **Burble** — Gossamer as voice client UI
 

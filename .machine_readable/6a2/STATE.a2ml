@@ -229,3 +229,19 @@ depends-on = ["ephapax", "idris2", "zig", "webkitgtk"]
 #             ReScript->AffineScript IPC-binding migration split to its own PR #73
 #             (bindings/affinescript/src/Gossamer.affine, affinescript-check clean;
 #             standards#252) to keep #70 focused on the Android #71 companion.
+# 2026-06-02: Session close-out — all three PRs merged to main; gossamer CI made
+#             foundationally green:
+#             [#70] Android gossamer-android-services companion (squash 425fd68);
+#                   post-merge test-android re-run green (transient setup-zig flake
+#                   cleared).
+#             [#73] AffineScript IPC binding added (@gossamer/api port).
+#             [#74] ReScript->AffineScript CUTOVER complete: bindings/rescript/
+#                   retired; bindings/affinescript/ is now @gossamer/api (MPL-2.0
+#                   deno.json + `deno task build` -> Deno-ESM). Two pre-existing
+#                   governance gates also fixed foundationally: LICENSE AGPL->MPL-2.0
+#                   (owner-confirmed; 394 files + .ipkg were already MPL-2.0) and
+#                   .trusted-base-ignore for tests/idris2/ escape hatches. Gates now
+#                   green: Licence-consistency, Trusted-base, Language/package, Hypatia.
+#                   Auto-merge (squash) used; stale local branches pruned.
+#             FLAG (untouched, licence guardrail): standards/LICENSE + burble/LICENSE
+#             carry the same AGPL-vs-MPL drift — surfaced for owner, not edited.
