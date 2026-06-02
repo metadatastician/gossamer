@@ -115,10 +115,13 @@ site/dist/
 # asdf version manager
 .tool-versions
 generated/
-# Exception: directory README and tlaiser specs are source-controlled
+# Exception: directory README, tlaiser specs, and the Android JVM shims are
+# source-controlled (downstream apps consume generated/android/ directly).
 !generated/README.adoc
 !generated/tlaiser/
 !generated/tlaiser/**
+!generated/android/
+!generated/android/**
 target/
 node_modules/
 _build/
