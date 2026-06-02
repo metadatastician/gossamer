@@ -177,8 +177,11 @@ pub fn build(b: *std.Build) void {
     // default `test`): the estate `test` gate runs under `2>/dev/null`, which
     // hides Zig compile errors, so a dedicated workflow (.github/workflows/
     // android.yml) runs this step with visible output instead.
+    // Rooted in src/ (not test/) because Zig 0.15 forbids importing files
+    // outside a module's root directory — a test/ root cannot @import("../src/
+    // jni.zig"). The aggregator pulls in the android sources from the same dir.
     const android_test_module = b.createModule(.{
-        .root_source_file = b.path("test/android_components_test.zig"),
+        .root_source_file = b.path("src/android_test.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
