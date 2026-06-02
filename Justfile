@@ -160,8 +160,8 @@ build-all-platforms: build-ffi build-macos-x64 build-macos-arm build-windows bui
     @echo "Built for: linux-x64, macos-x64, macos-arm64, windows-x64, linux-arm64, linux-riscv64"
 
 # ─── Android ───────────────────────────────────────────────────
-# Regenerate the JVM-bytecode shims + manifest skeleton (generated/android/).
-# This is the ONLY supported way to change generated/android/ — edit the
+# Regenerate the JVM-bytecode shims + manifest skeleton (android/gossamer-generated/).
+# This is the ONLY supported way to change android/gossamer-generated/ — edit the
 # templates in tools/android-codegen/templates/ and re-run this.
 android-gen package="com.example.app" label="Gossamer App" launcher=".MainActivity" widgetinfo="@xml/gossamer_widget_info":
     zig run tools/android-codegen/codegen.zig -- "{{package}}" "{{label}}" "{{launcher}}" "{{widgetinfo}}"
@@ -183,10 +183,10 @@ android-build:
     for tgt in "${!ABI[@]}"; do
         echo "==> $tgt (${ABI[$tgt]})"
         ( cd src/interface/ffi && zig build -Dtarget="$tgt" -Doptimize=ReleaseSafe )
-        mkdir -p "generated/android/jniLibs/${ABI[$tgt]}"
-        cp "src/interface/ffi/zig-out/lib/libgossamer.so" "generated/android/jniLibs/${ABI[$tgt]}/" 2>/dev/null || true
+        mkdir -p "android/gossamer-generated/src/main/jniLibs/${ABI[$tgt]}"
+        cp "src/interface/ffi/zig-out/lib/libgossamer.so" "android/gossamer-generated/src/main/jniLibs/${ABI[$tgt]}/" 2>/dev/null || true
     done
-    @echo "Android .so built for: arm64-v8a, x86_64, armeabi-v7a (see generated/android/jniLibs/)"
+    @echo "Android .so built for: arm64-v8a, x86_64, armeabi-v7a (see android/gossamer-generated/src/main/jniLibs/)"
 
 # Show supported platform targets
 platforms:
