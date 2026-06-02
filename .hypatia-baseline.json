@@ -1,0 +1,34 @@
+[
+  {
+    "severity": "high",
+    "severity_override": "advisory",
+    "rule_module": "code_safety",
+    "type": "zig_ptr_cast",
+    "file": "src/interface/ffi/src/jni.zig",
+    "note": "Inherent to the JNI binding: dispatching through the per-thread JNINativeInterface vtable requires reinterpreting opaque table slots as typed function pointers. This is CWE-704 by construction, not a defect — it is the identical pattern std.DynLib.lookup uses for dlsym results, and is documented at each call site with a // SAFETY: note. The only alternative is hand-transcribing the full ~232-entry NDK vtable as a typed struct, which is more error-prone than the cast. Owner-acknowledged; kept advisory (visible, non-blocking)."
+  },
+  {
+    "severity": "medium",
+    "severity_override": "advisory",
+    "rule_module": "code_safety",
+    "type": "zig_ptr_cast",
+    "file": "src/interface/ffi/src/jni.zig",
+    "note": "See the high-severity entry: inherent JNI vtable function-pointer cast; advisory."
+  },
+  {
+    "severity": "high",
+    "severity_override": "advisory",
+    "rule_module": "code_safety",
+    "type": "zig_align_cast",
+    "file": "src/interface/ffi/src/jni.zig",
+    "note": "Inherent to the JNI binding: @alignCast pairs with the vtable/env @ptrCast (same std.DynLib.lookup pattern). Not independently fixable; advisory (visible, non-blocking)."
+  },
+  {
+    "severity": "medium",
+    "severity_override": "advisory",
+    "rule_module": "code_safety",
+    "type": "zig_align_cast",
+    "file": "src/interface/ffi/src/jni.zig",
+    "note": "See the high-severity entry: inherent JNI vtable alignment cast; advisory."
+  }
+]
