@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 = FFI
 Zig FFI implementation providing the C-compatible ABI bridge between the Idris2 interface definitions and the native WebView platform code.
 The `zig/` subdirectory contains the Zig build unit; generated C headers consumed here live in `generated/`.

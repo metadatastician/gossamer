@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 // Gossamer CLI — Development and build tool for Gossamer webview apps
 //
 // Reads gossamer.conf.json, orchestrates the build pipeline, and launches
@@ -11,8 +13,6 @@
 //   gossamer info    — Show project info from gossamer.conf.json
 //   gossamer run     — Load frontendDist in webview (no build step)
 //
-// SPDX-License-Identifier: MPL-2.0
-// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 const std = @import("std");
 

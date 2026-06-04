@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 // Gossamer launcher — MVP host runtime for Ephapax-compiled cli.wasm
 //
 // Loads a .wasm module compiled by the ephapax toolchain and runs its
@@ -25,8 +27,6 @@
 // Eventually (post-14a.5c):
 //   gossamer dev    # launcher discovers /usr/share/gossamer/cli.wasm
 //
-// SPDX-License-Identifier: MPL-2.0
-// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 const std = @import("std");
 const bridges = @import("bridges.zig");

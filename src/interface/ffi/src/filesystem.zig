@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
-// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //
 // Gossamer — Filesystem FFI Implementation
 //
@@ -9,8 +9,6 @@
 // These functions are called from the IPC bridge when the JS frontend
 // invokes __gossamer_fs_* commands, or directly from Ephapax via __ffi().
 //
-// SPDX-License-Identifier: MPL-2.0
-// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 const std = @import("std");
 const main = @import("main.zig");

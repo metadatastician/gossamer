@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 = Benchmarks
 Top-level benchmark entry-point scripts for gossamer.
 The `startup-bench.sh` script here drives high-level timing measurements; per-category benchmarks live under `tests/bench/`.

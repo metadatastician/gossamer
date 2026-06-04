@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 // Gossamer launcher — Build configuration
 //
 // Builds the `gossamer-launcher` binary: a thin Zig host that embeds
@@ -20,8 +22,6 @@
 // argv_arg_get). Phase 14a.5b adds the ~80 libgossamer imports;
 // Phase 14a.5c wires the Ephapax compile step.
 //
-// SPDX-License-Identifier: MPL-2.0
-// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 const std = @import("std");
 

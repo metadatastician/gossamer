@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
-// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //
 // Gossamer — CSP Enforcement & Streaming IPC (Backend → Frontend Push)
 //
@@ -31,8 +31,6 @@
 //   All three functions use g_idle_add for GTK thread marshalling. The context
 //   structs are heap-allocated and self-freeing in the idle callback.
 //
-// SPDX-License-Identifier: MPL-2.0
-// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 const std = @import("std");
 const main = @import("main.zig");

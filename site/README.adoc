@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 = Site
 Static website sources for the gossamer project homepage.
 Contains `index.html`, `style.css`, a `src/` subtree for additional page content, and a dev.to announcement draft; built by `scripts/ssg-build-runner.zig`.

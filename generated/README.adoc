@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 = Generated
 Auto-generated artefacts produced by tooling during the build or verification pipeline — do not edit by hand.
 `tlaiser/` contains TLA+ model-checking specs generated for gossamer's capability-token and window-lifecycle state machines.

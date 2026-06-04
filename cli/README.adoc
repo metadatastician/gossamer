@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 = CLI
 Zig command-line interface for gossamer, providing `gossamer` binary entry-point, file-watcher integration, and developer tooling.
 Build with `zig build` from this directory; the resulting binary is the primary way to launch and manage gossamer windows from the shell.
