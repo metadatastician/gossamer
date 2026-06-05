@@ -6,7 +6,7 @@
 [metadata]
 project = "gossamer"
 version = "0.3.1"
-last-updated = "2026-06-02"
+last-updated = "2026-06-05"
 status = "active"  # active | paused | archived
 
 [project-context]
@@ -41,7 +41,7 @@ milestones = [
   { name = "Phase 2c: Streaming IPC (gossamer_emit, g_idle_add, JS/Rust/ReScript bindings)", completion = 100 },
   { name = "Phase 3: Integration tests + hot reload", completion = 100 },
   { name = "Phase 4: macOS and Windows support", completion = 100 },
-  { name = "Phase 5: Mobile (iOS and Android)", completion = 82 },
+  { name = "Phase 5: Mobile (iOS and Android)", completion = 82 },  # Android JNI + services + AndroidComponents.idr landed 2026-06-02; NDK CI + APK pipeline + iOS signing remain
   { name = "Phase 6: Plugin system (dlopen vtable, load/unload/list, liveness check)", completion = 100 },
 ]
 
@@ -245,3 +245,20 @@ depends-on = ["ephapax", "idris2", "zig", "webkitgtk"]
 #                   Auto-merge (squash) used; stale local branches pruned.
 #             FLAG (untouched, licence guardrail): standards/LICENSE + burble/LICENSE
 #             carry the same AGPL-vs-MPL drift — surfaced for owner, not edited.
+# 2026-06-05: Currency checkpoint (automated):
+#             [1] .machine_readable/agent_instructions/ → bot_directives/ (git mv; 0 external refs).
+#             [2] contractiles/INDEX.a2ml + _base.ncl added (missing from v2.0 set).
+#             [3] contractiles/adjust/ trident created (Adjustfile.a2ml gossamer-specific; adjust.ncl +
+#                 adjust.k9.ncl + adjust.manifest.a2ml from canonical).
+#             [4] contractiles/intend/ trident created (Intentfile.a2ml gossamer-specific with real
+#                 intents/wishes from critical-next-actions; intend.ncl + intend.k9.ncl +
+#                 intend.manifest.a2ml from canonical).
+#             [5] contractiles/bust/Bustfile.a2ml rewritten: was wrong-format (// comments,
+#                 meta-repo submodule scenarios) → gold xfile shape with REAL gossamer probes
+#                 (Zig FFI, Idris2 ABI, Android JNI, deprecated-path reintroduction guards).
+#             [6] contractiles/README.adoc updated: removed stale lust/ reference, listed all 6 verbs.
+#             [7] 6a2/META.a2ml: removed stale rescript from languages[], updated last-updated.
+#             [8] 6a2/ECOSYSTEM.a2ml: updated purpose (plugin system landed), added Android+AffineScript
+#                 integration points, updated last-updated.
+#             [9] EXPLAINME.adoc: replaced stale ReScript binding references with AffineScript
+#                 (bindings/rescript/ retired PR #74; bindings/affinescript/ is now @gossamer/api).

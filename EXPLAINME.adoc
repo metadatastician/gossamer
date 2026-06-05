@@ -71,10 +71,10 @@ There is no runtime dispatch overhead.
 === Honest caveat
 
 The linearity guarantee applies to code written in Ephapax. If a consumer
-calls the raw C FFI directly (from C, Rust, or ReScript), the Ephapax
+calls the raw C FFI directly (from C, Rust, or AffineScript), the Ephapax
 compiler cannot enforce linearity across that boundary. The Idris2 proofs
 cover the ABI contract, not arbitrary callers. The `bindings/` tree provides
-typed wrappers for Rust and ReScript that partially restore safety, but those
+typed wrappers for Rust and AffineScript that partially restore safety, but those
 wrappers are not machine-checked at the same level as the Ephapax layer.
 
 == Claim 2: "IPC messages can't mismatch — frontend and backend agree at compile time"
@@ -112,7 +112,7 @@ what capabilities they export, preventing IPC calls to absent services.
 The IPC type-safety holds between Ephapax-typed backend handlers and the
 capability registry. The frontend JavaScript payload is validated at the
 boundary but JavaScript itself is not statically typed by Gossamer — the
-ReScript or JS calling code carries its own type discipline. The comparison
+AffineScript or JS calling code carries its own type discipline. The comparison
 table in the README ("Yes (compile-time)") is accurate for the Ephapax
 backend but should be read as applying at the backend boundary, not across
 the entire frontend JS heap.

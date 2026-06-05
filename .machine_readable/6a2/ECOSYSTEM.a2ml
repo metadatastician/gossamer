@@ -5,12 +5,12 @@
 # Relationships, dependencies, integration points.
 
 [metadata]
-version = "0.2.0"
-last-updated = "2026-04-12"
+version = "0.3.0"
+last-updated = "2026-06-05"
 
 [project]
 name = "gossamer"
-purpose = "Linearly-typed webview shell with formal ABI proofs — async IPC, CSP enforcement, streaming + binary events, multi-window registry, Groove connections, plugin system (planned)"
+purpose = "Linearly-typed webview shell with formal ABI proofs — async IPC, CSP enforcement, streaming + binary events, multi-window registry, Groove connections, plugin system (landed 2026-04-12), Android mobile shell (JNI + Services/Receiver/Widget, landed 2026-06-02), AffineScript @gossamer/api binding (landed 2026-06-02)"
 role = "library"  # e.g. ffi-infrastructure, cli-tool, library, service
 
 [position-in-ecosystem]
@@ -20,16 +20,22 @@ tier = "infrastructure"  # 1 | 2 | infrastructure
 # relationship types: sibling-standard, dependency, dependent, inspiration, potential-consumer
 projects = [
   { name = "panll", relationship = "dependent", notes = "PanLL panels run inside Gossamer webviews" },
-  { name = "ephapax", relationship = "dependency", notes = "Backend language with linear types" },
-  { name = "idaptik", relationship = "potential-consumer", notes = "Game shell migration target" },
+  { name = "ephapax", relationship = "dependency", notes = "Backend language with linear types (let! enforces resource linearity)" },
+  { name = "idaptik", relationship = "potential-consumer", notes = "Game shell migration target (Tauri→Gossamer desktop; reanchor 2026-06-03)" },
   { name = "proven", relationship = "sibling-standard", notes = "Formal verification proofs for ABI" },
   { name = "burble", relationship = "potential-consumer", notes = "Voice platform may use Gossamer panels" },
+  { name = "neurophone", relationship = "dependent", notes = "Banned Kotlin Android app migrating onto gossamer (neurophone#83; gossamer-android-services unblocks sub-PRs #3-#9)" },
+  { name = "affinescript", relationship = "dependency", notes = "@gossamer/api bindings ship as AffineScript (bindings/affinescript/); compiler is affinescript on PATH" },
 ]
 
 [integration-points]
 # External systems this project connects to
 points = [
-  { system = "webkitgtk", direction = "outbound", protocol = "C ABI via Zig FFI" },
+  { system = "webkitgtk", direction = "outbound", protocol = "C ABI via Zig FFI (Linux)" },
+  { system = "wkwebview", direction = "outbound", protocol = "Obj-C/C via Zig FFI (macOS/iOS)" },
+  { system = "webview2", direction = "outbound", protocol = "COM via Zig FFI (Windows)" },
+  { system = "android-webview", direction = "outbound", protocol = "JNI via jni.zig vtable model (Android)" },
   { system = "panll", direction = "inbound", protocol = "IPC channels (sync + async + streaming)" },
   { system = "gossamer.conf.json", direction = "inbound", protocol = "JSON configuration (CSP, build paths)" },
+  { system = "affinescript-api", direction = "inbound", protocol = "Deno ESM (@gossamer/api, bindings/affinescript/)" },
 ]
