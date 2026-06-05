@@ -1,19 +1,45 @@
-= Contractiles Template Set
+= Gossamer Contractile Set
 :toc:
 :sectnums:
 
-This directory contains the generalized contractiles templates. Copy the `.machine_readable/contractiles/` directory into a new repo to establish a consistent operational, validation, trust, recovery, and intent framework.
+This directory contains the contractile verb set for Gossamer (RSR-SPEC v2.0).
+Six verbs, each a trident: `{Verbfile}.a2ml` + `{verb}.ncl` + `{verb}.k9.ncl`.
+The `intend` and `adjust` verbs also carry a `{verb}.manifest.a2ml`.
 
-== Fill-In Instructions
+== Verb Registry
 
-1. Update the Mustfile to reflect your real invariants (paths, schema versions, ports).
-2. Replace Trustfile.hs placeholders with your actual key paths and verification commands.
-3. Adjust Dustfile handlers to match your rollback and recovery tooling.
-4. Update Intentfile to mirror the roadmap you want the system to evolve toward.
+See `INDEX.a2ml` for the machine-readable registry of all six verbs.
 
-== Contents
+[cols="1,2,1,1"]
+|===
+| Verb | Semantics | Authority | Gate
 
-* `must/Mustfile` - required invariants and validations.
-* `trust/Trustfile.hs` - cryptographic verification steps.
-* `dust/Dustfile` - rollback and recovery semantics.
-* `lust/Intentfile` - future intent and roadmap direction.
+| `must`  | Persistent invariants (file presence, SPDX, no believe_me) | blocking  | hard
+| `trust` | Secrets, provenance, container security                     | blocking  | hard
+| `bust`  | Failure modes + recovery paths                              | blocking  | hard
+| `adjust`| Drift tolerances + corrective actions                       | advisory  | warn
+| `dust`  | Hygiene — stale files, format duplicates, build artifacts   | advisory  | warn
+| `intend`| North star — committed next-actions + horizon aspirations   | reporting | non-gating
+|===
+
+== Fill-In Notes
+
+1. `must/Mustfile.a2ml` — update invariants for Gossamer's actual file layout.
+2. `trust/Trustfile.a2ml` — update provenance checks (git author, license content).
+3. `bust/Bustfile.a2ml` — failure modes grounded in Gossamer's build chain (Zig FFI, Idris2 ABI, Android JNI).
+4. `adjust/Adjustfile.a2ml` — drift tolerances: ABI module count, believe_me count, test count.
+5. `dust/Dustfile.a2ml` — stale-file and format-duplicate hygiene.
+6. `intend/Intentfile.a2ml` — committed next-actions (arXiv, NDK CI, iOS signing, IDApTIK migration).
+
+== Base Schema
+
+`_base.ncl` provides the shared pedigree, probe, and run-defaults schemas imported by every verb runner.
+
+== k9 Templates
+
+`../svc/k9/` contains the three trust-tier templates (Kennel / Yard / Hunt).
+`adjust.k9.ncl` and `intend.k9.ncl` import `template-hunt.k9.ncl` as `base_k9`.
+
+== Deprecated
+
+`lust/` — REMOVED estate-wide 2026-04-18. The north-star semantics live in `intend/`.

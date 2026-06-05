@@ -5,12 +5,13 @@
 # Architecture decisions, design rationale, governance.
 
 [metadata]
-version = "0.2.0"
-last-updated = "2026-03-23"
+version = "0.3.0"
+last-updated = "2026-06-05"
 
 [project-info]
 type = "library"  # library | binary | monorepo | service | website
-languages = ["zig", "idris2", "ephapax", "rescript", "rust"]
+# rescript removed 2026-06-02 (PR #74 cutover); affinescript added (bindings/affinescript/ = @gossamer/api)
+languages = ["zig", "idris2", "ephapax", "affinescript", "rust"]
 license = "MPL-2.0"
 author = "Jonathan D.A. Jewell (hyperpolymath)"
 
