@@ -1,5 +1,0 @@
-// SPDX-License-Identifier: MPL-2.0
-// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
-= Contractiles
-Machine-readable contractile definitions governing the obligations and constraints for gossamer across its build, trust, and intent lifecycle.
-Each subdirectory holds one contractile verb: `intend/` (north-star intent), `must/` (hard constraints), `trust/` (trust policy), and `k9/` (metadata service binding).
