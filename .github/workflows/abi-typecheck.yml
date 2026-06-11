@@ -7,7 +7,6 @@
 # Path-filtered and concurrency-guarded so it does not add load to the
 # estate CI pool on unrelated changes.
 name: ABI Typecheck Gate
-
 on:
   pull_request:
     branches: ['**']
@@ -21,14 +20,11 @@ on:
       - 'src/interface/**'
       - 'gossamer-abi.ipkg'
       - '.github/workflows/abi-typecheck.yml'
-
 permissions:
   contents: read
-
 concurrency:
   group: abi-typecheck-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
   abi-typecheck:
     name: idris2 --typecheck gossamer-abi.ipkg
@@ -37,10 +33,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
       - name: Install Chez Scheme
         run: sudo apt-get update && sudo apt-get install -y chezscheme
-
       - name: Build & install Idris2 (pinned v0.8.0)
         run: |
           set -euo pipefail
@@ -49,6 +43,5 @@ jobs:
           make bootstrap SCHEME=chezscheme
           make install
           echo "$HOME/.idris2/bin" >> "$GITHUB_PATH"
-
       - name: Typecheck the formal ABI package
         run: idris2 --typecheck gossamer-abi.ipkg

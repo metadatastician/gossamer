@@ -7,7 +7,6 @@
 # C-ABI symbol exports, and safety aspects.
 
 name: E2E + Safety
-
 on:
   push:
     branches: [main, master, develop]
@@ -19,23 +18,18 @@ on:
   pull_request:
     branches: [main, master]
   workflow_dispatch:
-
 permissions: read-all
-
 concurrency:
   group: e2e-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
   e2e:
     name: E2E — FFI Build + Integration + CLI
     runs-on: ubuntu-latest
     timeout-minutes: 20
-
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Detect E2E relevance
         id: changes
         run: |
@@ -50,15 +44,12 @@ jobs:
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
           fi
-
       - name: Install Zig
-        uses: goto-bus-stop/setup-zig@abea47f85e598557f500fa1fd2ab7464fcb39406  # v2
+        uses: goto-bus-stop/setup-zig@abea47f85e598557f500fa1fd2ab7464fcb39406 # v2
         with:
           version: 0.15.2
-
       - name: Install GTK/WebKit dev headers
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev xvfb
-
       # libwasmtime — C API release bundle from bytecodealliance/wasmtime.
       # Required to link the cli/launcher (Zig wasm host). Pinned to a
       # specific release SHA256 so a future repo move can't silently
@@ -96,11 +87,9 @@ jobs:
           sudo ldconfig
           test -f /usr/local/include/wasmtime.h
           test -f /usr/local/lib/libwasmtime.so
-
       - name: Run E2E test suite (includes Xvfb display tests)
         if: steps.changes.outputs.run == 'true'
         run: bash tests/e2e.sh
-
       - name: Skip E2E for docs-only changes
         if: steps.changes.outputs.run != 'true'
         run: echo "Docs-only change set; skipping E2E."
