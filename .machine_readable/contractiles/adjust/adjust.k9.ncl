@@ -21,7 +21,7 @@
 # erosion causing gradual parameter drift). Where must flags "broken
 # now", adjust flags "drifting toward broken".
 
-let base_k9 = import "../k9/template-hunt.k9.ncl" in
+let base_k9 = import "../../svc/k9/template-hunt.k9.ncl" in
 let base    = import "../_base.ncl" in
 
 {
