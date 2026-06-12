@@ -86,13 +86,13 @@ notes = "First trident instance in the estate (2026-04-18). Reports progress tow
 name = "k9"
 semantics = "trust-tier templates (EXCEPTION to one-verbfile rule)"
 file_pair = [
-  "k9/template-hunt.k9.ncl",
-  "k9/template-kennel.k9.ncl",
-  "k9/template-yard.k9.ncl",
+  "../svc/k9/template-hunt.k9.ncl",
+  "../svc/k9/template-kennel.k9.ncl",
+  "../svc/k9/template-yard.k9.ncl",
 ]
 status = "exception"
 gating = "not applicable"
-notes = "k9 is service-automation meta-infrastructure, not a verb contractile. Three trust-tier templates (Kennel/Yard/Hunt). Does not have a Verbfile.a2ml. See CONTRACTILE-SPEC §k9-exception."
+notes = "k9 is service-automation meta-infrastructure, not a verb contractile. Three trust-tier templates (Kennel/Yard/Hunt). Does not have a Verbfile.a2ml. Templates live under .machine_readable/svc/k9/ (the single k9 home, per ADR-001 2026-04-18); the verb tridents (intend/adjust .k9.ncl) import them via ../../svc/k9/. The former phantom contractiles/k9/ duplicate (carried stale {{AUTHOR}} placeholders) was removed. See CONTRACTILE-SPEC §k9-exception."
 
 # [[verbs]] lust REMOVED 2026-04-18 — name had unwanted associations;
 # the horizon/aspiration semantics were always meant to live inside `intend`
