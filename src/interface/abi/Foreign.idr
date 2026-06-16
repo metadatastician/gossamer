@@ -1,13 +1,25 @@
 -- SPDX-License-Identifier: MPL-2.0
 -- Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 ||| SPDX-License-Identifier: MPL-2.0
-||| Foreign Function Interface Declarations for GOSSAMER
+||| Foreign Function Interface Declarations for GOSSAMER (HONEST ABI)
 |||
-||| This module declares all C-compatible functions that will be
-||| implemented in the Zig FFI layer.
+||| Restored 2026-06-16: every `%foreign "C:gossamer_*"` below names a symbol that
+||| is a real `export fn` in `src/interface/ffi/src/` — verified by the
+||| %foreign-subset-of-exports check (see `just check-abi-honest` / CI).
 |||
-||| All functions are declared here with type signatures and safety proofs.
-||| Implementations live in ffi/zig/
+||| The previous version declared EIGHT phantom symbols that no Zig export ever
+||| provided (`gossamer_init`, `_free`, `_process`, `_free_string`, `_get_string`,
+||| `_process_array`, `_register_callback`, `_is_initialized`) — a wrong generic
+||| template laid over a real `create/eval/run/channel/cap` codebase. Those are
+||| removed. Signatures here mirror `bindings/rust/src/lib.rs` (the real consumer
+||| surface) and the Zig `export fn` declarations.
+|||
+||| Scope: a curated CORE of the 126-symbol surface (lifecycle, content/navigation,
+||| window control, channels, capabilities, notify, version/error). The remaining
+||| real exports (tray, fs, conf, dialog, group, registry, emit, debug, clipboard,
+||| platform, groove) are NOT yet bound here — an honest *coverage* gap, not a
+||| phantom. The groove-typed surface is deliberately excluded: it relocates to the
+||| groove/cleave experiment.
 
 module Gossamer.ABI.Foreign
 
@@ -16,202 +28,271 @@ import Gossamer.ABI.Layout
 
 %default total
 
---------------------------------------------------------------------------------
--- Library Lifecycle
---------------------------------------------------------------------------------
-
-||| Initialize the library
-||| Returns a handle to the library instance, or Nothing on failure
-export
-%foreign "C:gossamer_init, libgossamer"
-prim__init : PrimIO Bits64
-
-||| Safe wrapper for library initialization
-||| Requires a MainThreadProof witness — the library handle is main-thread-bound.
-export
-init : {auto prf : MainThreadProof} -> IO (Maybe WebviewHandle)
-init = do
-  ptr <- primIO prim__init
-  pure (createWebview ptr)
-
-||| Clean up library resources
-export
-%foreign "C:gossamer_free, libgossamer"
-prim__free : Bits64 -> PrimIO ()
-
-||| Safe wrapper for cleanup
-export
-free : WebviewHandle -> IO ()
-free h = primIO (prim__free (webviewPtr h))
+||| Decode a C Result int into the Result enum (Error on an unknown code).
+resOf : Bits32 -> Result
+resOf n = case resultFromInt n of
+            Just r  => r
+            Nothing => Error
 
 --------------------------------------------------------------------------------
--- Core Operations
+-- String support (real: Idris2 support runtime)
 --------------------------------------------------------------------------------
 
-||| Example operation: process data
-export
-%foreign "C:gossamer_process, libgossamer"
-prim__process : Bits64 -> Bits32 -> PrimIO Bits32
-
-||| Safe wrapper with error handling
-export
-process : WebviewHandle -> Bits32 -> IO (Either Result Bits32)
-process h input = do
-  result <- primIO (prim__process (webviewPtr h) input)
-  pure $ case result of
-    0 => Left Error
-    n => Right n
-
---------------------------------------------------------------------------------
--- String Operations
---------------------------------------------------------------------------------
-
-||| Convert C string to Idris String
 export
 %foreign "support:idris2_getString, libidris2_support"
 prim__getString : Bits64 -> String
 
-||| Free C string
-export
-%foreign "C:gossamer_free_string, libgossamer"
-prim__freeString : Bits64 -> PrimIO ()
-
-||| Get string result from library
-export
-%foreign "C:gossamer_get_string, libgossamer"
-prim__getResult : Bits64 -> PrimIO Bits64
-
-||| Safe string getter
-export
-getString : WebviewHandle -> IO (Maybe String)
-getString h = do
-  ptr <- primIO (prim__getResult (webviewPtr h))
-  if ptr == 0
-    then pure Nothing
-    else do
-      let str = prim__getString ptr
-      primIO (prim__freeString ptr)
-      pure (Just str)
-
 --------------------------------------------------------------------------------
--- Array/Buffer Operations
+-- Lifecycle  (gossamer_create / run / destroy)
 --------------------------------------------------------------------------------
 
-||| Process array data
 export
-%foreign "C:gossamer_process_array, libgossamer"
-prim__processArray : Bits64 -> Bits64 -> Bits32 -> PrimIO Bits32
+%foreign "C:gossamer_create, libgossamer"
+prim__create : String -> Bits32 -> Bits32 -> Bits8 -> Bits8 -> Bits8 -> PrimIO Bits64
 
-||| Safe array processor
+||| Create a webview window. Main-thread-bound (carries a MainThreadProof).
 export
-processArray : WebviewHandle -> (buffer : Bits64) -> (len : Bits32) -> IO (Either Result ())
-processArray h buf len = do
-  result <- primIO (prim__processArray (webviewPtr h) buf len)
-  pure $ case resultFromInt result of
-    Just Ok => Right ()
-    Just err => Left err
-    Nothing => Left Error
+create : {auto prf : MainThreadProof}
+      -> (title : String) -> (width : Bits32) -> (height : Bits32)
+      -> (resizable : Bool) -> (decorations : Bool) -> (fullscreen : Bool)
+      -> IO (Maybe WebviewHandle)
+create title w h r d f = do
+  ptr <- primIO (prim__create title w h (bit r) (bit d) (bit f))
+  pure (createWebview ptr)
   where
-    resultFromInt : Bits32 -> Maybe Result
-    resultFromInt 0 = Just Ok
-    resultFromInt 1 = Just Error
-    resultFromInt 2 = Just InvalidParam
-    resultFromInt 3 = Just OutOfMemory
-    resultFromInt 4 = Just NullPointer
-    resultFromInt _ = Nothing
+    bit : Bool -> Bits8
+    bit True  = 1
+    bit False = 0
 
---------------------------------------------------------------------------------
--- Error Handling
---------------------------------------------------------------------------------
-
-||| Get last error message
 export
-%foreign "C:gossamer_last_error, libgossamer"
-prim__lastError : PrimIO Bits64
+%foreign "C:gossamer_run, libgossamer"
+prim__run : Bits64 -> PrimIO ()
 
-||| Retrieve last error as string
+||| Enter the webview run loop (blocks until the window closes).
 export
-lastError : IO (Maybe String)
-lastError = do
-  ptr <- primIO prim__lastError
-  if ptr == 0
-    then pure Nothing
-    else pure (Just (prim__getString ptr))
+run : WebviewHandle -> IO ()
+run h = primIO (prim__run (webviewPtr h))
 
--- errorDescription is re-exported via Gossamer.ABI.Types
+export
+%foreign "C:gossamer_destroy, libgossamer"
+prim__destroy : Bits64 -> PrimIO ()
+
+||| Destroy the webview and release its native resources.
+export
+destroy : WebviewHandle -> IO ()
+destroy h = primIO (prim__destroy (webviewPtr h))
 
 --------------------------------------------------------------------------------
--- Version Information
+-- Content / navigation   (handle, string) -> Result
 --------------------------------------------------------------------------------
 
-||| Get library version
+export
+%foreign "C:gossamer_load_html, libgossamer"
+prim__loadHtml : Bits64 -> String -> PrimIO Bits32
+
+export
+loadHtml : WebviewHandle -> String -> IO Result
+loadHtml h html = do n <- primIO (prim__loadHtml (webviewPtr h) html); pure (resOf n)
+
+export
+%foreign "C:gossamer_navigate, libgossamer"
+prim__navigate : Bits64 -> String -> PrimIO Bits32
+
+export
+navigate : WebviewHandle -> String -> IO Result
+navigate h url = do n <- primIO (prim__navigate (webviewPtr h) url); pure (resOf n)
+
+export
+%foreign "C:gossamer_eval, libgossamer"
+prim__eval : Bits64 -> String -> PrimIO Bits32
+
+export
+eval : WebviewHandle -> String -> IO Result
+eval h js = do n <- primIO (prim__eval (webviewPtr h) js); pure (resOf n)
+
+export
+%foreign "C:gossamer_set_title, libgossamer"
+prim__setTitle : Bits64 -> String -> PrimIO Bits32
+
+export
+setTitle : WebviewHandle -> String -> IO Result
+setTitle h t = do n <- primIO (prim__setTitle (webviewPtr h) t); pure (resOf n)
+
+export
+%foreign "C:gossamer_set_csp, libgossamer"
+prim__setCsp : Bits64 -> String -> PrimIO Bits32
+
+export
+setCsp : WebviewHandle -> String -> IO Result
+setCsp h csp = do n <- primIO (prim__setCsp (webviewPtr h) csp); pure (resOf n)
+
+--------------------------------------------------------------------------------
+-- Window control   (handle) -> Result,  plus resize
+--------------------------------------------------------------------------------
+
+||| Apply a (handle -> Result) primitive and decode the Result.
+hop : (Bits64 -> PrimIO Bits32) -> WebviewHandle -> IO Result
+hop prim h = do n <- primIO (prim (webviewPtr h)); pure (resOf n)
+
+export
+%foreign "C:gossamer_show, libgossamer"
+prim__show : Bits64 -> PrimIO Bits32
+export
+showWindow : WebviewHandle -> IO Result
+showWindow = hop prim__show
+
+export
+%foreign "C:gossamer_hide, libgossamer"
+prim__hide : Bits64 -> PrimIO Bits32
+export
+hideWindow : WebviewHandle -> IO Result
+hideWindow = hop prim__hide
+
+export
+%foreign "C:gossamer_minimize, libgossamer"
+prim__minimize : Bits64 -> PrimIO Bits32
+export
+minimize : WebviewHandle -> IO Result
+minimize = hop prim__minimize
+
+export
+%foreign "C:gossamer_maximize, libgossamer"
+prim__maximize : Bits64 -> PrimIO Bits32
+export
+maximize : WebviewHandle -> IO Result
+maximize = hop prim__maximize
+
+export
+%foreign "C:gossamer_restore, libgossamer"
+prim__restore : Bits64 -> PrimIO Bits32
+export
+restoreWindow : WebviewHandle -> IO Result
+restoreWindow = hop prim__restore
+
+export
+%foreign "C:gossamer_request_close, libgossamer"
+prim__requestClose : Bits64 -> PrimIO Bits32
+export
+requestClose : WebviewHandle -> IO Result
+requestClose = hop prim__requestClose
+
+export
+%foreign "C:gossamer_resize, libgossamer"
+prim__resize : Bits64 -> Bits32 -> Bits32 -> PrimIO Bits32
+
+export
+resize : WebviewHandle -> (width : Bits32) -> (height : Bits32) -> IO Result
+resize h w ht = do n <- primIO (prim__resize (webviewPtr h) w ht); pure (resOf n)
+
+--------------------------------------------------------------------------------
+-- Channels
+--------------------------------------------------------------------------------
+
+export
+%foreign "C:gossamer_channel_open, libgossamer"
+prim__channelOpen : Bits64 -> PrimIO Bits64
+
+||| Open an IPC channel on a webview; returns the raw channel handle (0 = failure).
+export
+channelOpen : WebviewHandle -> IO Bits64
+channelOpen h = primIO (prim__channelOpen (webviewPtr h))
+
+export
+%foreign "C:gossamer_channel_close, libgossamer"
+prim__channelClose : Bits64 -> PrimIO ()
+
+export
+channelClose : (channel : Bits64) -> IO ()
+channelClose c = primIO (prim__channelClose c)
+
+export
+%foreign "C:gossamer_async_inflight_count, libgossamer"
+prim__asyncInflightCount : PrimIO Bits32
+
+export
+asyncInflightCount : IO Bits32
+asyncInflightCount = primIO prim__asyncInflightCount
+
+--------------------------------------------------------------------------------
+-- Capabilities  (raw token surface)
+--------------------------------------------------------------------------------
+
+export
+%foreign "C:gossamer_cap_grant, libgossamer"
+prim__capGrant : Bits32 -> PrimIO Bits64
+
+||| Grant a capability for a resource-kind code; returns a token (0 = denied).
+export
+capGrant : (resourceKind : Bits32) -> IO Bits64
+capGrant k = primIO (prim__capGrant k)
+
+export
+%foreign "C:gossamer_cap_check, libgossamer"
+prim__capCheck : Bits64 -> PrimIO Bits32
+
+export
+capCheck : (token : Bits64) -> IO Result
+capCheck t = do n <- primIO (prim__capCheck t); pure (resOf n)
+
+export
+%foreign "C:gossamer_cap_revoke, libgossamer"
+prim__capRevoke : Bits64 -> PrimIO ()
+
+export
+capRevoke : (token : Bits64) -> IO ()
+capRevoke t = primIO (prim__capRevoke t)
+
+--------------------------------------------------------------------------------
+-- Notifications
+--------------------------------------------------------------------------------
+
+export
+%foreign "C:gossamer_notify, libgossamer"
+prim__notify : String -> String -> PrimIO Bits32
+
+||| Post a desktop notification; returns a backend-defined status word.
+export
+notify : (title : String) -> (body : String) -> IO Bits32
+notify t b = primIO (prim__notify t b)
+
+--------------------------------------------------------------------------------
+-- Version / build / error  (return char*, read via idris2_getString)
+--------------------------------------------------------------------------------
+
 export
 %foreign "C:gossamer_version, libgossamer"
 prim__version : PrimIO Bits64
 
-||| Get version as string
 export
 version : IO String
-version = do
-  ptr <- primIO prim__version
-  pure (prim__getString ptr)
+version = do ptr <- primIO prim__version; pure (prim__getString ptr)
 
-||| Get library build info
 export
 %foreign "C:gossamer_build_info, libgossamer"
 prim__buildInfo : PrimIO Bits64
 
-||| Get build information
 export
 buildInfo : IO String
-buildInfo = do
-  ptr <- primIO prim__buildInfo
-  pure (prim__getString ptr)
+buildInfo = do ptr <- primIO prim__buildInfo; pure (prim__getString ptr)
+
+export
+%foreign "C:gossamer_last_error, libgossamer"
+prim__lastError : PrimIO Bits64
+
+||| Last error message, or Nothing if no error is set (null char*).
+export
+lastError : IO (Maybe String)
+lastError = do
+  ptr <- primIO prim__lastError
+  if ptr == 0 then pure Nothing else pure (Just (prim__getString ptr))
 
 --------------------------------------------------------------------------------
--- Callback Support
+-- Callback ABI type (kept for downstream consumers; no phantom binding)
 --------------------------------------------------------------------------------
 
-||| Callback function type (C ABI)
+||| Callback function type (C ABI). Channel/tray callback binding is not yet
+||| restored here (the real `gossamer_channel_bind`/`gossamer_tray_set_callback`
+||| take function pointers); this type is retained for downstream use.
 public export
 Callback : Type
 Callback = Bits64 -> Bits32 -> Bits32
-
-||| Register a callback.
-||| The callback is passed to C as a function pointer: Idris2's C FFI
-||| marshals the `Callback` closure directly (the prior `AnyPtr` +
-||| `cast` had no `Cast Callback AnyPtr` instance and never compiled —
-||| a latent error masked by the never-built module).
-export
-%foreign "C:gossamer_register_callback, libgossamer"
-prim__registerCallback : Bits64 -> Callback -> PrimIO Bits32
-
-||| Safe callback registration
-export
-registerCallback : WebviewHandle -> Callback -> IO (Either Result ())
-registerCallback h cb = do
-  result <- primIO (prim__registerCallback (webviewPtr h) cb)
-  pure $ case resultFromInt result of
-    Just Ok => Right ()
-    Just err => Left err
-    Nothing => Left Error
-  where
-    resultFromInt : Bits32 -> Maybe Result
-    resultFromInt 0 = Just Ok
-    resultFromInt _ = Just Error
-
---------------------------------------------------------------------------------
--- Utility Functions
---------------------------------------------------------------------------------
-
-||| Check if library is initialized
-export
-%foreign "C:gossamer_is_initialized, libgossamer"
-prim__isInitialized : Bits64 -> PrimIO Bits32
-
-||| Check initialization status
-export
-isInitialized : WebviewHandle -> IO Bool
-isInitialized h = do
-  result <- primIO (prim__isInitialized (webviewPtr h))
-  pure (result /= 0)
