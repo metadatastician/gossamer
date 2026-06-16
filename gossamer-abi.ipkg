@@ -28,11 +28,8 @@ modules = Gossamer.ABI.Types
         , Gossamer.ABI.Layout
         , Gossamer.ABI.Foreign
         , Gossamer.ABI.Groove
-        , Gossamer.ABI.CapabilityAuthenticity
-        , Gossamer.ABI.IPCDispatch
         , Gossamer.ABI.HandleLinearity
         , Gossamer.ABI.WindowStateMachine
-        , Gossamer.ABI.GrooveTermination
         , Gossamer.ABI.LayoutStability
         , Gossamer.ABI.IPCIntegrity
         , Gossamer.ABI.PanelIsolation
