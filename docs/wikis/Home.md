@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MPL-2.0 -->
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 # Gossamer
 
 **Build desktop apps that can't leak resources. By design, not by discipline.**
