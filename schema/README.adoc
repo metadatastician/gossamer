@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: CC-BY-SA-4.0
 = Schema
 JSON Schema definitions for gossamer's runtime configuration and Groove manifest formats.
 `gossamer.conf.schema.json` validates `gossamer.conf.json`; `groove-manifest.schema.json` validates Groove service manifests consumed by gossamer.

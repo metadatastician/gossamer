@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: CC-BY-SA-4.0
 = Generated
 Auto-generated artefacts produced by tooling during the build or verification pipeline — do not edit by hand.
 

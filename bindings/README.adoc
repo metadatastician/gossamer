@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: CC-BY-SA-4.0
 = Bindings
 Language-specific client bindings that wrap the gossamer C ABI for use from higher-level languages.
 Current targets are `rescript/` (ReScript/Deno) and `rust/` (Rust crate); each subdirectory is a self-contained build unit.

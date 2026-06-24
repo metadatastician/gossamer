@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: CC-BY-SA-4.0
 = CLI
 Zig command-line interface for gossamer, providing `gossamer` binary entry-point, file-watcher integration, and developer tooling.
 Build with `zig build` from this directory; the resulting binary is the primary way to launch and manage gossamer windows from the shell.
