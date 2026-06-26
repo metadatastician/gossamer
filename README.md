@@ -8,6 +8,8 @@ SPDX-FileCopyrightText: 2025-2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 FFI](https://img.shields.io/badge/FFI-Zig-orange.svg) [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/hyperpolymath/gossamer/badge)](https://securityscorecards.dev/viewer/?uri=github.com/hyperpolymath/gossamer) ![Idris2
 ABI](https://img.shields.io/badge/ABI-Idris2-purple.svg) [![Green Hosting](https://api.thegreenwebfoundation.org/greencheckimage/jewell.nexus)](https://www.thegreenwebfoundation.org/green-web-check/?url=jewell.nexus)
 
+<p align="center"><img src="brand/social-preview.svg" alt="gossamer" width="720"></p>
+
 **Build desktop apps that can’t leak resources. By design, not by
 discipline.**
 
