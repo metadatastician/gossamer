@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="circle-glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <radialGradient id="bg-glow" cx="50%" cy="46%" r="55%">
+      <stop offset="0%" stop-color="#10151c"/>
+      <stop offset="70%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#080c10"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="#0d1117"/>
+  <rect width="512" height="512" rx="96" fill="url(#bg-glow)"/>
+
+  <!-- Native window frame: the OS webview the shell wraps (WebKitGTK / WKWebView / WebView2) -->
+  <rect x="128" y="140" width="256" height="232" rx="18" fill="none" stroke="#94a3b8" stroke-width="6" opacity="0.30"/>
+  <!-- Title-bar rule of the native window -->
+  <line x1="128" y1="180" x2="384" y2="180" stroke="#94a3b8" stroke-width="4" opacity="0.30"/>
+  <circle cx="150" cy="160" r="5" fill="#94a3b8" opacity="0.45"/>
+  <circle cx="170" cy="160" r="5" fill="#94a3b8" opacity="0.45"/>
+  <circle cx="190" cy="160" r="5" fill="#94a3b8" opacity="0.45"/>
+
+  <!-- Gossamer filament (let! — exactly once): one unbroken silver strand entering, tracing three edges of the frame, exiting once -->
+  <path d="M 96,210 L 128,210 L 128,372 L 384,372 L 384,140 L 416,140"
+        fill="none" stroke="#cbd5e1" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"
+        filter="url(#glow)"/>
+
+  <!-- Entry node: the handle introduced -->
+  <circle cx="96" cy="210" r="11" fill="#cbd5e1" filter="url(#glow)"/>
+  <!-- Exit arrowhead: the handle consumed (closed) exactly once, leaves the frame -->
+  <path d="M 416,140 l -20,-13 l 0,26 z" fill="#cbd5e1" filter="url(#glow)"/>
+
+  <!-- Tension highlight: the thin strand glowing where it crosses the webview -->
+  <circle cx="256" cy="372" r="6" fill="#cbd5e1" opacity="0.55" filter="url(#circle-glow)"/>
+</svg>

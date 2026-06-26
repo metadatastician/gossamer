@@ -1,0 +1,72 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= Gossamer Brand Pack
+:toc:
+
+== Mark
+
+The Gossamer mark is a single thin silver filament that traces three
+sides of a window frame — entering at one corner, following the native
+window's edge, and leaving at the next. It is a *thread over a frame*:
+the gossamer-thin shell drawn taut around the OS webview it wraps. The
+filament is unbroken — one strand, used once — echoing the `let!`
+linear binding at the heart of Gossamer: a webview handle that must be
+closed exactly once or the program will not compile.
+
+The name itself is the symbolism: _gossamer_ is the finest filament of
+spider silk — almost weightless, yet under tension it holds. So is the
+shell: a ~1 MB native window (no V8, no Node GC, no interpreter) thin
+enough to vanish against the OS, strong enough that handle leaks,
+IPC mismatches, and permission bypasses become compile errors.
+
+|===
+| File | Use
+
+| `icon.svg` | Primary mark with dark background (rounded corners). README, docs, about screens.
+| `icon-square.svg` | Transparent background mark. Favicon, app icon, overlay on custom backgrounds.
+| `social-preview.svg` | GitHub / Open Graph social preview (1280x640). "gossamer" wordmark + mark.
+| `marr-levels.svg` | Explainer: the project at David Marr's three levels of analysis.
+| `sandler-submarine.svg` | Impact / case-making: the seven sealed compartments of adoption.
+|===
+
+== Colours
+
+[cols="1,1,2"]
+|===
+| Name | Hex | Use
+
+| Thread Silver | `#cbd5e1` | Primary brand colour. The filament tracing the frame, active states, headings.
+| Filament Slate | `#94a3b8` | Secondary. The native window frame, IPC channel hints, muted accents.
+| Background | `#0d1117` | Dark surfaces. GitHub-dark compatible.
+| Foreground | `#e6edf3` | Text on dark background.
+| Glow | `#10151c` | Radial background glow behind the mark.
+|===
+
+== Typography
+
+Wordmark uses the system font stack: `system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif` at weight 300 (light), lowercase. The tagline _thin shell over native_ is set at the same stack, weight 300.
+
+No custom font is required. All text is set in the SVG, not a separate font file.
+
+== Rules
+
+- The mark always shows one unbroken filament tracing the window frame. Never draw the filament twice or close it into a full loop — the thread is *used once* (the `let!` linearity), not duplicated, not recycled.
+- The silver must be `#cbd5e1` — do not approximate with other greys/silvers.
+- The wordmark is always lowercase `gossamer`.
+- On light backgrounds, invert: slate `#475569` filament and `#1b1f24` text on white/light grey.
+- The tagline _thin shell over native_ is the positioning line (Electron/Tauri/Wails alternative), not a marketing strapline; it may appear on repository assets. Sales/marketing straplines never appear on repository assets.
+
+== Generating raster assets
+
+[source,shell]
+----
+# Requires Inkscape or rsvg-convert (librsvg)
+
+# Favicon (64x64 PNG)
+rsvg-convert -w 64 -h 64 icon-square.svg > favicon-64.png
+
+# App icon (512x512 PNG)
+rsvg-convert -w 512 -h 512 icon.svg > icon-512.png
+
+# Social preview (1280x640 PNG for GitHub)
+rsvg-convert -w 1280 -h 640 social-preview.svg > social-preview.png
+----
