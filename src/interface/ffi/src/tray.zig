@@ -64,7 +64,7 @@ var global_tray: ?*TrayHandle = null;
 /// Menu items are added via gossamer_tray_add_item.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__trayCreate
-export fn gossamer_tray_create(tooltip: [*:0]const u8) u64 {
+pub export fn gossamer_tray_create(tooltip: [*:0]const u8) u64 {
     const allocator = std.heap.c_allocator;
 
     // Ensure GTK is initialised
@@ -126,7 +126,7 @@ export fn gossamer_tray_create(tooltip: [*:0]const u8) u64 {
 }
 
 /// Destroy the system tray icon. CONSUMES the handle.
-export fn gossamer_tray_destroy(handle_ptr: u64) void {
+pub export fn gossamer_tray_destroy(handle_ptr: u64) void {
     const handle = trayFromU64(handle_ptr) orelse return;
 
     c.gtk_status_icon_set_visible(handle.status_icon, 0);
@@ -149,7 +149,7 @@ export fn gossamer_tray_destroy(handle_ptr: u64) void {
 /// Returns: 0 on success, non-zero on failure.
 ///
 /// When the item is clicked, the menu_callback is invoked with item_id.
-export fn gossamer_tray_add_item(handle_ptr: u64, label: [*:0]const u8, item_id: u32) u32 {
+pub export fn gossamer_tray_add_item(handle_ptr: u64, label: [*:0]const u8, item_id: u32) u32 {
     const handle = trayFromU64(handle_ptr) orelse return 1;
 
     if (handle.menu_item_count >= MAX_MENU_ITEMS) return 2;
@@ -174,7 +174,7 @@ export fn gossamer_tray_add_item(handle_ptr: u64, label: [*:0]const u8, item_id:
 }
 
 /// Add a separator to the tray context menu.
-export fn gossamer_tray_add_separator(handle_ptr: u64) u32 {
+pub export fn gossamer_tray_add_separator(handle_ptr: u64) u32 {
     const handle = trayFromU64(handle_ptr) orelse return 1;
 
     const sep = c.gtk_separator_menu_item_new() orelse return 2;
@@ -187,7 +187,7 @@ export fn gossamer_tray_add_separator(handle_ptr: u64) u32 {
 /// Set the callback function for menu item activation.
 ///
 /// The callback receives the item_id (u32) of the activated menu item.
-export fn gossamer_tray_set_callback(handle_ptr: u64, callback: ?*const fn (u32) callconv(.c) void) u32 {
+pub export fn gossamer_tray_set_callback(handle_ptr: u64, callback: ?*const fn (u32) callconv(.c) void) u32 {
     const handle = trayFromU64(handle_ptr) orelse return 1;
     handle.menu_callback = callback;
     return 0;
@@ -197,28 +197,28 @@ export fn gossamer_tray_set_callback(handle_ptr: u64, callback: ?*const fn (u32)
 ///
 /// Standard names: "dialog-information", "dialog-warning", "dialog-error",
 /// "network-server", "network-offline", "preferences-system-network"
-export fn gossamer_tray_set_icon(handle_ptr: u64, icon_name: [*:0]const u8) u32 {
+pub export fn gossamer_tray_set_icon(handle_ptr: u64, icon_name: [*:0]const u8) u32 {
     const handle = trayFromU64(handle_ptr) orelse return 1;
     c.gtk_status_icon_set_from_icon_name(handle.status_icon, icon_name);
     return 0;
 }
 
 /// Set the tray icon from a file path.
-export fn gossamer_tray_set_icon_from_file(handle_ptr: u64, path: [*:0]const u8) u32 {
+pub export fn gossamer_tray_set_icon_from_file(handle_ptr: u64, path: [*:0]const u8) u32 {
     const handle = trayFromU64(handle_ptr) orelse return 1;
     c.gtk_status_icon_set_from_file(handle.status_icon, path);
     return 0;
 }
 
 /// Update the tray tooltip text.
-export fn gossamer_tray_set_tooltip(handle_ptr: u64, tooltip: [*:0]const u8) u32 {
+pub export fn gossamer_tray_set_tooltip(handle_ptr: u64, tooltip: [*:0]const u8) u32 {
     const handle = trayFromU64(handle_ptr) orelse return 1;
     c.gtk_status_icon_set_tooltip_text(handle.status_icon, tooltip);
     return 0;
 }
 
 /// Show or hide the tray icon.
-export fn gossamer_tray_set_visible(handle_ptr: u64, visible: u32) u32 {
+pub export fn gossamer_tray_set_visible(handle_ptr: u64, visible: u32) u32 {
     const handle = trayFromU64(handle_ptr) orelse return 1;
     c.gtk_status_icon_set_visible(handle.status_icon, @intCast(visible));
     handle.visible = visible != 0;
@@ -227,7 +227,7 @@ export fn gossamer_tray_set_visible(handle_ptr: u64, visible: u32) u32 {
 
 /// Attach a main window handle to the tray so left-click can toggle it.
 /// Passing 0 detaches the current window.
-export fn gossamer_tray_set_window(handle_ptr: u64, window_ptr: u64) u32 {
+pub export fn gossamer_tray_set_window(handle_ptr: u64, window_ptr: u64) u32 {
     const handle = trayFromU64(handle_ptr) orelse return 1;
     if (window_ptr == 0) {
         handle.window = null;
@@ -242,7 +242,7 @@ export fn gossamer_tray_set_window(handle_ptr: u64, window_ptr: u64) u32 {
 
 /// Clear any attached main window from the singleton tray.
 /// Used when the main window is being destroyed.
-export fn gossamer_tray_clear_window() void {
+pub export fn gossamer_tray_clear_window() void {
     if (global_tray) |tray| {
         tray.window = null;
     }
@@ -259,7 +259,7 @@ export fn gossamer_tray_clear_window() void {
 ///
 /// Args: title (cstr), body (cstr)
 /// Returns: Result (0=ok, 1=error)
-export fn gossamer_notify(title: [*:0]const u8, body: [*:0]const u8) u32 {
+pub export fn gossamer_notify(title: [*:0]const u8, body: [*:0]const u8) u32 {
     // Use notify-send as a simple, reliable approach that works on all
     // Linux desktops including KDE Plasma on Wayland via Fedora Atomic.
     // This avoids linking libnotify and works with the notification portal.

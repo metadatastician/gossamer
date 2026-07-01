@@ -101,6 +101,11 @@ jobs:
         if: steps.changes.outputs.run == 'true'
         run: bash tests/e2e.sh
 
+      - name: Run FFI/ABI integration tests (headless)
+        if: steps.changes.outputs.run == 'true'
+        working-directory: src/interface/ffi
+        run: zig build test-integration
+
       - name: Skip E2E for docs-only changes
         if: steps.changes.outputs.run != 'true'
         run: echo "Docs-only change set; skipping E2E."

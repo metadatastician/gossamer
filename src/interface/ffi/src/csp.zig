@@ -66,7 +66,7 @@ const c = @cImport({
 ///
 /// Thread safety: if called from a non-GTK thread, uses g_idle_add to marshal
 /// the JS evaluation onto the GTK main thread.
-export fn gossamer_set_csp(handle_ptr: u64, csp: [*:0]const u8) main.Result {
+pub export fn gossamer_set_csp(handle_ptr: u64, csp: [*:0]const u8) main.Result {
     main.clearError();
     const handle = main.ptrFromU64(handle_ptr) orelse {
         main.setError("Null webview handle");
@@ -149,7 +149,7 @@ const EmitContext = struct {
 ///   window.__gossamer_on("file_changed", function(data) {
 ///     console.log("Changed:", data.path);
 ///   });
-export fn gossamer_emit(
+pub export fn gossamer_emit(
     handle_ptr: u64,
     event_name: [*:0]const u8,
     payload_json: [*:0]const u8,
@@ -233,7 +233,7 @@ export fn gossamer_emit(
 /// Thread safety: uses g_idle_add exactly like gossamer_emit. Safe from any thread.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__emitBinary
-export fn gossamer_emit_binary(
+pub export fn gossamer_emit_binary(
     handle_ptr: u64,
     event_name: [*:0]const u8,
     data: [*]const u8,

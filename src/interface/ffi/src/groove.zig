@@ -304,7 +304,7 @@ fn hasCapability(idx: usize, name: []const u8) bool {
 
 /// Discover all groove targets by probing well-known ports.
 /// Returns the number of successfully connected grooves.
-export fn gossamer_groove_discover() callconv(.c) u32 {
+pub export fn gossamer_groove_discover() callconv(.c) u32 {
     var count: u32 = 0;
     for (0..TARGET_COUNT) |i| {
         probeTarget(i);
@@ -316,7 +316,7 @@ export fn gossamer_groove_discover() callconv(.c) u32 {
 }
 
 /// Get the status of a specific groove target.
-export fn gossamer_groove_status(target_id: u32) callconv(.c) u32 {
+pub export fn gossamer_groove_status(target_id: u32) callconv(.c) u32 {
     if (target_id >= TARGET_COUNT) return 0;
     return @intFromEnum(grooves[target_id].status);
 }
@@ -324,7 +324,7 @@ export fn gossamer_groove_status(target_id: u32) callconv(.c) u32 {
 /// Get the manifest JSON for a connected groove target.
 /// Returns a pointer to a null-terminated string (thread-local buffer).
 /// Returns pointer to empty string if not connected.
-export fn gossamer_groove_manifest(target_id: u32) callconv(.c) [*:0]const u8 {
+pub export fn gossamer_groove_manifest(target_id: u32) callconv(.c) [*:0]const u8 {
     if (target_id >= TARGET_COUNT) return "";
     const state = &grooves[target_id];
     if (state.status == .not_found or state.manifest_len == 0) return "";
@@ -337,7 +337,7 @@ export fn gossamer_groove_manifest(target_id: u32) callconv(.c) [*:0]const u8 {
 
 /// Find which groove target provides a given capability.
 /// Returns the target index, or 0xFFFFFFFF if none.
-export fn gossamer_groove_find_capability(cap_name: [*:0]const u8) callconv(.c) u32 {
+pub export fn gossamer_groove_find_capability(cap_name: [*:0]const u8) callconv(.c) u32 {
     // Determine string length.
     var len: usize = 0;
     while (cap_name[len] != 0 and len < MAX_CAP_NAME) : (len += 1) {}
@@ -357,7 +357,7 @@ export fn gossamer_groove_find_capability(cap_name: [*:0]const u8) callconv(.c) 
 /// Check if two groove targets are compatible for composition.
 /// Two targets are compatible if each offers what the other consumes.
 /// Returns 1 if compatible, 0 if not.
-export fn gossamer_groove_check_compat(target_a: u32, target_b: u32) callconv(.c) u32 {
+pub export fn gossamer_groove_check_compat(target_a: u32, target_b: u32) callconv(.c) u32 {
     if (target_a >= TARGET_COUNT or target_b >= TARGET_COUNT) return 0;
     const a = &grooves[target_a];
     const b = &grooves[target_b];
@@ -424,7 +424,7 @@ pub export fn gossamer_groove_send(target_id: u32, msg_ptr: [*:0]const u8) callc
 /// Receive a pending message from a grooved service.
 /// Uses HTTP GET to /.well-known/groove/recv on the target port.
 /// Returns a pointer to the response body (thread-local buffer).
-export fn gossamer_groove_recv(target_id: u32) callconv(.c) [*:0]const u8 {
+pub export fn gossamer_groove_recv(target_id: u32) callconv(.c) [*:0]const u8 {
     if (target_id >= TARGET_COUNT) return "";
     if (grooves[target_id].status == .not_found) return "";
 
@@ -459,7 +459,7 @@ export fn gossamer_groove_recv(target_id: u32) callconv(.c) [*:0]const u8 {
 
 /// Get a JSON summary of all groove connections.
 /// Format: [{"id":0,"service":"burble","status":2,"port":6473,"caps":3}, ...]
-export fn gossamer_groove_summary() callconv(.c) [*:0]const u8 {
+pub export fn gossamer_groove_summary() callconv(.c) [*:0]const u8 {
     var pos: usize = 0;
     out_buf[pos] = '[';
     pos += 1;
@@ -490,13 +490,13 @@ export fn gossamer_groove_summary() callconv(.c) [*:0]const u8 {
 }
 
 /// Disconnect a specific groove target.
-export fn gossamer_groove_disconnect(target_id: u32) callconv(.c) void {
+pub export fn gossamer_groove_disconnect(target_id: u32) callconv(.c) void {
     if (target_id >= TARGET_COUNT) return;
     grooves[target_id] = .{};
 }
 
 /// Disconnect all groove targets.
-export fn gossamer_groove_disconnect_all() callconv(.c) void {
+pub export fn gossamer_groove_disconnect_all() callconv(.c) void {
     for (&grooves) |*g| {
         g.* = .{};
     }

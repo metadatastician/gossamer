@@ -31,7 +31,7 @@ const ByteList = std.ArrayList(u8);
 /// Returns null on failure (file not found, read error, OOM).
 ///
 /// FFI for: gossamer_ssg_read_file(path: String): String
-export fn gossamer_ssg_read_file(path: [*:0]const u8) ?[*:0]u8 {
+pub export fn gossamer_ssg_read_file(path: [*:0]const u8) ?[*:0]u8 {
     const path_slice = mem.span(path);
 
     const file = fs.cwd().openFile(path_slice, .{}) catch return null;
@@ -56,7 +56,7 @@ export fn gossamer_ssg_read_file(path: [*:0]const u8) ?[*:0]u8 {
 /// Returns 0 on success, 1 on failure.
 ///
 /// FFI for: gossamer_ssg_write_file(path: String, content: String): I32
-export fn gossamer_ssg_write_file(path: [*:0]const u8, content: [*:0]const u8) c_int {
+pub export fn gossamer_ssg_write_file(path: [*:0]const u8, content: [*:0]const u8) c_int {
     const path_slice = mem.span(path);
     const content_slice = mem.span(content);
 
@@ -77,7 +77,7 @@ export fn gossamer_ssg_write_file(path: [*:0]const u8, content: [*:0]const u8) c
 /// Returns empty string if directory doesn't exist or has no matches.
 ///
 /// FFI for: gossamer_ssg_list_files(dir: String, extension: String): String
-export fn gossamer_ssg_list_files(dir: [*:0]const u8, extension: [*:0]const u8) ?[*:0]u8 {
+pub export fn gossamer_ssg_list_files(dir: [*:0]const u8, extension: [*:0]const u8) ?[*:0]u8 {
     const dir_slice = mem.span(dir);
     const ext_slice = mem.span(extension);
 
@@ -122,7 +122,7 @@ export fn gossamer_ssg_list_files(dir: [*:0]const u8, extension: [*:0]const u8) 
 /// Returns the front matter block (without delimiters), or empty string if none.
 ///
 /// FFI for: gossamer_ssg_parse_front_matter(content: String): String
-export fn gossamer_ssg_parse_front_matter(content: [*:0]const u8) ?[*:0]u8 {
+pub export fn gossamer_ssg_parse_front_matter(content: [*:0]const u8) ?[*:0]u8 {
     const slice = mem.span(content);
 
     // Front matter must start with "---\n" at the beginning.
@@ -152,7 +152,7 @@ export fn gossamer_ssg_parse_front_matter(content: [*:0]const u8) ?[*:0]u8 {
 /// If no front matter, returns the entire content.
 ///
 /// FFI for: gossamer_ssg_parse_body(content: String): String
-export fn gossamer_ssg_parse_body(content: [*:0]const u8) ?[*:0]u8 {
+pub export fn gossamer_ssg_parse_body(content: [*:0]const u8) ?[*:0]u8 {
     const slice = mem.span(content);
 
     // No front matter — return entire content.
@@ -196,7 +196,7 @@ export fn gossamer_ssg_parse_body(content: [*:0]const u8) ?[*:0]u8 {
 ///   Lines starting with ``` are treated as <pre><code> blocks
 ///
 /// FFI for: gossamer_ssg_md_to_html(markdown: String): String
-export fn gossamer_ssg_md_to_html(markdown: [*:0]const u8) ?[*:0]u8 {
+pub export fn gossamer_ssg_md_to_html(markdown: [*:0]const u8) ?[*:0]u8 {
     const input = mem.span(markdown);
     var out: ByteList = .empty;
     defer out.deinit(alloc);
@@ -384,7 +384,7 @@ fn appendInlineMarkdown(out: *ByteList, text: []const u8) !void {
 /// newline-separated "key=value" string.
 ///
 /// FFI for: gossamer_ssg_template_substitute(template: String, vars: String): String
-export fn gossamer_ssg_template_substitute(
+pub export fn gossamer_ssg_template_substitute(
     template: [*:0]const u8,
     vars: [*:0]const u8,
 ) ?[*:0]u8 {
@@ -453,7 +453,7 @@ export fn gossamer_ssg_template_substitute(
 /// Returns 0 on success, 1 on failure.
 ///
 /// FFI for: gossamer_ssg_build_site(contentDir: String, templateFile: String, outDir: String): I32
-export fn gossamer_ssg_build_site(
+pub export fn gossamer_ssg_build_site(
     content_dir: [*:0]const u8,
     template_file: [*:0]const u8,
     out_dir: [*:0]const u8,

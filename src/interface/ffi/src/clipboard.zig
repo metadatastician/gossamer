@@ -150,7 +150,7 @@ const backend = switch (builtin.os.tag) {
 /// Null-safety: returns -1 (invalid_param) if buf is null or buf_len is 0.
 ///
 /// Matches ABI: Gossamer.ABI.Types.ResourceKind.Clipboard (kind = 3)
-export fn gossamer_clipboard_read(buf: ?[*]u8, buf_len: usize) callconv(.c) c_int {
+pub export fn gossamer_clipboard_read(buf: ?[*]u8, buf_len: usize) callconv(.c) c_int {
     if (buf == null or buf_len == 0) {
         setError("Clipboard read: null buffer or zero length");
         return -1;
@@ -167,7 +167,7 @@ export fn gossamer_clipboard_read(buf: ?[*]u8, buf_len: usize) callconv(.c) c_in
 /// Null-safety: returns invalid_param if text is null.
 ///
 /// Matches ABI: Gossamer.ABI.Types.ResourceKind.Clipboard (kind = 3)
-export fn gossamer_clipboard_write(text: ?[*:0]const u8) callconv(.c) c_int {
+pub export fn gossamer_clipboard_write(text: ?[*:0]const u8) callconv(.c) c_int {
     if (text == null) {
         setError("Clipboard write: null text pointer");
         return @intFromEnum(Result.invalid_param);
