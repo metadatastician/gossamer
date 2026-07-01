@@ -19,15 +19,25 @@ const std = @import("std");
 const testing = std.testing;
 
 // Primary module — all main.zig exports accessible via gossamer.*
-const gossamer = @import("../src/main.zig");
+// Imported as the named "gossamer" module (wired in build.zig): Zig 0.15
+// forbids a test/-rooted module from importing ../src/*.zig directly.
+const gossamer = @import("gossamer");
 const Result = gossamer.Result;
 
-// Sub-module imports — functions exported from these modules are reachable
-// through the shared library; for test builds we import directly.
-const csp_mod = @import("../src/csp.zig");
-const fs_mod = @import("../src/filesystem.zig");
-const ssg_mod = @import("../src/ssg.zig");
-const groove_mod = @import("../src/groove.zig");
+// Sub-modules reached through the gossamer module's re-exports (main.zig).
+const csp_mod = gossamer.csp;
+const fs_mod = gossamer.filesystem;
+const ssg_mod = gossamer.ssg;
+const groove_mod = gossamer.groove;
+
+// Test helper: a byte-zeroed GossamerHandle (invalid — null internal pointer).
+// Zig 0.15's std.mem.zeroes rejects the struct's non-nullable pointer field, so
+// we zero the raw bytes instead — same intent: a handle that must be rejected.
+fn zeroedHandle() gossamer.GossamerHandle {
+    var h: gossamer.GossamerHandle = undefined;
+    @memset(std.mem.asBytes(&h), 0);
+    return h;
+}
 
 //==============================================================================
 // Result Code Alignment Tests
@@ -48,10 +58,12 @@ test "result codes match Idris2 ABI (Types.idr resultToInt)" {
     try testing.expectEqual(@as(c_int, 10), @intFromEnum(Result.capability_denied));
 }
 
-test "result enum has exactly 11 variants" {
-    // Ensures no accidental additions/removals without updating Types.idr
+test "result enum has exactly 12 variants" {
+    // Ensures no accidental additions/removals without updating Types.idr.
+    // 12 variants (0..=11): ok..guard_locked — matches Types.idr resultToInt,
+    // verified with idris2 --typecheck of the ABI package.
     const fields = @typeInfo(Result).@"enum".fields;
-    try testing.expectEqual(@as(usize, 11), fields.len);
+    try testing.expectEqual(@as(usize, 12), fields.len);
 }
 
 //==============================================================================
@@ -179,7 +191,7 @@ test "cap_grant returns non-zero token for valid resource kinds" {
 
 test "cap_grant rejects invalid resource kind" {
     // Resource kinds > 5 are invalid (Types.idr has 6 constructors: 0-5)
-    const CAP_ERROR = @import("../src/main.zig").CAP_ERROR;
+    const CAP_ERROR = gossamer.CAP_ERROR;
     try testing.expectEqual(CAP_ERROR, gossamer.gossamer_cap_grant(6));
     try testing.expectEqual(CAP_ERROR, gossamer.gossamer_cap_grant(255));
 }
@@ -254,22 +266,24 @@ test "last_error contains meaningful message" {
 //==============================================================================
 
 test "tray_create returns 0 (not yet implemented)" {
-    const tray = gossamer.gossamer_tray_create("Test");
+    const tray = gossamer.tray.gossamer_tray_create("Test");
     try testing.expectEqual(@as(u64, 0), tray);
 }
 
-test "notify returns error (not yet implemented)" {
-    const result = gossamer.gossamer_notify("Title", "Body");
-    try testing.expectEqual(Result.@"error", result);
+test "notify returns error when no notification daemon is reachable" {
+    // gossamer_notify returns u32 (0 = ok, 1 = error). In a headless test
+    // environment (no notify-send / notification portal) it returns error.
+    const result = gossamer.tray.gossamer_notify("Title", "Body");
+    try testing.expectEqual(@as(u32, 1), result); // 1 = Result.@"error"
 }
 
 test "dialog_open returns 0 (not yet implemented)" {
-    const dialog = gossamer.gossamer_dialog_open("Open", "*");
+    const dialog = gossamer.dialog.gossamer_dialog_open("Open", "*");
     try testing.expectEqual(@as(u64, 0), dialog);
 }
 
 test "dialog_save returns 0 (not yet implemented)" {
-    const dialog = gossamer.gossamer_dialog_save("Save", "*");
+    const dialog = gossamer.dialog.gossamer_dialog_save("Save", "*");
     try testing.expectEqual(@as(u64, 0), dialog);
 }
 
@@ -278,18 +292,18 @@ test "dialog_save returns 0 (not yet implemented)" {
 //==============================================================================
 
 test "clipboard_write rejects null pointer" {
-    const result = gossamer.gossamer_clipboard_write(null);
+    const result = gossamer.clipboard.gossamer_clipboard_write(null);
     try testing.expectEqual(@as(c_int, @intFromEnum(Result.invalid_param)), result);
 }
 
 test "clipboard_read rejects null buffer" {
-    const result = gossamer.gossamer_clipboard_read(null, 256);
+    const result = gossamer.clipboard.gossamer_clipboard_read(null, 256);
     try testing.expectEqual(@as(c_int, -1), result);
 }
 
 test "clipboard_read rejects zero length" {
     var buf: [1]u8 = undefined;
-    const result = gossamer.gossamer_clipboard_read(&buf, 0);
+    const result = gossamer.clipboard.gossamer_clipboard_read(&buf, 0);
     try testing.expectEqual(@as(c_int, -1), result);
 }
 
@@ -298,7 +312,7 @@ test "clipboard_read with valid buffer and no display returns -1 or 0+" {
     // With a display, we get 0 (empty clipboard) or >0 (clipboard has text).
     // Either way it must not crash.
     var buf: [256]u8 = undefined;
-    const result = gossamer.gossamer_clipboard_read(&buf, buf.len);
+    const result = gossamer.clipboard.gossamer_clipboard_read(&buf, buf.len);
     try testing.expect(result >= -1);
 }
 
@@ -306,7 +320,7 @@ test "clipboard_write with valid text and no display returns error or ok" {
     // In headless CI, GTK init will fail so we get error.
     // With a display, we get ok.
     // Either way it must not crash.
-    const result = gossamer.gossamer_clipboard_write("gossamer clipboard test");
+    const result = gossamer.clipboard.gossamer_clipboard_write("gossamer clipboard test");
     try testing.expect(result == @intFromEnum(Result.ok) or result == @intFromEnum(Result.@"error"));
 }
 
@@ -349,7 +363,7 @@ test "guard_set invalid mode on fake handle returns invalid_param" {
     // touching platform state, so invalid_param is returned without a crash.
     // We pass a raw stack address; the handle check calls ptrFromU64 which only
     // verifies non-zero, so we must supply a real initialized struct.
-    var fake_handle = std.mem.zeroes(gossamer.GossamerHandle);
+    var fake_handle = zeroedHandle();
     fake_handle.initialized = true;
     fake_handle.closed = false;
     fake_handle.guard = .free;
@@ -386,7 +400,7 @@ test "registry_count returns a value in 0..64" {
 
 test "registry_count monotonicity: add increases count" {
     // Create a fake initialized handle to add to the registry
-    var fake_handle = std.mem.zeroes(gossamer.GossamerHandle);
+    var fake_handle = zeroedHandle();
     fake_handle.initialized = true;
     fake_handle.closed = false;
     fake_handle.allocator = std.heap.c_allocator;
@@ -585,7 +599,7 @@ test "transmute mode ordinals match ABI spec" {
 
 test "transmute with invalid mode on fake handle returns invalid_param" {
     // Supply a real initialized handle struct to trigger the mode validation path
-    var fake_handle = std.mem.zeroes(gossamer.GossamerHandle);
+    var fake_handle = zeroedHandle();
     fake_handle.initialized = true;
     fake_handle.closed = false;
     fake_handle.allocator = std.heap.c_allocator;
@@ -623,7 +637,7 @@ test "activity level ordinals match ABI spec" {
 }
 
 test "activity_set with invalid level on fake handle returns invalid_param" {
-    var fake_handle = std.mem.zeroes(gossamer.GossamerHandle);
+    var fake_handle = zeroedHandle();
     fake_handle.initialized = true;
     fake_handle.closed = false;
     fake_handle.allocator = std.heap.c_allocator;
@@ -1508,7 +1522,7 @@ test "boundary: registry count never exceeds 64 after multiple add/remove cycles
     // Register and deregister multiple fake handles in a loop
     var handles: [8]gossamer.GossamerHandle = undefined;
     for (&handles) |*h| {
-        h.* = std.mem.zeroes(gossamer.GossamerHandle);
+        h.* = zeroedHandle();
         h.initialized = true;
         h.closed = false;
         h.allocator = std.heap.c_allocator;
@@ -1536,7 +1550,7 @@ test "boundary: registry count never exceeds 64 after multiple add/remove cycles
 // Plugin System Tests (plugin.zig)
 //==============================================================================
 
-const plugin_mod = @import("../src/plugin.zig");
+const plugin_mod = gossamer.plugin;
 
 test "plugin_load with null handle returns 0" {
     plugin_mod.resetForTesting();
@@ -1555,7 +1569,7 @@ test "plugin_load with nonexistent library path returns 0" {
     plugin_mod.resetForTesting();
 
     // Create a stack-allocated fake handle with initialized=true, closed=false
-    var fake_handle = std.mem.zeroes(gossamer.GossamerHandle);
+    var fake_handle = zeroedHandle();
     fake_handle.initialized = true;
     fake_handle.closed = false;
     fake_handle.allocator = std.heap.c_allocator;

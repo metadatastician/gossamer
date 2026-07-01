@@ -170,6 +170,34 @@ pub fn build(b: *std.Build) void {
     const display_test_step = b.step("test-display", "Run Gossamer display integration tests (requires X11/Wayland/Xvfb)");
     display_test_step.dependOn(&run_display_tests.step);
 
+    // --- FFI/ABI integration tests (headless; no display server) ---
+    // test/integration_test.zig exercises the exported C API surface (result
+    // codes, capability lifecycle, IPC, groove, filesystem, ssg, plugin) against
+    // the Idris2 ABI. It imports the `gossamer` module (main.zig re-exports the
+    // submodules) rather than ../src/*.zig, which Zig 0.15 forbids from a
+    // test/-rooted module. GTK/WebKit dev libs are needed to compile main.zig,
+    // but no display server is required to run.
+    //   zig build test-integration
+    const integration_test_module = b.createModule(.{
+        .root_source_file = b.path("test/integration_test.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .imports = &.{
+            .{ .name = "gossamer", .module = gossamer_module },
+        },
+    });
+
+    linkPlatformLibs(integration_test_module, os, abi);
+
+    const integration_tests = b.addTest(.{
+        .root_module = integration_test_module,
+    });
+
+    const run_integration_tests = b.addRunArtifact(integration_tests);
+    const integration_test_step = b.step("test-integration", "Run Gossamer FFI/ABI integration tests (headless)");
+    integration_test_step.dependOn(&run_integration_tests.step);
+
     // --- Android component host logic tests (host-runnable; pure Zig, no NDK) ---
     // The JNI binding and the Service/Receiver/Widget hosts are pure Zig, so
     // their registry/dispatch/JSON/directive logic runs on the host via

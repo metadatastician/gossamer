@@ -13,16 +13,20 @@ on:
     branches: ['**']
     paths:
       - 'src/interface/**'
+      - 'tests/idris2/**'
       - 'gossamer-abi.ipkg'
       - 'gossamer-groove.ipkg'
+      - 'gossamer-abi-tests.ipkg'
       - 'scripts/check-abi-decoupling.sh'
       - '.github/workflows/abi-typecheck.yml'
   push:
     branches: [main, master]
     paths:
       - 'src/interface/**'
+      - 'tests/idris2/**'
       - 'gossamer-abi.ipkg'
       - 'gossamer-groove.ipkg'
+      - 'gossamer-abi-tests.ipkg'
       - 'scripts/check-abi-decoupling.sh'
       - '.github/workflows/abi-typecheck.yml'
 
@@ -47,7 +51,7 @@ jobs:
         run: ./scripts/check-abi-decoupling.sh
 
   abi-typecheck:
-    name: idris2 --typecheck (shell + groove)
+    name: idris2 typecheck + test (shell + groove)
     runs-on: ubuntu-latest
     needs: abi-structure
     steps:
@@ -74,3 +78,8 @@ jobs:
 
       - name: Typecheck the groove protocol package (depends on the shell)
         run: idris2 --typecheck gossamer-groove.ipkg
+
+      - name: Build & run the ABI runtime test suite
+        run: |
+          idris2 --build gossamer-abi-tests.ipkg
+          ./build/exec/gossamer-abi-tests

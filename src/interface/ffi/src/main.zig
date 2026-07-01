@@ -17,6 +17,22 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+// Submodule re-exports — expose the FFI submodules so the integration test
+// suite (test/integration_test.zig) can reach their exported functions through
+// the `gossamer` module. Zig 0.15 forbids a test/-rooted module from importing
+// ../src/*.zig directly, so the tests import "gossamer" and read e.g.
+// `gossamer.groove`. These also force each submodule's `export fn`s into the
+// shared library (the sibling `comptime { _ = @import("…"); }` guards below are
+// now redundant but kept for locality).
+pub const ssg = @import("ssg.zig");
+pub const filesystem = @import("filesystem.zig");
+pub const groove = @import("groove.zig");
+pub const csp = @import("csp.zig");
+pub const plugin = @import("plugin.zig");
+pub const clipboard = @import("clipboard.zig");
+pub const dialog = @import("dialog.zig");
+pub const tray = @import("tray.zig");
+
 extern fn gossamer_tray_clear_window() void;
 
 // Static Site Generator FFI functions (gossamer_ssg_*).
@@ -466,7 +482,7 @@ fn createHandle(
 /// Must be called from the main/UI thread.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__create
-export fn gossamer_create(
+pub export fn gossamer_create(
     title: [*:0]const u8,
     width: u32,
     height: u32,
@@ -483,7 +499,7 @@ export fn gossamer_create(
 /// visible uses 0/1 to control whether the window starts hidden.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__createEx
-export fn gossamer_create_ex(
+pub export fn gossamer_create_ex(
     title: [*:0]const u8,
     width: u32,
     height: u32,
@@ -514,7 +530,7 @@ export fn gossamer_create_ex(
 /// Load HTML content into the webview.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__loadHTML
-export fn gossamer_load_html(handle_ptr: u64, html: [*:0]const u8) Result {
+pub export fn gossamer_load_html(handle_ptr: u64, html: [*:0]const u8) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
@@ -537,7 +553,7 @@ export fn gossamer_load_html(handle_ptr: u64, html: [*:0]const u8) Result {
 /// Navigate the webview to a URL.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__navigate
-export fn gossamer_navigate(handle_ptr: u64, url: [*:0]const u8) Result {
+pub export fn gossamer_navigate(handle_ptr: u64, url: [*:0]const u8) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
@@ -560,7 +576,7 @@ export fn gossamer_navigate(handle_ptr: u64, url: [*:0]const u8) Result {
 /// Evaluate JavaScript in the webview context.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__eval
-export fn gossamer_eval(handle_ptr: u64, js: [*:0]const u8) Result {
+pub export fn gossamer_eval(handle_ptr: u64, js: [*:0]const u8) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
@@ -583,7 +599,7 @@ export fn gossamer_eval(handle_ptr: u64, js: [*:0]const u8) Result {
 /// Set the window title.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__setTitle
-export fn gossamer_set_title(handle_ptr: u64, title: [*:0]const u8) Result {
+pub export fn gossamer_set_title(handle_ptr: u64, title: [*:0]const u8) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
@@ -607,7 +623,7 @@ export fn gossamer_set_title(handle_ptr: u64, title: [*:0]const u8) Result {
 /// Rejected when guard mode is locked or read_only.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__resize
-export fn gossamer_resize(handle_ptr: u64, width: u32, height: u32) Result {
+pub export fn gossamer_resize(handle_ptr: u64, width: u32, height: u32) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
@@ -634,7 +650,7 @@ export fn gossamer_resize(handle_ptr: u64, width: u32, height: u32) Result {
 /// After this returns, the handle is CONSUMED — the webview is destroyed.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__run
-export fn gossamer_run(handle_ptr: u64) void {
+pub export fn gossamer_run(handle_ptr: u64) void {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse return;
 
@@ -703,7 +719,7 @@ pub export fn gossamer_hide(handle_ptr: u64) Result {
 /// Rejected when guard mode is locked or read_only.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__minimize
-export fn gossamer_minimize(handle_ptr: u64) Result {
+pub export fn gossamer_minimize(handle_ptr: u64) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
@@ -731,7 +747,7 @@ export fn gossamer_minimize(handle_ptr: u64) Result {
 /// Rejected when guard mode is locked or read_only.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__maximize
-export fn gossamer_maximize(handle_ptr: u64) Result {
+pub export fn gossamer_maximize(handle_ptr: u64) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
@@ -792,7 +808,7 @@ pub export fn gossamer_restore(handle_ptr: u64) Result {
 /// owner calls destroy().
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__requestClose
-export fn gossamer_request_close(handle_ptr: u64) Result {
+pub export fn gossamer_request_close(handle_ptr: u64) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
@@ -823,7 +839,7 @@ export fn gossamer_request_close(handle_ptr: u64) Result {
 /// Alternative to gossamer_run for cases where you need teardown only.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__destroy
-export fn gossamer_destroy(handle_ptr: u64) void {
+pub export fn gossamer_destroy(handle_ptr: u64) void {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse return;
     cleanup(handle);
@@ -877,7 +893,7 @@ const READONLY_OVERLAY_REMOVE =
 ///   any → same:       no-op (returns ok)
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__guardSet
-export fn gossamer_guard_set(handle_ptr: u64, mode: c_int) Result {
+pub export fn gossamer_guard_set(handle_ptr: u64, mode: c_int) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
@@ -927,7 +943,7 @@ export fn gossamer_guard_set(handle_ptr: u64, mode: c_int) Result {
 /// Returns: 0=free, 1=locked, 2=read_only, or -1 on error.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__guardGet
-export fn gossamer_guard_get(handle_ptr: u64) c_int {
+pub export fn gossamer_guard_get(handle_ptr: u64) c_int {
     const handle = ptrFromU64(handle_ptr) orelse return -1;
     return @intFromEnum(handle.guard);
 }
@@ -948,7 +964,7 @@ var next_window_id: u32 = 1;
 
 /// Register a handle in the global window registry.
 /// Returns the assigned window ID (>0), or 0 on failure.
-export fn gossamer_registry_add(handle_ptr: u64) u32 {
+pub export fn gossamer_registry_add(handle_ptr: u64) u32 {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null handle");
@@ -974,7 +990,7 @@ export fn gossamer_registry_add(handle_ptr: u64) u32 {
 }
 
 /// Remove a handle from the registry.
-export fn gossamer_registry_remove(handle_ptr: u64) void {
+pub export fn gossamer_registry_remove(handle_ptr: u64) void {
     const handle = ptrFromU64(handle_ptr) orelse return;
 
     registry_mutex.lock();
@@ -990,7 +1006,7 @@ export fn gossamer_registry_remove(handle_ptr: u64) void {
 }
 
 /// Count of live registered windows.
-export fn gossamer_registry_count() u32 {
+pub export fn gossamer_registry_count() u32 {
     registry_mutex.lock();
     defer registry_mutex.unlock();
 
@@ -1040,7 +1056,7 @@ var next_group_id: u32 = 1;
 
 /// Create a new window group with an optional label.
 /// Returns group ID (>0), or 0 on failure.
-export fn gossamer_group_create(label: ?[*:0]const u8) u32 {
+pub export fn gossamer_group_create(label: ?[*:0]const u8) u32 {
     clearError();
     groups_mutex.lock();
     defer groups_mutex.unlock();
@@ -1068,7 +1084,7 @@ export fn gossamer_group_create(label: ?[*:0]const u8) u32 {
 }
 
 /// Add a window (by ID) to a group.
-export fn gossamer_group_add(group_id: u32, window_id: u32) Result {
+pub export fn gossamer_group_add(group_id: u32, window_id: u32) Result {
     clearError();
     groups_mutex.lock();
     defer groups_mutex.unlock();
@@ -1100,7 +1116,7 @@ export fn gossamer_group_add(group_id: u32, window_id: u32) Result {
 }
 
 /// Remove a window from a group.
-export fn gossamer_group_remove(group_id: u32, window_id: u32) Result {
+pub export fn gossamer_group_remove(group_id: u32, window_id: u32) Result {
     clearError();
     groups_mutex.lock();
     defer groups_mutex.unlock();
@@ -1130,7 +1146,7 @@ export fn gossamer_group_remove(group_id: u32, window_id: u32) Result {
 }
 
 /// Destroy a group (does not destroy the windows, just the grouping).
-export fn gossamer_group_destroy(group_id: u32) void {
+pub export fn gossamer_group_destroy(group_id: u32) void {
     groups_mutex.lock();
     defer groups_mutex.unlock();
 
@@ -1147,7 +1163,7 @@ export fn gossamer_group_destroy(group_id: u32) void {
 
 /// Apply an operation to all windows in a group.
 /// op: 0=minimize, 1=maximize, 2=restore, 3=show, 4=hide, 5=close
-export fn gossamer_group_apply(group_id: u32, op: u32) Result {
+pub export fn gossamer_group_apply(group_id: u32, op: u32) Result {
     clearError();
     groups_mutex.lock();
     const g = findGroup(group_id) orelse {
@@ -1192,7 +1208,7 @@ fn findGroup(group_id: u32) ?*WindowGroup {
 //==============================================================================
 
 /// Raise the window to the front of the z-order (pull to front).
-export fn gossamer_raise(handle_ptr: u64) Result {
+pub export fn gossamer_raise(handle_ptr: u64) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
@@ -1213,7 +1229,7 @@ export fn gossamer_raise(handle_ptr: u64) Result {
 }
 
 /// Lower the window to the bottom of the z-order (push to back).
-export fn gossamer_lower(handle_ptr: u64) Result {
+pub export fn gossamer_lower(handle_ptr: u64) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
@@ -1256,7 +1272,7 @@ export fn gossamer_lower(handle_ptr: u64) Result {
 // Delivered via __gossamer_emit() in each target webview's JS context.
 
 /// Broadcast an event to all registered windows.
-export fn gossamer_broadcast(event_name: [*:0]const u8, payload_json: [*:0]const u8) u32 {
+pub export fn gossamer_broadcast(event_name: [*:0]const u8, payload_json: [*:0]const u8) u32 {
     registry_mutex.lock();
     defer registry_mutex.unlock();
 
@@ -1277,7 +1293,7 @@ export fn gossamer_broadcast(event_name: [*:0]const u8, payload_json: [*:0]const
 }
 
 /// Send an event to a specific window by its registry ID.
-export fn gossamer_send_to(target_id: u32, event_name: [*:0]const u8, payload_json: [*:0]const u8) Result {
+pub export fn gossamer_send_to(target_id: u32, event_name: [*:0]const u8, payload_json: [*:0]const u8) Result {
     clearError();
     registry_mutex.lock();
     const handle = registryLookup(target_id);
@@ -1319,7 +1335,7 @@ fn emitToHandle(handle: *GossamerHandle, event: []const u8, payload: []const u8)
 
 /// Auto-arrange all registered windows using the given strategy.
 /// strategy: 0=tile_h, 1=tile_v, 2=cascade, 3=grid
-export fn gossamer_arrange(strategy: u32) Result {
+pub export fn gossamer_arrange(strategy: u32) Result {
     clearError();
     registry_mutex.lock();
 
@@ -1439,7 +1455,7 @@ fn getTransmuteSlot(handle: *GossamerHandle) ?usize {
 ///   tui/cli → gui:      Restore webview, reload last HTML
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__transmute
-export fn gossamer_transmute(handle_ptr: u64, mode: c_int) Result {
+pub export fn gossamer_transmute(handle_ptr: u64, mode: c_int) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null handle");
@@ -1609,7 +1625,7 @@ export fn gossamer_transmute(handle_ptr: u64, mode: c_int) Result {
 }
 
 /// Get the current transmute mode for a window.
-export fn gossamer_transmute_get(handle_ptr: u64) c_int {
+pub export fn gossamer_transmute_get(handle_ptr: u64) c_int {
     const handle = ptrFromU64(handle_ptr) orelse return -1;
     const slot = getTransmuteSlot(handle) orelse return -1;
     return @intFromEnum(transmute_modes[slot]);
@@ -1641,7 +1657,7 @@ var activity_levels: [MAX_WINDOWS]ActivityLevel = [_]ActivityLevel{.realtime} **
 /// Set the activity level for a window.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__activitySet
-export fn gossamer_activity_set(handle_ptr: u64, level: c_int) Result {
+pub export fn gossamer_activity_set(handle_ptr: u64, level: c_int) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null handle");
@@ -1720,7 +1736,7 @@ export fn gossamer_activity_set(handle_ptr: u64, level: c_int) Result {
 }
 
 /// Get the current activity level for a window.
-export fn gossamer_activity_get(handle_ptr: u64) c_int {
+pub export fn gossamer_activity_get(handle_ptr: u64) c_int {
     const handle = ptrFromU64(handle_ptr) orelse return -1;
     const slot = getTransmuteSlot(handle) orelse return -1;
     return @intFromEnum(activity_levels[slot]);
@@ -1739,7 +1755,7 @@ export fn gossamer_activity_get(handle_ptr: u64) c_int {
 // Toggle via gossamer_debug_toggle() or Ctrl+Shift+D from JS.
 
 /// Inject the debug drawer into the webview.
-export fn gossamer_debug_open(handle_ptr: u64) Result {
+pub export fn gossamer_debug_open(handle_ptr: u64) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null handle");
@@ -1794,7 +1810,7 @@ export fn gossamer_debug_open(handle_ptr: u64) Result {
 }
 
 /// Close the debug drawer.
-export fn gossamer_debug_close(handle_ptr: u64) Result {
+pub export fn gossamer_debug_close(handle_ptr: u64) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null handle");
@@ -1815,7 +1831,7 @@ export fn gossamer_debug_close(handle_ptr: u64) Result {
 }
 
 /// Toggle the debug drawer.
-export fn gossamer_debug_toggle(handle_ptr: u64) Result {
+pub export fn gossamer_debug_toggle(handle_ptr: u64) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null handle");
@@ -1871,7 +1887,7 @@ var groove_connections: [MAX_GROOVE_CONNECTIONS]GrooveConnection = [_]GrooveConn
 /// Establish a typed groove connection.
 /// type_: 0=hard, 1=soft
 /// ttl: for soft grooves, auto-disconnect after N seconds (0=manual)
-export fn gossamer_groove_connect_typed(target_id: u32, groove_type: c_int, ttl: u32) Result {
+pub export fn gossamer_groove_connect_typed(target_id: u32, groove_type: c_int, ttl: u32) Result {
     clearError();
     const gt = std.meta.intToEnum(GrooveType, groove_type) catch {
         setError("Invalid groove type (0=hard, 1=soft)");
@@ -1895,7 +1911,7 @@ export fn gossamer_groove_connect_typed(target_id: u32, groove_type: c_int, ttl:
 }
 
 /// Disconnect a typed groove. For soft grooves, this wipes all shared state.
-export fn gossamer_groove_disconnect_typed(target_id: u32) Result {
+pub export fn gossamer_groove_disconnect_typed(target_id: u32) Result {
     clearError();
     for (&groove_connections) |*gc| {
         if (gc.active and gc.target_id == target_id) {
@@ -1913,7 +1929,7 @@ export fn gossamer_groove_disconnect_typed(target_id: u32) Result {
 
 /// Query groove type for a connected target.
 /// Returns: 0=hard, 1=soft, -1=not connected
-export fn gossamer_groove_query_type(target_id: u32) c_int {
+pub export fn gossamer_groove_query_type(target_id: u32) c_int {
     for (groove_connections) |gc| {
         if (gc.active and gc.target_id == target_id) {
             return @intFromEnum(gc.groove_type);
@@ -1936,7 +1952,7 @@ export fn gossamer_groove_query_type(target_id: u32) c_int {
 /// Dock a groove service into the window frame.
 /// url: the HTTP endpoint to load in the dock panel (e.g. "http://localhost:6473/.well-known/groove")
 /// width: width of the dock panel in pixels (0 = default 300)
-export fn gossamer_groove_dock(handle_ptr: u64, url: [*:0]const u8, width: u32) Result {
+pub export fn gossamer_groove_dock(handle_ptr: u64, url: [*:0]const u8, width: u32) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null handle");
@@ -1960,7 +1976,7 @@ export fn gossamer_groove_dock(handle_ptr: u64, url: [*:0]const u8, width: u32) 
 }
 
 /// Remove the docked groove panel.
-export fn gossamer_groove_undock(handle_ptr: u64) Result {
+pub export fn gossamer_groove_undock(handle_ptr: u64) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null handle");
@@ -1986,7 +2002,7 @@ export fn gossamer_groove_undock(handle_ptr: u64) Result {
 /// Returns a pointer to ChannelHandle, or 0 on failure.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__channelOpen
-export fn gossamer_channel_open(handle_ptr: u64) u64 {
+pub export fn gossamer_channel_open(handle_ptr: u64) u64 {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
@@ -2134,7 +2150,7 @@ export fn gossamer_channel_open(handle_ptr: u64) u64 {
 /// the JSON-encoded payload and its return value is sent back to JS.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__channelBind
-export fn gossamer_channel_bind(
+pub export fn gossamer_channel_bind(
     channel_ptr: u64,
     name: [*:0]const u8,
     callback: ?*const fn ([*:0]const u8, ?*anyopaque) callconv(.c) [*:0]const u8,
@@ -2199,7 +2215,7 @@ export fn gossamer_channel_bind(
 /// Maximum inflight async calls: 256 (MAX_INFLIGHT_ASYNC).
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__channelBindAsync
-export fn gossamer_channel_bind_async(
+pub export fn gossamer_channel_bind_async(
     channel_ptr: u64,
     name: [*:0]const u8,
     callback: ?*const fn ([*:0]const u8, ?*anyopaque) callconv(.c) [*:0]const u8,
@@ -2257,7 +2273,7 @@ export fn gossamer_channel_bind_async(
 /// Close the IPC channel. Consumes the channel handle.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__channelClose
-export fn gossamer_channel_close(channel_ptr: u64) void {
+pub export fn gossamer_channel_close(channel_ptr: u64) void {
     clearError();
     const raw_ptr = @as(?*ChannelHandle, @ptrFromInt(@as(usize, @intCast(channel_ptr)))) orelse return;
     raw_ptr.open = false;
@@ -2266,7 +2282,7 @@ export fn gossamer_channel_close(channel_ptr: u64) void {
 
 /// Query the number of currently inflight async IPC calls.
 /// Returns 0..256. Useful for diagnostics and back-pressure monitoring.
-export fn gossamer_async_inflight_count() u32 {
+pub export fn gossamer_async_inflight_count() u32 {
     return async_ipc.inflightCount();
 }
 
@@ -2445,7 +2461,7 @@ pub export fn gossamer_cap_resource_kind(token: u64) u32 {
 /// Revoke a capability token. Consumes it — future checks will fail.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__capRevoke
-export fn gossamer_cap_revoke(token: u64) void {
+pub export fn gossamer_cap_revoke(token: u64) void {
     clearError();
     if (token == 0) return;
 
@@ -2526,7 +2542,7 @@ threadlocal var error_buf: [ERROR_BUF_SIZE]u8 = undefined;
 /// function on this thread. Callers must copy if they need to keep it.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__lastError
-export fn gossamer_last_error() ?[*:0]const u8 {
+pub export fn gossamer_last_error() ?[*:0]const u8 {
     const err = last_error orelse return null;
     // Clear immediately — consume-on-read prevents stale errors
     last_error = null;
@@ -2543,12 +2559,12 @@ export fn gossamer_last_error() ?[*:0]const u8 {
 //==============================================================================
 
 /// Get the library version string.
-export fn gossamer_version() [*:0]const u8 {
+pub export fn gossamer_version() [*:0]const u8 {
     return VERSION;
 }
 
 /// Get build information string.
-export fn gossamer_build_info() [*:0]const u8 {
+pub export fn gossamer_build_info() [*:0]const u8 {
     return BUILD_INFO;
 }
 
@@ -2562,7 +2578,7 @@ export fn gossamer_build_info() [*:0]const u8 {
 /// Platform identifier string.
 /// Returns one of: "linux", "macos", "windows", "freebsd", "openbsd",
 /// "netbsd", "ios", or "unknown".
-export fn gossamer_platform() [*:0]const u8 {
+pub export fn gossamer_platform() [*:0]const u8 {
     return switch (builtin.os.tag) {
         .linux => "linux",
         .macos => "macos",
@@ -2577,7 +2593,7 @@ export fn gossamer_platform() [*:0]const u8 {
 
 /// CPU architecture string.
 /// Returns one of: "x86_64", "aarch64", "riscv64", "wasm32", or "unknown".
-export fn gossamer_arch() [*:0]const u8 {
+pub export fn gossamer_arch() [*:0]const u8 {
     return switch (builtin.cpu.arch) {
         .x86_64 => "x86_64",
         .aarch64 => "aarch64",
@@ -2589,7 +2605,7 @@ export fn gossamer_arch() [*:0]const u8 {
 
 /// Webview engine name for the current platform.
 /// Returns one of: "webkitgtk", "wkwebview", "webview2", or "none".
-export fn gossamer_webview_engine() [*:0]const u8 {
+pub export fn gossamer_webview_engine() [*:0]const u8 {
     return switch (builtin.os.tag) {
         .linux, .freebsd, .openbsd, .netbsd => "webkitgtk",
         .macos, .ios => "wkwebview",
@@ -2600,7 +2616,7 @@ export fn gossamer_webview_engine() [*:0]const u8 {
 
 /// Whether the current platform is a desktop platform (not mobile/embedded).
 /// Returns 1 for desktop, 0 for mobile/other.
-export fn gossamer_is_desktop() u8 {
+pub export fn gossamer_is_desktop() u8 {
     return switch (builtin.os.tag) {
         .linux, .macos, .windows, .freebsd, .openbsd, .netbsd => 1,
         else => 0,
@@ -2643,7 +2659,7 @@ const PLATFORM_JSON = blk: {
         "\",\"desktop\":" ++ desktop ++ "}";
 };
 
-export fn gossamer_platform_json() [*:0]const u8 {
+pub export fn gossamer_platform_json() [*:0]const u8 {
     return PLATFORM_JSON;
 }
 

@@ -211,7 +211,7 @@ fn runFileChooserDialog(
 ///   gossamer_dialog_free_path), or 0 if the user cancelled.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__dialogOpen
-export fn gossamer_dialog_open(title: [*:0]const u8, filters: [*:0]const u8) u64 {
+pub export fn gossamer_dialog_open(title: [*:0]const u8, filters: [*:0]const u8) u64 {
     clearError();
     return runFileChooserDialog(
         title,
@@ -232,7 +232,7 @@ export fn gossamer_dialog_open(title: [*:0]const u8, filters: [*:0]const u8) u64
 ///   gossamer_dialog_free_path), or 0 if the user cancelled.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__dialogSave
-export fn gossamer_dialog_save(title: [*:0]const u8, filters: [*:0]const u8) u64 {
+pub export fn gossamer_dialog_save(title: [*:0]const u8, filters: [*:0]const u8) u64 {
     clearError();
     return runFileChooserDialog(
         title,
@@ -252,7 +252,7 @@ export fn gossamer_dialog_save(title: [*:0]const u8, filters: [*:0]const u8) u64
 ///   gossamer_dialog_free_path), or 0 if the user cancelled.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__dialogOpenDirectory
-export fn gossamer_dialog_open_directory(title: [*:0]const u8) u64 {
+pub export fn gossamer_dialog_open_directory(title: [*:0]const u8) u64 {
     clearError();
     return runFileChooserDialog(
         title,
@@ -274,7 +274,7 @@ export fn gossamer_dialog_open_directory(title: [*:0]const u8) u64 {
 ///   Returns 0 if the user cancelled or an error occurred.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__dialogOpenMultiple
-export fn gossamer_dialog_open_multiple(title: [*:0]const u8, filters: [*:0]const u8) u64 {
+pub export fn gossamer_dialog_open_multiple(title: [*:0]const u8, filters: [*:0]const u8) u64 {
     clearError();
     if (!ensureGtkInit()) {
         setError("GTK not initialised — cannot show file dialog");
@@ -376,7 +376,7 @@ export fn gossamer_dialog_open_multiple(title: [*:0]const u8, filters: [*:0]cons
 /// to match — using the wrong free will corrupt the heap.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__dialogFreePath
-export fn gossamer_dialog_free_path(path_ptr: u64) void {
+pub export fn gossamer_dialog_free_path(path_ptr: u64) void {
     if (path_ptr == 0) return;
     std.c.free(@ptrFromInt(@as(usize, @intCast(path_ptr))));
 }
