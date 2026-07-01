@@ -2,7 +2,7 @@
 # AI Assistant Instructions
 
 ## Repository Focus
-- `rsr-template-repo` is treated as a Rhodium Standard Repository; obey the Rhodium policies and keep `.machine_readable/` authoritative.
+- `gossamer` is treated as a Rhodium Standard Repository; obey the Rhodium policies and keep `.machine_readable/` authoritative.
 - All machine-readable content lives under `.machine_readable/` — state files (a2ml), bot directives, and contractiles.
 - Prefer to keep generated files out of source control, and regenerate them with the documented commands before committing.
 
