@@ -21,7 +21,6 @@ module Gossamer.ABI.ResourceCleanup
 import Gossamer.ABI.Types
 import Gossamer.ABI.HandleLinearity
 import Gossamer.ABI.PanelIsolation
-import Gossamer.ABI.Groove
 import Data.So
 import Data.Bits
 import Data.Nat

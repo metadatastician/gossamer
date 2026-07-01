@@ -1,0 +1,43 @@
+-- SPDX-License-Identifier: MPL-2.0
+-- Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+--
+-- Gossamer Groove — Idris2 package for the Groove inter-service protocol proofs.
+--
+-- De-conflated from the shell ABI (gossamer-abi.ipkg): Groove is a separate
+-- concern (type-safe capability discovery between services), so its proofs live
+-- in their own package that DEPENDS ON the shell, never the other way round.
+-- This layering is enforced: no gossamer-abi module imports a groove module.
+--
+-- The canonical sources live in src/interface/abi/ and declare module
+-- Gossamer.ABI.*  ; src/interface/Gossamer/ABI/<M>.idr symlinks to them so the
+-- on-disk path matches the module name (Idris2's requirement).
+--
+-- Build the shell first, then this package:
+--   idris2 --install   gossamer-abi.ipkg
+--   idris2 --typecheck gossamer-groove.ipkg
+
+package gossamer-groove
+
+version = 0.1.0
+
+authors = "Jonathan D.A. Jewell"
+
+brief = "Formally verified proofs for the Groove inter-service discovery protocol"
+
+sourcedir = "src/interface"
+
+depends = base
+        , gossamer-abi
+
+modules = Gossamer.ABI.Groove
+        , Gossamer.ABI.GrooveLinearity
+        , Gossamer.ABI.CapabilityAuthenticity
+        , Gossamer.ABI.GrooveTermination
+
+-- Groove-protocol proof modules relocated here from the shell (gossamer#95):
+--   * Groove                — capability types, manifests, handshake state machine
+--   * GrooveLinearity       — groove-handle linearity (instantiates the shell's
+--                             generic LinearHandle for GrooveHandle)
+--   * CapabilityAuthenticity — no phantom capabilities; attenuation soundness
+--   * GrooveTermination     — handshake termination + no-privilege-escalation
+--                             (discharged in gossamer#36, MERGED)

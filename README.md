@@ -173,13 +173,17 @@ Gossamer’s ABI is written in Idris2 with the proof obligations audited
 in `PROOF-NEEDS.md`. Headline posture (as of `standards#131` close-out,
 2026-05-20):
 
-- **All 13 ABI proof modules build green.** `gossamer-abi.ipkg` `idris2`
-  `0.8.0` `--typecheck` passes 13/13 with `%default` `total`. Modules:
-  `Types`, `Layout`, `Foreign`, `Groove`, `CapabilityAuthenticity`,
-  `IPCDispatch`, `HandleLinearity`, `WindowStateMachine`,
-  `GrooveTermination`, `LayoutStability`, `IPCIntegrity`,
-  `PanelIsolation`, `ResourceCleanup`. Discharge ledger in
-  `PROOF-NEEDS.md`.
+- **All 15 ABI proof modules build green, across two de-conflated
+  packages** (`gossamer#95`). `idris2` `0.8.0` `--typecheck` passes with
+  `%default` `total`.
+  - **Shell** — `gossamer-abi.ipkg` (11, groove-agnostic): `Types`,
+    `Layout`, `Foreign`, `IPCDispatch`, `HandleLinearity`,
+    `WindowStateMachine`, `LayoutStability`, `IPCIntegrity`,
+    `PanelIsolation`, `ResourceCleanup`, `AndroidComponents`.
+  - **Groove** — `gossamer-groove.ipkg` (4, depends on the shell):
+    `Groove`, `GrooveLinearity`, `CapabilityAuthenticity`,
+    `GrooveTermination`. No shell module imports a groove module; the
+    dependency points one way only. Discharge ledger in `PROOF-NEEDS.md`.
 
 <!-- -->
 
