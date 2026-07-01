@@ -30,7 +30,6 @@
 module Gossamer.ABI.IPCDispatch
 
 import Gossamer.ABI.Types
-import Gossamer.ABI.Groove
 
 %default total
 

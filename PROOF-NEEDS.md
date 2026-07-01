@@ -5,7 +5,8 @@
 - `src/interface/abi/Foreign.idr` — FFI declarations
 - `src/interface/abi/Layout.idr` — Memory layout definitions
 - `src/interface/abi/Groove.idr` — Groove protocol type definitions
-- `src/interface/abi/HandleLinearity.idr` — Handle lifecycle and uniqueness proofs
+- `src/interface/abi/GrooveLinearity.idr` — Groove-handle linearity (instantiates the shell's generic `LinearHandle` for `GrooveHandle`) ✅ NEW (gossamer#95)
+- `src/interface/abi/HandleLinearity.idr` — Handle lifecycle and uniqueness proofs (groove-agnostic)
 - `src/interface/abi/IPCIntegrity.idr` — IPC message integrity proofs
 - `src/interface/abi/PanelIsolation.idr` — Panel isolation proofs
 - `src/interface/abi/CapabilityAuthenticity.idr` — Capability authenticity proofs
@@ -14,7 +15,7 @@
 - `src/interface/abi/ResourceCleanup.idr` — Resource cleanup on teardown proofs ✅
 - `src/interface/abi/WindowStateMachine.idr` — Window state machine correctness (GS1) ✅ NEW 2026-04-11
 - `src/interface/abi/IPCDispatch.idr` — IPC handler type safety, 25 handlers (GS2) ✅ NEW 2026-04-11
-- **All 13 ABI modules above are now wired into `gossamer-abi.ipkg` and pass `idris2 0.8.0 --typecheck` cleanly** (2026-05-20, `standards#131` close-out). Prior to `gossamer#22` / `#36` / `#40` / `#41`, several modules were excluded from the ipkg and had never been built — their PROOF-NEEDS ✅ markers reflected an unverified posture; build is now the oracle.
+- **All 15 ABI modules above build green and pass `idris2 0.8.0 --typecheck` cleanly**, now split across two de-conflated packages (`gossamer#95`): the groove-agnostic **shell** `gossamer-abi.ipkg` (11 modules) and the **groove** `gossamer-groove.ipkg` (4: `Groove`, `GrooveLinearity`, `CapabilityAuthenticity`, `GrooveTermination`), which *depends on* the shell. The dependency points one way only — no shell module imports a groove module. The canonical sources live in `src/interface/abi/`; `src/interface/Gossamer/ABI/<M>.idr` are symlinks (a single source of truth, no drift). `scripts/check-abi-decoupling.sh` gates both invariants in CI. Prior to `gossamer#22` / `#36` / `#40` / `#41`, several modules were excluded from the ipkg and had never been built — their PROOF-NEEDS ✅ markers reflected an unverified posture; build is now the oracle.
 - **One class-J axiom**: `Gossamer.ABI.PanelIsolation.stringNotEqCommut` — sanctioned principled assumption over the Idris2 backend primitive `prim__eq_String` (content-symmetry on every supported backend; cannot be derived inside Idris2). `%unsafe`-annotated, `believe_me ()`-bodied, documented at the use site. Same trust posture as boj-server's `Boj.SafetyLemmas.charEqSym` and four sibling axioms over String / Char primitives. See "Class-J axioms (trusted base)" section below.
 - No other `believe_me`, `sorry`, `postulate`, or `assert_total` in the ABI layer.
 - Zig FFI layer in `src/interface/ffi/`

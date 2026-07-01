@@ -15,11 +15,15 @@ version = 0.1.0
 
 authors = "Jonathan D.A. Jewell"
 
-brief = "Formally verified ABI for the Gossamer webview shell and Groove protocol"
+brief = "Formally verified ABI for the Gossamer webview shell (groove-agnostic)"
 
--- Source files live in src/interface/abi/ but declare module Gossamer.ABI.*
--- Symlinks in src/interface/Gossamer/ABI/ map the Idris2 module namespace
--- to the physical file locations.
+-- The canonical source files live in src/interface/abi/ and declare module
+-- Gossamer.ABI.*  Idris2 requires the on-disk path to match the module name,
+-- so src/interface/Gossamer/ABI/<M>.idr is a SYMLINK to ../../abi/<M>.idr —
+-- a single source of truth, no duplicated copies to drift.
+-- The groove protocol layer (Groove, GrooveTermination, CapabilityAuthenticity,
+-- GrooveLinearity) is de-conflated into its own package, gossamer-groove.ipkg,
+-- which depends on this one. No module listed here imports a groove module.
 sourcedir = "src/interface"
 
 depends = base
@@ -27,12 +31,9 @@ depends = base
 modules = Gossamer.ABI.Types
         , Gossamer.ABI.Layout
         , Gossamer.ABI.Foreign
-        , Gossamer.ABI.Groove
-        , Gossamer.ABI.CapabilityAuthenticity
         , Gossamer.ABI.IPCDispatch
         , Gossamer.ABI.HandleLinearity
         , Gossamer.ABI.WindowStateMachine
-        , Gossamer.ABI.GrooveTermination
         , Gossamer.ABI.LayoutStability
         , Gossamer.ABI.IPCIntegrity
         , Gossamer.ABI.PanelIsolation
@@ -41,7 +42,6 @@ modules = Gossamer.ABI.Types
 
 -- All formerly-deferred ABI proof modules from gossamer#22's OWED list
 -- are now wired and `idris2 --typecheck` green:
---   * GrooveTermination  — discharged in gossamer#36 (MERGED)
 --   * LayoutStability    — discharged in gossamer#40 (MERGED)
 --   * IPCIntegrity       — discharged in gossamer#40 (MERGED)
 --   * PanelIsolation     — discharged in this branch via a sanctioned
@@ -51,3 +51,4 @@ modules = Gossamer.ABI.Types
 --                           posture as boj-server's `Boj.SafetyLemmas.*`.
 --   * ResourceCleanup    — discharged in this branch (missing `Data.DPair`
 --                           import + lowercase `exists` → `Exists`).
+-- GrooveTermination (gossamer#36) now lives in gossamer-groove.ipkg.

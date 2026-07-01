@@ -41,10 +41,15 @@ check-affine:
 check-example name:
     {{ephapax}} check examples/{{name}}/main.eph --mode linear -v
 
-# Type-check the formal ABI proof package (idris2 0.8.0). This is a
+# Type-check the formal ABI proof packages (idris2 0.8.0). This is a
 # REQUIRED gate, not optional: the ABI modules silently bit-rot otherwise.
+# Guards the shell/groove decoupling (gossamer#95), then type-checks the
+# groove-agnostic shell package and the groove package that depends on it.
 abi-check:
+    ./scripts/check-abi-decoupling.sh
     idris2 --typecheck gossamer-abi.ipkg
+    idris2 --install   gossamer-abi.ipkg
+    idris2 --typecheck gossamer-groove.ipkg
 
 # Build the Gossamer CLI (links libgossamer)
 build-cli: build-ffi
