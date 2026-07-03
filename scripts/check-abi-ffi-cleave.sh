@@ -74,12 +74,8 @@ fi
 # This turns coverage from "reported" into "enforced": add/change/remove a Zig
 # `export fn gossamer_*` and the committed ForeignGen.idr goes stale, failing CI
 # until `just abi-gen` regenerates it — so the ABI cannot drift from the FFI.
-if command -v python3 >/dev/null 2>&1; then
-  if ! python3 scripts/gen-abi-foreign.py --check; then
-    fail=1
-  fi
-else
-  echo "  (python3 unavailable — skipping ForeignGen freshness check)"
+if ! scripts/gen-abi-foreign.sh --check; then
+  fail=1
 fi
 
 # --- GitHub step summary (when running in Actions) ---

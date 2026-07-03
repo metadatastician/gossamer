@@ -57,7 +57,7 @@ abi-check:
 # the ABI (gossamer#82); run this after adding/changing an FFI export, then
 # commit — CI (`check-abi-ffi-cleave.sh`) fails if the mirror is stale.
 abi-gen:
-    python3 scripts/gen-abi-foreign.py
+    ./scripts/gen-abi-foreign.sh
 
 # Build the Gossamer CLI (links libgossamer)
 build-cli: build-ffi

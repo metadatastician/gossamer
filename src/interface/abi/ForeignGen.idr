@@ -2,8 +2,8 @@
 -- Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 --
 ||| GENERATED FILE — DO NOT EDIT BY HAND.
-||| Regenerate with `just abi-gen` (scripts/gen-abi-foreign.py); CI fails if this
-||| file is stale (scripts/check-abi-ffi-cleave.sh --check-generated).
+||| Regenerate with `just abi-gen` (scripts/gen-abi-foreign.sh); CI fails if this
+||| file is stale (scripts/check-abi-ffi-cleave.sh runs it with --check).
 |||
 ||| Complete raw %foreign mirror of the libgossamer C ABI: EVERY `export fn
 ||| gossamer_*` in src/interface/ffi/src/*.zig has a matching declaration here,
