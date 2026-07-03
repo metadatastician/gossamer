@@ -29,9 +29,17 @@ build-ffi:
 build-ffi-release:
     cd src/interface/ffi && zig build -Doptimize=ReleaseSafe
 
-# Type-check all Gossamer core modules
+# Type-check all Gossamer core modules (linear mode)
 check:
-    {{ephapax}} check src/core/Shell.eph src/core/Bridge.eph src/core/Capabilities.eph src/core/SSG.eph src/core/Platform.eph --mode linear -v
+    {{ephapax}} check src/core/*.eph --mode linear -v
+
+# Ephapax linearity gate (gossamer#82): type-check every src/core/*.eph AND
+# prove that leaking a linear resource handle is a compile error (drops each
+# module's consume and asserts rejection). REQUIRED gate, not optional — the
+# .eph bindings silently de-linearise otherwise (they were once __ffi
+# passthroughs over raw I64 handles that never even compiled).
+eph-check:
+    EPHAPAX="{{ephapax}}" ./scripts/check-eph-linearity.sh
 
 # Type-check in affine mode (more permissive)
 check-affine:

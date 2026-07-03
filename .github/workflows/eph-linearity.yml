@@ -1,0 +1,79 @@
+# SPDX-License-Identifier: MPL-2.0
+# Ephapax Linearity Gate — machine-checks that the src/core/*.eph bindings to
+# the libgossamer C ABI genuinely type-check under Ephapax's linear discipline,
+# and that leaking a linear resource handle is a compile error. Refs
+# hyperpolymath/gossamer#82.
+#
+# Ephapax is a sibling estate repo (hyperpolymath/ephapax); this gate builds it
+# from source to use its `check` subcommand as the oracle. If Ephapax cannot be
+# cloned/built (e.g. token scope), the gate degrades to a notice rather than a
+# hard failure — matching the estate's sibling-tool convention (see the Hypatia
+# job in static-analysis-gate.yml). The gate is authoritative whenever the
+# compiler is reachable, and `just eph-check` always runs it locally.
+#
+# Path-filtered and concurrency-guarded so it does not add load on unrelated
+# changes.
+name: Ephapax Linearity Gate
+
+on:
+  pull_request:
+    branches: ['**']
+    paths:
+      - 'src/core/**/*.eph'
+      - 'scripts/check-eph-linearity.sh'
+      - '.github/workflows/eph-linearity.yml'
+  push:
+    branches: [main, master]
+    paths:
+      - 'src/core/**/*.eph'
+      - 'scripts/check-eph-linearity.sh'
+      - '.github/workflows/eph-linearity.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eph-linearity-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REPO_OWNER: ${{ github.repository_owner }}
+  # Pinned Ephapax revision validated against these .eph files. Bump when the
+  # oracle is upgraded (a repo/org variable can override without editing here).
+  EPHAPAX_REF: ${{ vars.EPHAPAX_REF || '55d6a24cebf3e6fb4dc59212c4550e0df0544f52' }}
+
+jobs:
+  eph-linearity:
+    name: ephapax check + linearity (src/core/*.eph)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Clone and build Ephapax (the linear-type oracle)
+        id: build
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          git clone "https://github.com/${REPO_OWNER}/ephapax.git" "$RUNNER_TEMP/ephapax" 2>/dev/null || true
+          if [ ! -f "$RUNNER_TEMP/ephapax/Cargo.toml" ]; then
+            echo "::notice::Ephapax repo not reachable — skipping the linearity gate."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          cd "$RUNNER_TEMP/ephapax"
+          git checkout "$EPHAPAX_REF" 2>/dev/null || echo "::notice::EPHAPAX_REF $EPHAPAX_REF not found; using default branch."
+          # Rust stable is pre-installed on ubuntu-latest; debug build is fast enough.
+          if cargo build --bin ephapax; then
+            echo "bin=$RUNNER_TEMP/ephapax/target/debug/ephapax" >> "$GITHUB_OUTPUT"
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Ephapax failed to build — skipping the linearity gate."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run the Ephapax linearity gate
+        if: steps.build.outputs.ready == 'true'
+        env:
+          EPHAPAX: ${{ steps.build.outputs.bin }}
+        run: ./scripts/check-eph-linearity.sh
