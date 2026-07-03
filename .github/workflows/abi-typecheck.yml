@@ -19,6 +19,7 @@ on:
       - 'gossamer-abi-tests.ipkg'
       - 'scripts/check-abi-decoupling.sh'
       - 'scripts/check-abi-ffi-cleave.sh'
+      - 'scripts/gen-abi-foreign.py'
       - '.github/workflows/abi-typecheck.yml'
   push:
     branches: [main, master]
@@ -30,6 +31,7 @@ on:
       - 'gossamer-abi-tests.ipkg'
       - 'scripts/check-abi-decoupling.sh'
       - 'scripts/check-abi-ffi-cleave.sh'
+      - 'scripts/gen-abi-foreign.py'
       - '.github/workflows/abi-typecheck.yml'
 
 permissions:

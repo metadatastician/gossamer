@@ -52,6 +52,13 @@ abi-check:
     idris2 --install   gossamer-abi.ipkg
     idris2 --typecheck gossamer-groove.ipkg
 
+# Regenerate the raw %foreign ABI mirror (Gossamer.ABI.ForeignGen) from the Zig
+# `export fn gossamer_*` surface. The Zig FFI is the single source of truth for
+# the ABI (gossamer#82); run this after adding/changing an FFI export, then
+# commit — CI (`check-abi-ffi-cleave.sh`) fails if the mirror is stale.
+abi-gen:
+    python3 scripts/gen-abi-foreign.py
+
 # Build the Gossamer CLI (links libgossamer)
 build-cli: build-ffi
     cd cli && zig build
