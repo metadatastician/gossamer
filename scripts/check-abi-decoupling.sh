@@ -68,7 +68,12 @@ done < <(git ls-files -s -- "$NS_DIR"/*.idr | sed -E 's/^([0-9]+) [0-9a-f]+ [0-9
 # Check 2: no shell module imports a Groove-layer module.
 # ---------------------------------------------------------------------------
 echo "== Check 2: shell modules are groove-agnostic (no conflation) =="
-groove_import_re='^import[[:space:]]+Gossamer\.ABI\.(Groove|GrooveTermination|GrooveLinearity|CapabilityAuthenticity)([[:space:]]|$)'
+# Derive the import-detection alternation from the single GROOVE_MODULES source
+# of truth above, so a newly-added groove module cannot be silently missed here
+# (as GrooveResidue was when the alternation was hand-maintained). The array and
+# this check can never drift apart now.
+groove_alt=$(IFS='|'; printf '%s' "${GROOVE_MODULES[*]}")
+groove_import_re="^import[[:space:]]+Gossamer\.ABI\.(${groove_alt})([[:space:]]|\$)"
 for f in "$ABI_DIR"/*.idr; do
   base=$(basename "$f" .idr)
   is_groove_module "$base" && continue
