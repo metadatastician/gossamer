@@ -47,6 +47,7 @@ check-example name:
 # groove-agnostic shell package and the groove package that depends on it.
 abi-check:
     ./scripts/check-abi-decoupling.sh
+    ./scripts/check-abi-ffi-cleave.sh
     idris2 --typecheck gossamer-abi.ipkg
     idris2 --install   gossamer-abi.ipkg
     idris2 --typecheck gossamer-groove.ipkg
