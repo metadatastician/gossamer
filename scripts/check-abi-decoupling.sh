@@ -28,7 +28,7 @@ GROOVE_IPKG="gossamer-groove.ipkg"
 
 # The Groove-layer modules (canonical basenames). Everything else under
 # $ABI_DIR is shell and must stay groove-agnostic.
-GROOVE_MODULES=(Groove GrooveTermination GrooveLinearity CapabilityAuthenticity)
+GROOVE_MODULES=(Groove GrooveTermination GrooveLinearity GrooveResidue CapabilityAuthenticity)
 
 fail=0
 err() { printf '::error::%s\n' "$1" >&2; fail=1; }
