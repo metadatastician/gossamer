@@ -70,6 +70,14 @@ if [ "$n_uncovered" -gt 0 ]; then
   echo "  uncovered Zig exports (no ABI %foreign):  $n_uncovered  [expansion work — gossamer#82]"
 fi
 
+# --- ENFORCE: the generated ABI mirror (ForeignGen.idr) is fresh vs the Zig FFI.
+# This turns coverage from "reported" into "enforced": add/change/remove a Zig
+# `export fn gossamer_*` and the committed ForeignGen.idr goes stale, failing CI
+# until `just abi-gen` regenerates it — so the ABI cannot drift from the FFI.
+if ! scripts/gen-abi-foreign.sh --check; then
+  fail=1
+fi
+
 # --- GitHub step summary (when running in Actions) ---
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   {

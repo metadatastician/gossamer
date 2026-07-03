@@ -31,6 +31,7 @@ depends = base
 modules = Gossamer.ABI.Types
         , Gossamer.ABI.Layout
         , Gossamer.ABI.Foreign
+        , Gossamer.ABI.ForeignGen
         , Gossamer.ABI.IPCDispatch
         , Gossamer.ABI.HandleLinearity
         , Gossamer.ABI.WindowStateMachine
