@@ -3,98 +3,89 @@
 //
 // Gossamer.Shell — Webview window lifecycle management.
 //
-// The webview handle is a LINEAR resource:
-// - create returns a linear handle (must be consumed)
-// - loadHTML borrows the handle (returns it back)
-// - navigate borrows the handle (returns it back)
-// - run CONSUMES the handle (window is destroyed)
-// - destroy CONSUMES the handle (alternative to run)
+// The webview handle is a GENUINELY LINEAR resource, enforced by the Ephapax
+// type checker (`ephapax check`, default `--mode linear`):
+//   - `create`  mints a linear `Webview` handle;
+//   - the borrow ops (loadHTML, navigate, eval, setTitle, resize, show, hide,
+//     minimize, maximize, restore, requestClose) take `&Webview` — they use
+//     the window without retiring it;
+//   - `run` CONSUMES the handle (the event loop owns then destroys the window);
+//   - `destroy` CONSUMES the handle (teardown without running).
+//
+// Because `Webview` is linear, a path that creates a window and never `run`s
+// or `destroy`s it is a COMPILE-TIME type error. The earlier version of this
+// file passed the handle around as a plain `I64` (no linear obligation) and
+// declared `: I32` / `: ()` returns over `__ffi(...)`, which is typed `I64` —
+// so it never type-checked at all. The opaque `extern` handle type is what
+// makes the checker enforce the lifecycle.
 
-// FFI declarations — these are implemented in ffi/zig/src/main.zig
-// and linked as libgossamer.so
+module gossamer/core/shell
 
-// Create a webview window. Returns a linear handle.
-// FFI: gossamer_create(title, width, height, resizable, decorations, fullscreen) -> handle
-fn create(title: String, width: I32, height: I32): I64 =
-  __ffi("gossamer_create", title, width, height, 1, 1, 0)
+// ── libgossamer C ABI (source of truth: src/interface/ffi/src/main.zig) ────
+extern "gossamer" {
+  // Opaque, linear webview window handle.
+  type Webview
 
-// Load HTML content into the webview. Borrows the handle.
-// FFI: gossamer_load_html(handle, html) -> result
-fn loadHTML(h: I64, html: String): I32 =
-  __ffi("gossamer_load_html", h, html)
+  // gossamer_create(title, width, height, resizable, decorations, fullscreen) -> handle
+  fn gossamer_create(title: String, width: I32, height: I32, resizable: I32, decorations: I32, fullscreen: I32): Webview
 
-// Navigate to a URL. Borrows the handle.
-// FFI: gossamer_navigate(handle, url) -> result
-fn navigate(h: I64, url: String): I32 =
-  __ffi("gossamer_navigate", h, url)
+  // Borrow ops — use the window, return a C result code, do not retire it.
+  fn gossamer_load_html(h: &Webview, html: String): I32
+  fn gossamer_navigate(h: &Webview, url: String): I32
+  fn gossamer_eval(h: &Webview, js: String): I32
+  fn gossamer_set_title(h: &Webview, title: String): I32
+  fn gossamer_resize(h: &Webview, width: I32, height: I32): I32
+  fn gossamer_show(h: &Webview): I32
+  fn gossamer_hide(h: &Webview): I32
+  fn gossamer_minimize(h: &Webview): I32
+  fn gossamer_maximize(h: &Webview): I32
+  fn gossamer_restore(h: &Webview): I32
+  fn gossamer_request_close(h: &Webview): I32
 
-// Evaluate JavaScript in the webview. Borrows the handle.
-// FFI: gossamer_eval(handle, js) -> result
-fn eval(h: I64, js: String): I32 =
-  __ffi("gossamer_eval", h, js)
+  // Consuming ops — retire the handle.
+  fn gossamer_run(h: Webview): Unit
+  fn gossamer_destroy(h: Webview): Unit
 
-// Set the window title. Borrows the handle.
-// FFI: gossamer_set_title(handle, title) -> result
-fn setTitle(h: I64, title: String): I32 =
-  __ffi("gossamer_set_title", h, title)
+  // Handle-free diagnostics (string pointers / no window).
+  fn gossamer_last_error(): I64
+  fn gossamer_version(): I64
+  fn gossamer_build_info(): I64
+}
+
+// ── Idiomatic wrappers (public API; other Ephapax modules import these) ────
+
+// Create a webview window. Returns a linear handle that MUST be consumed
+// (via run or destroy). Defaults: resizable, decorated, not fullscreen.
+pub fn create(title: String, width: I32, height: I32): Webview =
+  gossamer_create(title, width, height, 1, 1, 0)
+
+pub fn loadHTML(h: &Webview, html: String): I32 = gossamer_load_html(h, html)
+pub fn navigate(h: &Webview, url: String): I32 = gossamer_navigate(h, url)
+pub fn eval(h: &Webview, js: String): I32 = gossamer_eval(h, js)
+pub fn setTitle(h: &Webview, title: String): I32 = gossamer_set_title(h, title)
+pub fn resize(h: &Webview, width: I32, height: I32): I32 = gossamer_resize(h, width, height)
+pub fn show(h: &Webview): I32 = gossamer_show(h)
+pub fn hide(h: &Webview): I32 = gossamer_hide(h)
+pub fn minimize(h: &Webview): I32 = gossamer_minimize(h)
+pub fn maximize(h: &Webview): I32 = gossamer_maximize(h)
+pub fn restore(h: &Webview): I32 = gossamer_restore(h)
+pub fn requestClose(h: &Webview): I32 = gossamer_request_close(h)
 
 // Run the event loop. CONSUMES the handle — window is destroyed after.
-// FFI: gossamer_run(handle) -> void
-fn run(h: I64): () =
-  __ffi("gossamer_run", h)
-
-// Resize the webview window. Borrows the handle.
-// FFI: gossamer_resize(handle, width, height) -> result
-fn resize(h: I64, width: I32, height: I32): I32 =
-  __ffi("gossamer_resize", h, width, height)
-
-// Show the webview window. Borrows the handle.
-// FFI: gossamer_show(handle) -> result
-fn show(h: I64): I32 =
-  __ffi("gossamer_show", h)
-
-// Hide the webview window. Borrows the handle.
-// FFI: gossamer_hide(handle) -> result
-fn hide(h: I64): I32 =
-  __ffi("gossamer_hide", h)
-
-// Minimize the webview window. Borrows the handle.
-// FFI: gossamer_minimize(handle) -> result
-fn minimize(h: I64): I32 =
-  __ffi("gossamer_minimize", h)
-
-// Maximize the webview window. Borrows the handle.
-// FFI: gossamer_maximize(handle) -> result
-fn maximize(h: I64): I32 =
-  __ffi("gossamer_maximize", h)
-
-// Restore the webview window. Borrows the handle.
-// FFI: gossamer_restore(handle) -> result
-fn restore(h: I64): I32 =
-  __ffi("gossamer_restore", h)
-
-// Request that the window close. Borrows the handle.
-// FFI: gossamer_request_close(handle) -> result
-fn requestClose(h: I64): I32 =
-  __ffi("gossamer_request_close", h)
-
+pub fn run(h: Webview): Unit = gossamer_run(h)
 // Destroy the webview without running. CONSUMES the handle.
-// FFI: gossamer_destroy(handle) -> void
-fn destroy(h: I64): () =
-  __ffi("gossamer_destroy", h)
+pub fn destroy(h: Webview): Unit = gossamer_destroy(h)
 
-// Get the last error message from the FFI layer.
-// Returns a pointer to the error string, or 0 if no error.
-// FFI: gossamer_last_error() -> ptr
-fn lastError(): I64 =
-  __ffi("gossamer_last_error")
+pub fn lastError(): I64 = gossamer_last_error()
+pub fn version(): I64 = gossamer_version()
+pub fn buildInfo(): I64 = gossamer_build_info()
 
-// Get the library version string (e.g. "0.1.0").
-// FFI: gossamer_version() -> ptr
-fn version(): I64 =
-  __ffi("gossamer_version")
-
-// Get build information string.
-// FFI: gossamer_build_info() -> ptr
-fn buildInfo(): I64 =
-  __ffi("gossamer_build_info")
+// ── Linearity witness ──────────────────────────────────────────────────────
+// Create a window, load HTML into it (borrow), then run the loop (consume).
+// `ephapax check` accepts this because `w` is consumed exactly once; drop the
+// `run(w)` and the file is rejected — that rejection is the machine-checked
+// proof the window handle cannot leak.
+fn session(title: String, html: String): Unit =
+  let! w = create(title, 800, 600)
+  let _r = loadHTML(&w, html)
+  run(w)

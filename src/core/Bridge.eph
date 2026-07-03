@@ -3,24 +3,73 @@
 //
 // Gossamer.Bridge — Typed IPC channel between frontend (JS) and backend (Ephapax).
 //
-// The IPC channel is a LINEAR resource:
-// - open returns a linear channel handle (must be closed)
-// - bind borrows the channel (returns it back)
-// - close CONSUMES the channel handle
+// The IPC channel is a GENUINELY LINEAR resource, enforced by the Ephapax
+// type checker (`ephapax check`, default `--mode linear`):
+//   - `open`  mints a linear `Channel` handle (an opaque host handle);
+//   - `bind`  BORROWS the channel (`&Channel`) — it does not consume it,
+//             so the same channel can be bound many times, and returns the
+//             C result code;
+//   - `close` CONSUMES the channel handle (linear move; nothing returned).
+//
+// Because `Channel` is linear, a code path that opens a channel and forgets
+// to `close` it is a COMPILE-TIME type error ("Linear variable `ch` not
+// consumed"), not a silently leaked handle at runtime. The `session` driver
+// below exercises exactly that lifecycle so `ephapax check` verifies it.
+//
+// This is the shape #82 asked for: the earlier version of this file was a
+// set of `__ffi` passthroughs over raw `I64` handles with a comment CLAIMING
+// linearity and zero `let!` bindings — and it did not even type-check
+// (I32/I64 mismatch). Handles that are plain `I64` carry no linear
+// obligation, so nothing stopped a leak. The opaque `extern` handle type +
+// `let!` binding is what actually makes the checker enforce it.
 
-// Open a typed IPC channel on the webview.
-// FFI: gossamer_channel_open(webview_handle) -> channel_handle
-fn open(webviewHandle: I64): I64 =
-  __ffi("gossamer_channel_open", webviewHandle)
+module gossamer/core/bridge
 
-// Bind a named command handler to the IPC channel. Borrows the channel.
-// FFI: gossamer_channel_bind(channel, name, callback, user_data) -> result
-// user_data is passed through to callback on each invocation — enables
-// language bindings (Rust, etc.) to pass closure context through the C ABI.
-fn bind(channelHandle: I64, name: String, callback: I64, userData: I64): I32 =
-  __ffi("gossamer_channel_bind", channelHandle, name, callback, userData)
+// ── C ABI surface (single source of truth: src/interface/ffi/src/*.zig) ────
+//
+// The `extern "gossamer"` block names the real libgossamer C symbols. `Channel`
+// is an opaque linear handle (desugars to a host handle; the Ephapax program
+// can only pass it around, never forge or duplicate it).
+extern "gossamer" {
+  // Opaque, linear IPC channel handle. Minted by open, retired by close.
+  type Channel
 
-// Close the IPC channel. CONSUMES the channel handle.
-// FFI: gossamer_channel_close(channel) -> void
-fn close(channelHandle: I64): () =
-  __ffi("gossamer_channel_close", channelHandle)
+  // gossamer_channel_open(webview_handle) -> channel_handle
+  fn gossamer_channel_open(webviewHandle: I64): Channel
+
+  // gossamer_channel_bind(channel, name, callback, user_data) -> result
+  // Borrows the channel (&Channel): binding does not retire the handle.
+  // user_data is passed through to callback on each invocation — enables
+  // language bindings (Rust, etc.) to pass closure context through the C ABI.
+  fn gossamer_channel_bind(channelHandle: &Channel, name: String, callback: I64, userData: I64): I32
+
+  // gossamer_channel_close(channel) -> void. Linear: CONSUMES the channel.
+  fn gossamer_channel_close(channelHandle: Channel): Unit
+}
+
+// ── Idiomatic wrappers (what other Ephapax modules import) ─────────────────
+
+// Open a typed IPC channel on the webview. Returns a linear channel handle
+// that MUST eventually be `close`d.
+pub fn open(webviewHandle: I64): Channel =
+  gossamer_channel_open(webviewHandle)
+
+// Bind a named command handler to the IPC channel. Borrows the channel and
+// returns the C result code, so it may be called repeatedly on one channel.
+pub fn bind(channelHandle: &Channel, name: String, callback: I64, userData: I64): I32 =
+  gossamer_channel_bind(channelHandle, name, callback, userData)
+
+// Close the IPC channel. Consumes the channel handle.
+pub fn close(channelHandle: Channel): Unit =
+  gossamer_channel_close(channelHandle)
+
+// ── Linearity witness ──────────────────────────────────────────────────────
+//
+// A minimal driver that opens a channel, binds a handler (borrow), then
+// closes it (consume). `ephapax check` accepts this because `ch` is consumed
+// exactly once. Delete the `close(ch)` line and the checker rejects the file
+// — that rejection is the machine-checked proof that the handle cannot leak.
+fn session(webview: I64, callback: I64, userData: I64): Unit =
+  let! ch = open(webview)
+  let _r = bind(&ch, "cmd", callback, userData)
+  close(ch)

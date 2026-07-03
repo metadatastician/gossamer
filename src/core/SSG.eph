@@ -3,120 +3,47 @@
 //
 // Gossamer.SSG — Static Site Generator accessible from the application layer.
 //
-// Exposes the SSG Zig FFI functions (src/interface/ffi/src/ssg.zig) through
-// the Ephapax FFI bridge. Provides file I/O, front matter parsing, Markdown
-// to HTML conversion, template rendering, and full site build orchestration.
+// Exposes the SSG Zig FFI (src/interface/ffi/src/ssg.zig): file I/O, front
+// matter parsing, Markdown→HTML, template rendering, and full-site build.
 //
-// All returned string pointers are heap-allocated by the Zig c_allocator.
-// The Ephapax runtime is responsible for freeing them. Functions that return
-// I64 for string content return 0 (null) on failure.
+// The SSG module is STATELESS: no linear resources are created. Each call is
+// a self-contained operation that borrows its inputs and returns a fresh
+// result (I64 = heap-allocated string pointer, 0 on failure; I32 = 0/1 code).
 //
-// The SSG module is stateless: no linear resources are created. Each function
-// call is a self-contained operation that borrows its inputs and returns a
-// fresh result.
+// The earlier version declared `: I32` returns over `__ffi(...)`, which is
+// typed `I64`, so it never type-checked. The `extern` block carries the real
+// return types.
 //
-// Typical usage:
-//   1. Read source files with readFile
-//   2. Parse front matter with parseFrontMatter
-//   3. Extract body with extractBody
-//   4. Convert Markdown to HTML with markdownToHtml
-//   5. Render templates with templateRender
-//   6. Write output with writeFile
-//
-// Or use buildSite for the full pipeline in a single call.
+// Pipeline: readFile → parseFrontMatter → extractBody → markdownToHtml →
+// templateRender → writeFile, or buildSite for the whole thing in one call.
 
-// ---------------------------------------------------------------------------
-// File I/O
-// ---------------------------------------------------------------------------
+module gossamer/core/ssg
 
-// Read an entire file into a string.
-// Returns a pointer to the file contents (heap-allocated, null-terminated),
-// or 0 on failure (file not found, read error, exceeds 64 MiB limit).
-// FFI: gossamer_ssg_read_file(path) -> string_ptr | 0
-fn readFile(path: String): I64 =
-  __ffi("gossamer_ssg_read_file", path)
+// ── libgossamer C ABI (source of truth: src/interface/ffi/src/ssg.zig) ─────
+extern "gossamer" {
+  // File I/O.
+  fn gossamer_ssg_read_file(path: String): I64
+  fn gossamer_ssg_write_file(path: String, content: String): I32
+  fn gossamer_ssg_list_files(dir: String, extension: String): I64
+  // Front matter.
+  fn gossamer_ssg_parse_front_matter(content: String): I64
+  fn gossamer_ssg_parse_body(content: String): I64
+  // Markdown → HTML.
+  fn gossamer_ssg_md_to_html(markdown: String): I64
+  // Template rendering ({{key}} substitution).
+  fn gossamer_ssg_template_substitute(template: String, vars: String): I64
+  // Full-site build → 0 ok / 1 fail.
+  fn gossamer_ssg_build_site(contentDir: String, templateFile: String, outDir: String): I32
+}
 
-// Write content to a file, creating parent directories as needed.
-// Returns 0 on success, 1 on failure (permission denied, disk full).
-// FFI: gossamer_ssg_write_file(path, content) -> 0 | 1
-fn writeFile(path: String, content: String): I32 =
-  __ffi("gossamer_ssg_write_file", path, content)
+// ── Idiomatic wrappers (public API) ────────────────────────────────────────
 
-// List files in a directory matching a given extension.
-// Returns a newline-separated list of file paths (heap-allocated), or 0
-// on failure. Empty string for no matches. Extension includes the dot
-// (e.g. ".md", ".html").
-// FFI: gossamer_ssg_list_files(dir, extension) -> string_ptr | 0
-fn listFiles(dir: String, extension: String): I64 =
-  __ffi("gossamer_ssg_list_files", dir, extension)
-
-// ---------------------------------------------------------------------------
-// Front Matter Parsing
-// ---------------------------------------------------------------------------
-
-// Extract YAML front matter from content delimited by "---" lines.
-// Returns the front matter block (without delimiters) as a heap-allocated
-// string, or empty string if no front matter is present.
-// The content must begin with "---\n" for front matter to be detected.
-// FFI: gossamer_ssg_parse_front_matter(content) -> string_ptr
-fn parseFrontMatter(content: String): I64 =
-  __ffi("gossamer_ssg_parse_front_matter", content)
-
-// Extract the body content after the front matter block.
-// Returns everything after the closing "---" delimiter. If no front matter
-// is present, returns the entire content unchanged.
-// FFI: gossamer_ssg_parse_body(content) -> string_ptr
-fn extractBody(content: String): I64 =
-  __ffi("gossamer_ssg_parse_body", content)
-
-// ---------------------------------------------------------------------------
-// Markdown to HTML Conversion
-// ---------------------------------------------------------------------------
-
-// Convert a Markdown string to HTML.
-// Supported syntax:
-//   # through ###### headings
-//   **bold**, *italic*
-//   `inline code`
-//   [link text](url)
-//   Blank-line-separated paragraphs
-//   ``` code blocks (fenced)
-// Returns heap-allocated HTML string.
-// FFI: gossamer_ssg_md_to_html(markdown) -> string_ptr
-fn markdownToHtml(markdown: String): I64 =
-  __ffi("gossamer_ssg_md_to_html", markdown)
-
-// ---------------------------------------------------------------------------
-// Template Rendering
-// ---------------------------------------------------------------------------
-
-// Substitute {{key}} placeholders in a template with values from a
-// newline-separated "key=value" string.
-//
-// Example vars: "title=Hello World\ncontent=<p>Body</p>\ndate=2026-03-28"
-//
-// Unknown placeholders are preserved verbatim in the output.
-// Returns heap-allocated rendered string.
-// FFI: gossamer_ssg_template_substitute(template, vars) -> string_ptr
-fn templateRender(template: String, vars: String): I64 =
-  __ffi("gossamer_ssg_template_substitute", template, vars)
-
-// ---------------------------------------------------------------------------
-// Full Site Build
-// ---------------------------------------------------------------------------
-
-// Build an entire static site from a content directory, a template file,
-// and an output directory.
-//
-// Process for each .md file in contentDir:
-//   1. Read the file
-//   2. Extract front matter (title, date)
-//   3. Extract body and convert Markdown to HTML
-//   4. Substitute {{title}}, {{content}}, {{date}} into the template
-//   5. Write the result as .html in outDir
-//
-// Creates outDir and any parent directories if they do not exist.
-// Returns 0 on success, 1 on failure.
-// FFI: gossamer_ssg_build_site(contentDir, templateFile, outDir) -> 0 | 1
-fn buildSite(contentDir: String, templateFile: String, outDir: String): I32 =
-  __ffi("gossamer_ssg_build_site", contentDir, templateFile, outDir)
+pub fn readFile(path: String): I64 = gossamer_ssg_read_file(path)
+pub fn writeFile(path: String, content: String): I32 = gossamer_ssg_write_file(path, content)
+pub fn listFiles(dir: String, extension: String): I64 = gossamer_ssg_list_files(dir, extension)
+pub fn parseFrontMatter(content: String): I64 = gossamer_ssg_parse_front_matter(content)
+pub fn extractBody(content: String): I64 = gossamer_ssg_parse_body(content)
+pub fn markdownToHtml(markdown: String): I64 = gossamer_ssg_md_to_html(markdown)
+pub fn templateRender(template: String, vars: String): I64 = gossamer_ssg_template_substitute(template, vars)
+pub fn buildSite(contentDir: String, templateFile: String, outDir: String): I32 =
+  gossamer_ssg_build_site(contentDir, templateFile, outDir)
