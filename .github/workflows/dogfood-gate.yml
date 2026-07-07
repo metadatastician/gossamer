@@ -261,10 +261,12 @@ jobs:
 
           echo "has_manifest=true" >> "$GITHUB_OUTPUT"
 
-          # Validate TOML structure using Python 3.11+ tomllib.
-          # Lives in scripts/ — an inline multi-line `python3 -c` block at
-          # column 0 is invalid YAML and silently killed this workflow.
-          python3 scripts/validate-eclexiaiser.py || {
+          # Validate TOML structure using Python 3.11+ tomllib. Single-line
+          # -c on purpose: the previous multi-line block sat at column 0
+          # inside this run: | scalar — invalid YAML that silently killed
+          # the whole workflow. (A scripts/*.py file is not an option: the
+          # estate bans Python as a repo language.)
+          python3 -c 'import tomllib,sys; d=tomllib.load(open("eclexiaiser.toml","rb")); p=d.get("project",{}); fns=d.get("functions",[]); errs=[m for c,m in [(not p.get("name","").strip(),"project.name is required"),(not fns,"at least one [[functions]] entry is required")] if c]+[m for fn in fns for c,m in [(not fn.get("name","").strip(),"function name cannot be empty"),(not fn.get("source","").strip(),"function %r has no source path"%fn.get("name",""))] if c]; print("\n".join("ERROR: "+e for e in errs) or "Valid: %s (%d function(s))"%(p.get("name"),len(fns))); sys.exit(1 if errs else 0)' || {
             echo "::error file=eclexiaiser.toml::Invalid eclexiaiser.toml — see step output for details"
             exit 1
           }
