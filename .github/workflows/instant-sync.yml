@@ -18,20 +18,8 @@ jobs:
     steps:
       # Presence gate: if the dispatch token is not configured, skip
       # cleanly instead of failing the run with an opaque 401.
-      - name: Check dispatch token presence
-        id: gate
-        env:
-          DISPATCH_TOKEN: ${{ secrets.FARM_DISPATCH_TOKEN }}
-        run: |
-          if [ -n "$DISPATCH_TOKEN" ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::FARM_DISPATCH_TOKEN not configured — skipping instant sync"
-          fi
-
       - name: Trigger Propagation
-        if: steps.gate.outputs.present == 'true'
+        if: ${{ secrets.FARM_DISPATCH_TOKEN != '' }}
         uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # v3
         with:
           token: ${{ secrets.FARM_DISPATCH_TOKEN }}
@@ -46,5 +34,5 @@ jobs:
             }
 
       - name: Confirm
-        if: steps.gate.outputs.present == 'true'
+        if: ${{ secrets.FARM_DISPATCH_TOKEN != '' }}
         run: echo "::notice::Propagation triggered for ${{ github.event.repository.name }}"
