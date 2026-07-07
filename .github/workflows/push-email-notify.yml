@@ -13,6 +13,7 @@ jobs:
     name: Email on push
     if: ${{ vars.PUSH_EMAIL_ENABLED == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Send push notification email
         uses: dawidd6/action-send-mail@6e502825a508b867ab2954ad6343b68787624c01 # pinned

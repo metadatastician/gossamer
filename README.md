@@ -187,22 +187,20 @@ in `PROOF-NEEDS.md`. Headline posture (as of `standards#131` close-out,
 
 <!-- -->
 
-- **One `believe_me` invocation**, isolated in
-  `src/interface/abi/PanelIsolation.idr` (`stringNotEqCommut`),
-  class (J) — a **principled assumption**, not unproven debt. It
-  axiomatises the commutativity of Idris2 0.8.0’s opaque
-  `prim__eq_String` primitive (content-symmetric on every supported
-  backend — Chez, Racket, Node, JS — but not derivable in-language).
-  Same trust posture as boj-server’s `Boj.SafetyLemmas` axioms over
-  Char/String primitives. Reduction path: external backend-assurance
-  evidence (property-test harness against the primitive), not
-  constructive in-language proof.
+- **Zero `believe_me` invocations — zero axioms.** The one class-J
+  axiom this repo used to carry (`stringNotEqCommut`, commutativity of
+  the opaque `prim__eq_String` primitive) was eliminated
+  constructively: `PanelIsolation.Distinct` now carries an erased `So`
+  witness for *both* orientations of the inequality (each auto-solved
+  by evaluation at construction sites, where tags are concrete
+  literals), so `distinctSym` is a pure swap and never appeals to
+  primitive symmetry.
 
 <!-- -->
 
-- **No other unproven obligations remain in the audited surface.** The
-  full per-site rationale + reduce-the-trusted-base path are tracked in
-  `PROOF-NEEDS.md` ("Class-J axioms (trusted base)" section).
+- **No unproven obligations remain in the audited surface.** History of
+  the retired axiom is tracked in `PROOF-NEEDS.md` ("Class-J axioms
+  (trusted base)" section).
 
 # License
 

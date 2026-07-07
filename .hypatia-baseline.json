@@ -5,7 +5,7 @@
     "rule_module": "code_safety",
     "type": "zig_ptr_cast",
     "file": "src/interface/ffi/src/jni.zig",
-    "note": "Inherent to the JNI binding: dispatching through the per-thread JNINativeInterface vtable requires reinterpreting opaque table slots as typed function pointers. This is CWE-704 by construction, not a defect — it is the identical pattern std.DynLib.lookup uses for dlsym results, and is documented at each call site with a // SAFETY: note. The only alternative is hand-transcribing the full ~232-entry NDK vtable as a typed struct, which is more error-prone than the cast. Owner-acknowledged; kept advisory (visible, non-blocking)."
+    "note": "Inherent to the JNI binding: dispatching through the per-thread JNINativeInterface vtable requires reinterpreting opaque table slots as typed function pointers. This is CWE-704 by construction, not a defect \u2014 it is the identical pattern std.DynLib.lookup uses for dlsym results, and is documented at each call site with a // SAFETY: note. The only alternative is hand-transcribing the full ~232-entry NDK vtable as a typed struct, which is more error-prone than the cast. Owner-acknowledged; kept advisory (visible, non-blocking)."
   },
   {
     "severity": "medium",
@@ -30,5 +30,149 @@
     "type": "zig_align_cast",
     "file": "src/interface/ffi/src/jni.zig",
     "note": "See the high-severity entry: inherent JNI vtable alignment cast; advisory."
+  },
+  {
+    "severity": "high",
+    "severity_override": "advisory",
+    "rule_module": "code_safety",
+    "type": "zig_ptr_cast",
+    "file_pattern": "src/interface/ffi/src/*.zig",
+    "note": "FFI-inherent, same class as the owner-acknowledged jni.zig entries: this file implements a C-ABI boundary (GTK/WebKit, Cocoa, WebView2/COM, JNI, or the dlopen'd plugin/launcher surface) where dispatching through foreign vtables/opaque handles requires reinterpreting untyped slots as typed pointers \u2014 CWE-704 by construction, the identical pattern std.DynLib.lookup uses for dlsym results. Not independently fixable without hand-transcribing foreign ABIs, which is more error-prone than the cast. Advisory: visible, non-blocking."
+  },
+  {
+    "severity": "high",
+    "severity_override": "advisory",
+    "rule_module": "code_safety",
+    "type": "zig_align_cast",
+    "file_pattern": "src/interface/ffi/src/*.zig",
+    "note": "FFI-inherent, same class as the owner-acknowledged jni.zig entries: this file implements a C-ABI boundary (GTK/WebKit, Cocoa, WebView2/COM, JNI, or the dlopen'd plugin/launcher surface) where dispatching through foreign vtables/opaque handles requires reinterpreting untyped slots as typed pointers \u2014 CWE-704 by construction, the identical pattern std.DynLib.lookup uses for dlsym results. Not independently fixable without hand-transcribing foreign ABIs, which is more error-prone than the cast. Advisory: visible, non-blocking."
+  },
+  {
+    "severity": "medium",
+    "severity_override": "advisory",
+    "rule_module": "code_safety",
+    "type": "zig_bit_cast",
+    "file_pattern": "src/interface/ffi/src/*.zig",
+    "note": "FFI-inherent, same class as the owner-acknowledged jni.zig entries: this file implements a C-ABI boundary (GTK/WebKit, Cocoa, WebView2/COM, JNI, or the dlopen'd plugin/launcher surface) where dispatching through foreign vtables/opaque handles requires reinterpreting untyped slots as typed pointers \u2014 CWE-704 by construction, the identical pattern std.DynLib.lookup uses for dlsym results. Not independently fixable without hand-transcribing foreign ABIs, which is more error-prone than the cast. Advisory: visible, non-blocking."
+  },
+  {
+    "severity": "high",
+    "severity_override": "advisory",
+    "rule_module": "code_safety",
+    "type": "zig_ptr_cast",
+    "file_pattern": "cli/launcher/src/*.zig",
+    "note": "FFI-inherent, same class as the owner-acknowledged jni.zig entries: this file implements a C-ABI boundary (GTK/WebKit, Cocoa, WebView2/COM, JNI, or the dlopen'd plugin/launcher surface) where dispatching through foreign vtables/opaque handles requires reinterpreting untyped slots as typed pointers \u2014 CWE-704 by construction, the identical pattern std.DynLib.lookup uses for dlsym results. Not independently fixable without hand-transcribing foreign ABIs, which is more error-prone than the cast. Advisory: visible, non-blocking."
+  },
+  {
+    "severity": "high",
+    "severity_override": "advisory",
+    "rule_module": "code_safety",
+    "type": "zig_align_cast",
+    "file_pattern": "cli/launcher/src/*.zig",
+    "note": "FFI-inherent, same class as the owner-acknowledged jni.zig entries: this file implements a C-ABI boundary (GTK/WebKit, Cocoa, WebView2/COM, JNI, or the dlopen'd plugin/launcher surface) where dispatching through foreign vtables/opaque handles requires reinterpreting untyped slots as typed pointers \u2014 CWE-704 by construction, the identical pattern std.DynLib.lookup uses for dlsym results. Not independently fixable without hand-transcribing foreign ABIs, which is more error-prone than the cast. Advisory: visible, non-blocking."
+  },
+  {
+    "severity": "medium",
+    "severity_override": "advisory",
+    "rule_module": "code_safety",
+    "type": "zig_bit_cast",
+    "file_pattern": "cli/launcher/src/*.zig",
+    "note": "FFI-inherent, same class as the owner-acknowledged jni.zig entries: this file implements a C-ABI boundary (GTK/WebKit, Cocoa, WebView2/COM, JNI, or the dlopen'd plugin/launcher surface) where dispatching through foreign vtables/opaque handles requires reinterpreting untyped slots as typed pointers \u2014 CWE-704 by construction, the identical pattern std.DynLib.lookup uses for dlsym results. Not independently fixable without hand-transcribing foreign ABIs, which is more error-prone than the cast. Advisory: visible, non-blocking."
+  },
+  {
+    "severity": "critical",
+    "severity_override": "advisory",
+    "rule_module": "code_safety",
+    "type": "unwrap_dangerous_default",
+    "file": "bindings/rust/src/lib.rs",
+    "note": "The four unwrap_or(0) are min/max window dimensions passed to gossamer_create_ex, whose FFI contract documents 0 as the 'unconstrained' sentinel (None -> no min/max). A deliberate encoding of Option across the C ABI, not an error-swallowing default."
+  },
+  {
+    "severity": "medium",
+    "severity_override": "advisory",
+    "rule_module": "code_safety",
+    "type": "expect_in_hot_path",
+    "file": "bindings/rust/src/lib.rs",
+    "note": "Two expects are registration-time CString NUL checks (App::command/command_async \u2014 panicking at registration on an invalid command name is the conventional contract); the third guards the literal \"{}\" which cannot contain an interior NUL, so it is statically infallible."
+  },
+  {
+    "severity": "medium",
+    "severity_override": "advisory",
+    "rule_module": "code_safety",
+    "type": "unsafe_block",
+    "file": "bindings/rust/src/lib.rs",
+    "note": "Every unsafe block in this FFI-binding crate carries a '// SAFETY:' comment on the preceding line \u2014 exactly what this rule asks for. The matcher (regex on 'unsafe {') cannot see comments. The crate also sets #![forbid(unsafe_op_in_unsafe_fn)]."
+  },
+  {
+    "severity": "high",
+    "severity_override": "advisory",
+    "rule_module": "code_safety",
+    "type": "mem_forget",
+    "file": "bindings/rust/src/lib.rs",
+    "note": "Deliberate and documented at site: App::run() consumes self and gossamer_run frees the handle natively; mem::forget prevents the Drop impl from double-freeing. The second textual match is the explanatory comment."
+  },
+  {
+    "severity": "high",
+    "severity_override": "advisory",
+    "rule_module": "code_safety",
+    "type": "from_raw",
+    "file": "bindings/rust/src/lib.rs",
+    "note": "Drop reclaims the Box::into_raw'd CommandContext pointers 1:1 (created in command()/command_async(), freed exactly once in Drop). Standard FFI user-data ownership round-trip."
+  },
+  {
+    "severity": "medium",
+    "severity_override": "advisory",
+    "rule_module": "code_safety",
+    "type": "as_ptr",
+    "file": "bindings/rust/src/lib.rs",
+    "note": "CString::as_ptr passed to synchronous FFI calls while the owning CString is live in the enclosing scope; no pointer escapes the call. Standard c-string argument passing."
+  },
+  {
+    "severity": "medium",
+    "severity_override": "advisory",
+    "rule_module": "structural_drift",
+    "type": "SD022",
+    "file": "android/README.adoc",
+    "note": "Reference is to the Android subproject layout under android/gossamer-android-services/ (src/main/ and src/androidTest/ exist there). SD022's existence check is root-src-relative and cannot see subproject src/ trees."
+  },
+  {
+    "severity": "medium",
+    "severity_override": "advisory",
+    "rule_module": "structural_drift",
+    "type": "SD022",
+    "file": "android/gossamer-android-services/README.adoc",
+    "note": "Reference is to the Android subproject layout under android/gossamer-android-services/ (src/main/ and src/androidTest/ exist there). SD022's existence check is root-src-relative and cannot see subproject src/ trees."
+  },
+  {
+    "severity": "medium",
+    "severity_override": "advisory",
+    "rule_module": "structural_drift",
+    "type": "SD022",
+    "file": "docs/architecture/android-components.adoc",
+    "note": "Reference is to the Android subproject layout under android/gossamer-android-services/ (src/main/ and src/androidTest/ exist there). SD022's existence check is root-src-relative and cannot see subproject src/ trees."
+  },
+  {
+    "severity": "medium",
+    "severity_override": "advisory",
+    "rule_module": "structural_drift",
+    "type": "SD022",
+    "file": "ROADMAP.adoc",
+    "note": "Reference is to the Android subproject layout under android/gossamer-android-services/ (src/main/ and src/androidTest/ exist there). SD022's existence check is root-src-relative and cannot see subproject src/ trees."
+  },
+  {
+    "severity": "medium",
+    "severity_override": "advisory",
+    "rule_module": "structural_drift",
+    "type": "SD022",
+    "file": ".machine_readable/descriptiles/STATE.a2ml",
+    "note": "Reference is to the Android subproject layout under android/gossamer-android-services/ (src/main/ and src/androidTest/ exist there). SD022's existence check is root-src-relative and cannot see subproject src/ trees."
+  },
+  {
+    "severity": "medium",
+    "severity_override": "advisory",
+    "rule_module": "structural_drift",
+    "type": "SD022",
+    "file": "NEXT-STEPS.md",
+    "note": "Reference is to site/src/content/, which exists; SD022's root-src-relative check cannot see it."
   }
 ]

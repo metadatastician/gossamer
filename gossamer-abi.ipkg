@@ -45,11 +45,11 @@ modules = Gossamer.ABI.Types
 -- are now wired and `idris2 --typecheck` green:
 --   * LayoutStability    — discharged in gossamer#40 (MERGED)
 --   * IPCIntegrity       — discharged in gossamer#40 (MERGED)
---   * PanelIsolation     — discharged in this branch via a sanctioned
---                           class-J axiom (`stringNotEqCommut`) over the
---                           Idris2 backend primitive `prim__eq_String`.
---                           First class-J axiom in gossamer; same trust
---                           posture as boj-server's `Boj.SafetyLemmas.*`.
+--   * PanelIsolation     — discharged in gossamer#41; its class-J axiom
+--                           (`stringNotEqCommut`) was later retired: the
+--                           Distinct witness now carries both erased So
+--                           orientations, so distinctSym is constructive
+--                           (zero axioms; see PROOF-NEEDS.md).
 --   * ResourceCleanup    — discharged in this branch (missing `Data.DPair`
 --                           import + lowercase `exists` → `Exists`).
 -- GrooveTermination (gossamer#36) now lives in gossamer-groove.ipkg.
