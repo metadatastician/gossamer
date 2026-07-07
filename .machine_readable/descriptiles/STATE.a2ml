@@ -257,8 +257,8 @@ depends-on = ["ephapax", "idris2", "zig", "webkitgtk"]
 #                 meta-repo submodule scenarios) → gold xfile shape with REAL gossamer probes
 #                 (Zig FFI, Idris2 ABI, Android JNI, deprecated-path reintroduction guards).
 #             [6] contractiles/README.adoc updated: removed stale lust/ reference, listed all 6 verbs.
-#             [7] 6a2/META.a2ml: removed stale rescript from languages[], updated last-updated.
-#             [8] 6a2/ECOSYSTEM.a2ml: updated purpose (plugin system landed), added Android+AffineScript
+#             [7] descriptiles/META.a2ml: removed stale rescript from languages[], updated last-updated.
+#             [8] descriptiles/ECOSYSTEM.a2ml: updated purpose (plugin system landed), added Android+AffineScript
 #                 integration points, updated last-updated.
 #             [9] EXPLAINME.adoc: replaced stale ReScript binding references with AffineScript
 #                 (bindings/rescript/ retired PR #74; bindings/affinescript/ is now @gossamer/api).

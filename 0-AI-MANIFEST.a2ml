@@ -47,9 +47,9 @@
   (canonical-locations
     (ai-manifest     "0-AI-MANIFEST.a2ml"           "THIS FILE")
     (ai-instructions ".claude/CLAUDE.md"             "Claude-specific patterns")
-    (state           ".machine_readable/STATE.a2ml")
-    (meta            ".machine_readable/META.a2ml")
-    (ecosystem       ".machine_readable/ECOSYSTEM.a2ml")
+    (state           ".machine_readable/descriptiles/STATE.a2ml")
+    (meta            ".machine_readable/descriptiles/META.a2ml")
+    (ecosystem       ".machine_readable/descriptiles/ECOSYSTEM.a2ml")
     (config          "gossamer.conf.json"            "Gossamer runtime configuration"))
 
   ;; ===================================================================
@@ -62,7 +62,7 @@
       (ffi     "src/interface/ffi/src/*.zig"  "Zig C ABI implementation")
       (headers "src/interface/generated/*.h"  "Auto-generated C headers")
       (core    "src/core/*.eph"               "Ephapax core (Shell, Bridge, Capabilities)")
-      (platform "src/platform/*.eph"          "Platform-specific Ephapax code")
+      (platform "src/interface/ffi/src/webview_*.zig" "Platform-specific webview backends (Zig)")
       (bindings "bindings/"                   "Rust + ReScript bindings"))
     (features
       "Sync IPC (channels), Async IPC (worker threads, 256 inflight),
@@ -90,11 +90,11 @@
   (lifecycle
     (on-enter
       (step "Read THIS file first")
-      (step "Read .machine_readable/STATE.a2ml for current status")
+      (step "Read .machine_readable/descriptiles/STATE.a2ml for current status")
       (step "Check ABI-FFI result code alignment if touching interfaces"))
 
     (on-exit
-      (step "Update .machine_readable/STATE.a2ml with progress")
+      (step "Update .machine_readable/descriptiles/STATE.a2ml with progress")
       (step "Verify no orphaned linear resources in new code")))
 
   (format-meta

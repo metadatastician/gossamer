@@ -638,13 +638,13 @@ equivalent.
 {
   "ephapax": {
     "modules": [
-      "src/ephapax/resources.eph",
-      "src/ephapax/ipc_guards.eph"
+      "ephapax/resources.eph",
+      "ephapax/ipc_guards.eph"
     ],
     "region": "app",
     "linearVerification": true,
     "regionBoundary": "strict",
-    "preload": ["src/ephapax/resources.eph"],
+    "preload": ["ephapax/resources.eph"],
     "ffiBindings": "ffi/zig/src/"
   }
 }

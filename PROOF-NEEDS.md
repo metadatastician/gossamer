@@ -20,8 +20,8 @@
   - **No phantom, no drift.** `Gossamer.ABI.ForeignGen` is a **generated** raw `%foreign` mirror of the C ABI — `scripts/gen-abi-foreign.sh` emits one declaration per `export fn gossamer_*` in `src/interface/ffi/src/*.zig`, making the **Zig FFI the single source of truth**. Coverage is **130 / 130 (100%)**.
   - **Enforced in CI.** `scripts/check-abi-ffi-cleave.sh` hard-fails on any phantom `%foreign` *and* runs the generator in `--check` mode: if a Zig export is added/changed/removed and `ForeignGen.idr` isn't regenerated (`just abi-gen`), CI fails. The ABI therefore cannot drift from — or lie about — the FFI.
   - Curated safe wrappers over the core subset (with `MainThreadProof` etc.) remain hand-written in `Gossamer.ABI.Foreign`; `ForeignGen` is the complete raw layer beneath them.
-- **One class-J axiom**: `Gossamer.ABI.PanelIsolation.stringNotEqCommut` — sanctioned principled assumption over the Idris2 backend primitive `prim__eq_String` (content-symmetry on every supported backend; cannot be derived inside Idris2). `%unsafe`-annotated, `believe_me ()`-bodied, documented at the use site. Same trust posture as boj-server's `Boj.SafetyLemmas.charEqSym` and four sibling axioms over String / Char primitives. See "Class-J axioms (trusted base)" section below.
-- No other `believe_me`, `sorry`, `postulate`, or `assert_total` in the ABI layer.
+- **Zero class-J axioms** (as of 2026-07-07): the former `stringNotEqCommut` axiom was eliminated constructively — see "Class-J axioms (trusted base)" below for the retirement record.
+- No `believe_me`, `sorry`, `postulate`, or `assert_total` anywhere in the ABI layer.
 - Zig FFI layer in `src/interface/ffi/`
 
 ## What needs proving
@@ -44,15 +44,9 @@
 
 ## Class-J axioms (trusted base)
 
-This repo has one class-J axiom, sanctioned and documented:
+This repo has **zero class-J axioms** (as of 2026-07-07).
 
-| Axiom | Module | Justification | Soundness oracle |
-|---|---|---|---|
-| `stringNotEqCommut` | `Gossamer.ABI.PanelIsolation` | Commutativity of `prim__eq_String`: the Idris2 backend primitive for `String == String`. Holds on every supported backend (Chez, Racket, Node, JS — all dispatch to native string-equal which is content-symmetric). Cannot be derived inside Idris2 (opaque primitive with no constructors / induction principle). | Per-backend property-test validation (deferred to the backend-assurance harness once ported from boj-server's `project_boj_server_backend_assurance_harness`). |
-
-The axiom is `%unsafe`-marked and the function body is `believe_me ()` — explicit, named, audited; **not unproven debt**. Sites that depend on it: `PanelIsolation.distinctSym`.
-
-**Reduce-the-trusted-base path**: when gossamer adopts the backend-assurance harness, `stringNotEqCommut` can be promoted from class-J axiom to a backend-verified theorem via runtime correspondence tests against the primitive.
+**Retired**: `stringNotEqCommut` (`Gossamer.ABI.PanelIsolation`) axiomatised commutativity of the opaque `prim__eq_String` primitive so that `distinctSym : Distinct a b -> Distinct b a` could flip the carried `So (not (a == b))` witness. It was eliminated constructively, not by adopting the backend-assurance harness: `MkDistinct` now carries an erased `So` witness for **both** orientations of the inequality. At every construction site the tags are concrete string literals, so both witnesses are auto-solved by evaluation at zero runtime cost (both are `0`-quantity), and `distinctSym` is a pure swap of the two witnesses. The trusted base gained nothing and lost the axiom.
 
 ## Discharge ledger (2026-05-20, standards#131 close-out)
 

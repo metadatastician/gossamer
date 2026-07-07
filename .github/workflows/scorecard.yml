@@ -13,8 +13,10 @@ permissions:
 
 jobs:
   scorecard:
-    uses: hyperpolymath/standards/.github/workflows/scorecard-reusable.yml@d7c22711e830e1f383846472f6e9b99debdb201e
+    # The reusable's scorecard job elevates to these; a called workflow
+    # cannot exceed the caller's grant, so they must be granted here.
     permissions:
       contents: read
       security-events: write
       id-token: write
+    uses: hyperpolymath/standards/.github/workflows/scorecard-reusable.yml@6208833f327ea18f58f558762dbed9bc0effc049
