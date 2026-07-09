@@ -224,8 +224,16 @@ export
 prim__gossamer_get_max_inflight : PrimIO Bits32
 
 export
+%foreign "C:gossamer_groove_audit_summary, libgossamer"
+prim__gossamer_groove_audit_summary : Bits64 -> Bits64 -> PrimIO Bits64
+
+export
 %foreign "C:gossamer_groove_check_compat, libgossamer"
 prim__gossamer_groove_check_compat : Bits32 -> Bits32 -> PrimIO Bits32
+
+export
+%foreign "C:gossamer_groove_connect_session, libgossamer"
+prim__gossamer_groove_connect_session : Bits32 -> Bits32 -> Bits32 -> PrimIO Bits64
 
 export
 %foreign "C:gossamer_groove_connect_typed, libgossamer"
@@ -238,6 +246,10 @@ prim__gossamer_groove_disconnect : Bits32 -> PrimIO ()
 export
 %foreign "C:gossamer_groove_disconnect_all, libgossamer"
 prim__gossamer_groove_disconnect_all : PrimIO ()
+
+export
+%foreign "C:gossamer_groove_disconnect_session, libgossamer"
+prim__gossamer_groove_disconnect_session : Bits64 -> PrimIO Bits32
 
 export
 %foreign "C:gossamer_groove_disconnect_typed, libgossamer"
@@ -256,6 +268,10 @@ export
 prim__gossamer_groove_find_capability : String -> PrimIO Bits32
 
 export
+%foreign "C:gossamer_groove_heartbeat, libgossamer"
+prim__gossamer_groove_heartbeat : Bits64 -> PrimIO Bits32
+
+export
 %foreign "C:gossamer_groove_manifest, libgossamer"
 prim__gossamer_groove_manifest : Bits32 -> PrimIO Bits64
 
@@ -270,6 +286,10 @@ prim__gossamer_groove_recv : Bits32 -> PrimIO Bits64
 export
 %foreign "C:gossamer_groove_send, libgossamer"
 prim__gossamer_groove_send : Bits32 -> String -> PrimIO Bits32
+
+export
+%foreign "C:gossamer_groove_session_adopt, libgossamer"
+prim__gossamer_groove_session_adopt : Bits64 -> Bits64 -> PrimIO Bits32
 
 export
 %foreign "C:gossamer_groove_signing_active, libgossamer"

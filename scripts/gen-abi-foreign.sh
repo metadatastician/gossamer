@@ -59,6 +59,7 @@ gen_body() {
       if (z=="u64"||z=="i64"||z=="usize"||z=="isize"||z=="c_long"||z=="c_ulong") return "Bits64"
       if (z=="f32"||z=="f64") return "Double"
       if (z=="Result" || z ~ /\.Result$/) return "Bits32"
+      if (z=="GrooveHandle") return "Bits64"   # enum(u64) newtype (main.zig)
       bare=z; sub(/^\?/,"",bare)
       if (bare ~ /Fn$/) return "Bits64"
       printf("gen-abi-foreign: unmapped Zig type %s\n", z) > "/dev/stderr"; EXIT=1; return "Bits64"

@@ -198,6 +198,35 @@ pub fn build(b: *std.Build) void {
     const integration_test_step = b.step("test-integration", "Run Gossamer FFI/ABI integration tests (headless)");
     integration_test_step.dependOn(&run_integration_tests.step);
 
+    // --- Groove session-lease demo (manual; needs a LIVE groove service) ---
+    // Connects a soft lease (short TTL) and lets it lapse, connects a hard
+    // lease and heartbeats three windows, disconnects (showing the handle
+    // once-guard), then prints the teardown audit summary. Rooted in test/
+    // and importing the `gossamer` module for the same Zig 0.15 reason as
+    // the integration tests above.
+    //   zig build groove-demo -- <target-index>
+    const groove_demo_module = b.createModule(.{
+        .root_source_file = b.path("test/groove_demo.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .imports = &.{
+            .{ .name = "gossamer", .module = gossamer_module },
+        },
+    });
+
+    linkPlatformLibs(groove_demo_module, os, abi);
+
+    const groove_demo = b.addExecutable(.{
+        .name = "groove-demo",
+        .root_module = groove_demo_module,
+    });
+
+    const run_groove_demo = b.addRunArtifact(groove_demo);
+    if (b.args) |args| run_groove_demo.addArgs(args);
+    const groove_demo_step = b.step("groove-demo", "Build and run the groove session-lease demo (needs a live groove service)");
+    groove_demo_step.dependOn(&run_groove_demo.step);
+
     // --- Android component host logic tests (host-runnable; pure Zig, no NDK) ---
     // The JNI binding and the Service/Receiver/Widget hosts are pure Zig, so
     // their registry/dispatch/JSON/directive logic runs on the host via
