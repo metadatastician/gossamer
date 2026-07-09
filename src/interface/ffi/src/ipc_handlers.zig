@@ -46,6 +46,7 @@ extern fn gossamer_lower(handle: u64) c_int;
 extern fn gossamer_arrange(strategy: u32) c_int;
 extern fn gossamer_transmute(handle: u64, mode: c_int) c_int;
 extern fn gossamer_transmute_get(handle: u64) c_int;
+extern fn gossamer_last_error() ?[*:0]const u8;
 extern fn gossamer_activity_set(handle: u64, level: c_int) c_int;
 extern fn gossamer_activity_get(handle: u64) c_int;
 extern fn gossamer_debug_open(handle: u64) c_int;
@@ -478,8 +479,26 @@ fn transmuteHandler(payload: [*:0]const u8, user_data: ?*anyopaque) callconv(.c)
     else if (std.mem.eql(u8, mode_str, "panll_detach")) { mode = 5; }
     else { return @ptrCast(@constCast("{\"ok\":false,\"error\":\"invalid mode\"}")); }
 
-    return windowResultJson(gossamer_transmute(handle, mode));
+    const rc = gossamer_transmute(handle, mode);
+    if (rc != 0) {
+        // Surface the specific failure ("Illegal transmute transition:
+        // gui -> panll_detach", "PanLL attach failed", ...) instead of a
+        // bare result code. The message is controlled ASCII from setError —
+        // no JSON escaping needed.
+        if (gossamer_last_error()) |err| {
+            const msg = std.fmt.bufPrint(&transmute_json_buf,
+                "{{\"ok\":false,\"error\":\"{s}\"}}", .{std.mem.span(err)},
+            ) catch return windowResultJson(rc);
+            transmute_json_buf[msg.len] = 0;
+            return transmute_json_buf[0..msg.len :0];
+        }
+    }
+    return windowResultJson(rc);
 }
+
+/// Buffer for the formatted transmute error JSON (the returned pointer must
+/// outlive the handler call; threadlocal like the FFI's own error state).
+threadlocal var transmute_json_buf: [192]u8 = undefined;
 
 /// IPC handler: get current transmute mode.
 fn transmuteGetHandler(_: [*:0]const u8, user_data: ?*anyopaque) callconv(.c) [*:0]const u8 {

@@ -365,6 +365,17 @@ transmuteModeToInt TransmuteTerminalExport = 3
 transmuteModeToInt TransmutePanllAttach = 4
 transmuteModeToInt TransmutePanllDetach = 5
 
+||| Reconstruct TransmuteMode from C integer.
+public export
+transmuteModeFromInt : Bits32 -> Maybe TransmuteMode
+transmuteModeFromInt 0 = Just TransmuteGui
+transmuteModeFromInt 1 = Just TransmuteTui
+transmuteModeFromInt 2 = Just TransmuteCli
+transmuteModeFromInt 3 = Just TransmuteTerminalExport
+transmuteModeFromInt 4 = Just TransmutePanllAttach
+transmuteModeFromInt 5 = Just TransmutePanllDetach
+transmuteModeFromInt _ = Nothing
+
 --------------------------------------------------------------------------------
 -- Activity Level
 --------------------------------------------------------------------------------

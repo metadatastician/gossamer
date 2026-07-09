@@ -974,13 +974,17 @@ pub export fn gossamer_registry_add(handle_ptr: u64) u32 {
     registry_mutex.lock();
     defer registry_mutex.unlock();
 
-    for (&window_registry) |*slot| {
+    for (&window_registry, 0..) |*slot, i| {
         if (slot.* == null) {
             const id = next_window_id;
             next_window_id +%= 1;
             if (next_window_id == 0) next_window_id = 1;
             handle.window_id = id;
             slot.* = handle;
+            // A reused slot must not leak the previous occupant's per-slot
+            // state onto the new window (stale transmute mode / throttle).
+            transmute_modes[i] = .gui;
+            activity_levels[i] = .realtime;
             return id;
         }
     }
@@ -996,10 +1000,14 @@ pub export fn gossamer_registry_remove(handle_ptr: u64) void {
     registry_mutex.lock();
     defer registry_mutex.unlock();
 
-    for (&window_registry) |*slot| {
+    for (&window_registry, 0..) |*slot, i| {
         if (slot.* == handle) {
             slot.* = null;
             handle.window_id = 0;
+            // Slot hygiene: clear per-slot state on removal too, so a
+            // vacated slot never carries a stale mode/throttle forward.
+            transmute_modes[i] = .gui;
+            activity_levels[i] = .realtime;
             return;
         }
     }
@@ -1434,25 +1442,80 @@ pub const TransmuteMode = enum(c_int) {
 /// Current transmute mode per handle.
 /// Stored separately from GossamerHandle to avoid changing the core struct
 /// layout for features that most handles won't use.
-var transmute_modes: [MAX_WINDOWS]TransmuteMode = [_]TransmuteMode{.gui} ** MAX_WINDOWS;
+/// `pub` (not `export`) for state injection in integration_test.zig — only
+/// `export` symbols are part of the C ABI.
+pub var transmute_modes: [MAX_WINDOWS]TransmuteMode = [_]TransmuteMode{.gui} ** MAX_WINDOWS;
 
 /// Get the transmute mode for a window by registry index.
-fn getTransmuteSlot(handle: *GossamerHandle) ?usize {
+/// Caller must hold registry_mutex (the scan races registry add/remove).
+/// `pub` for state injection in integration_test.zig (single-threaded there,
+/// so the lock requirement is vacuous); not part of the C ABI.
+pub fn getTransmuteSlot(handle: *GossamerHandle) ?usize {
     for (window_registry, 0..) |slot, i| {
         if (slot == handle) return i;
     }
     return null;
 }
 
+/// The legal transmute transition relation. This is the runtime MIRROR of
+/// `Gossamer.ABI.TransmuteStateMachine.validTransmute` (the machine-checked
+/// spec) — keep the two arm-for-arm identical; each arm names its Idris
+/// constructor(s). `validSound`/`validComplete` prove the Idris side IS the
+/// transition relation; the 36-pair matrix in integration_test.zig pins this
+/// mirror to it.
+/// `pub` (not `export`): visible to tests, not part of the C ABI.
+pub fn validTransition(old: TransmuteMode, new: TransmuteMode) bool {
+    // Idris: SelfLoop m — accepted, effect-free (early return before effects)
+    if (old == new) return true;
+    return switch (old) {
+        // Idris: GuiToTui / GuiToCli / GuiToExport / GuiToAttach / GuiToDetach
+        .gui => true,
+        // Idris: {Tui,Cli,Export}ToGui / {Tui,Cli,Export}ToDetach
+        .tui, .cli, .terminal_export => new == .gui or new == .panll_detach,
+        // Idris: AttachToDetach — attach holds an external PanLL panel slot;
+        // its only exit is to release it (acquire/release bracket)
+        .panll_attach => new == .panll_detach,
+        // Idris: DetachToGui — detach is transient; normalize through gui
+        // (which runs the DOM restore) before any new transform
+        .panll_detach => new == .gui,
+    };
+}
+
+/// Buffer for the formatted illegal-transition message (setError stores the
+/// slice, so it must outlive the call; threadlocal like last_error itself).
+threadlocal var transmute_err_buf: [96]u8 = undefined;
+
+/// PanLL's well-known groove target (groove.zig targets[4]: "panll", port 8000).
+const PANLL_TARGET: u32 = 4;
+
 /// Set the transmute mode for a window.
 ///
-/// Mode transitions:
-///   gui → tui:          Extract webview text, inject ANSI-formatted content
-///   gui → cli:          Extract text, emit to stdout
-///   gui → terminal_export: Serialize current DOM state to a pty
-///   gui → panll_attach: Send groove message to PanLL on port 8000
-///   any → panll_detach: Disconnect from PanLL, restore standalone mode
-///   tui/cli → gui:      Restore webview, reload last HTML
+/// Enforced transition relation — proved in
+/// src/interface/abi/TransmuteStateMachine.idr; `validTransition` above
+/// mirrors `validTransmute` constructor-for-constructor:
+///
+///   gui → {tui, cli, terminal_export, panll_attach, panll_detach}
+///   tui/cli/terminal_export → {gui, panll_detach}
+///   panll_attach → panll_detach     (release the PanLL slot first)
+///   panll_detach → gui              (normalize through gui: restore runs)
+///   m → m                           (accepted, effect-free no-op)
+///
+/// Anything else returns .invalid_param with an "Illegal transmute
+/// transition" message and leaves the stored mode untouched. Effects that
+/// fail (JS injection, PanLL attach send) also leave the mode untouched and
+/// return an error — the stored mode never desyncs from reality. Exception,
+/// by design: the detach *notify* is best-effort (a dead PanLL must not trap
+/// windows in panll_attach — see everyModeHasExit in the proof).
+///
+/// Known limitation (B5): the gui backup lives in the webview JS global
+/// `window.__gossamer_gui_backup`, so page navigation while in tui/cli
+/// discards it; a later gui entry then just shows the navigated page. A real
+/// fix needs Zig-side DOM snapshot storage (deferred).
+///
+/// Threading: registry lookups and the mode write hold registry_mutex; the
+/// mutex is NEVER held across platform.eval/groove_send. Two concurrent
+/// transmutes of one window are excluded by the main-thread discipline
+/// (MainThreadProof on the Idris wrapper), not by this lock.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__transmute
 pub export fn gossamer_transmute(handle_ptr: u64, mode: c_int) Result {
@@ -1471,29 +1534,52 @@ pub export fn gossamer_transmute(handle_ptr: u64, mode: c_int) Result {
         return .invalid_param;
     };
 
-    const slot = getTransmuteSlot(handle) orelse {
-        setError("Window not registered — call gossamer_registry_add first");
-        return .@"error";
+    const old_mode = blk: {
+        registry_mutex.lock();
+        defer registry_mutex.unlock();
+        const slot = getTransmuteSlot(handle) orelse {
+            setError("Window not registered — call gossamer_registry_add first");
+            return .@"error";
+        };
+        break :blk transmute_modes[slot];
     };
 
-    const old_mode = transmute_modes[slot];
+    // SelfLoop: re-requesting the current mode is a legal, effect-free no-op
+    // (re-running a transform JS would double-render).
+    if (old_mode == new_mode) {
+        return .ok;
+    }
+
+    if (!validTransition(old_mode, new_mode)) {
+        const msg = std.fmt.bufPrint(&transmute_err_buf,
+            "Illegal transmute transition: {s} -> {s}",
+            .{ @tagName(old_mode), @tagName(new_mode) },
+        ) catch "Illegal transmute transition";
+        setError(msg);
+        return .invalid_param;
+    }
 
     switch (new_mode) {
         .gui => {
-            // Restore webview from terminal modes using the backed-up HTML
-            if (old_mode == .tui or old_mode == .cli or old_mode == .terminal_export) {
-                const restore_js =
-                    \\(function(){
-                    \\  if(window.__gossamer_gui_backup){
-                    \\    document.body.innerHTML=window.__gossamer_gui_backup;
-                    \\    document.body.style.margin='';
-                    \\    delete window.__gossamer_gui_backup;
-                    \\  }
-                    \\  window.__gossamer_emit&&window.__gossamer_emit('transmuted',{mode:'gui'});
-                    \\})();
-                ;
-                platform.eval(&handle.webview, restore_js) catch {};
-            }
+            // Restore the webview from the backed-up HTML. Runs on EVERY gui
+            // entry (the JS is a no-op without a backup): panll_detach can
+            // inherit a live backup (e.g. tui → panll_detach → gui), so
+            // restoring only from the terminal modes provably leaks it — see
+            // guiHasNoBackup / b1BugWitness in TransmuteStateMachine.idr.
+            const restore_js =
+                \\(function(){
+                \\  if(window.__gossamer_gui_backup){
+                \\    document.body.innerHTML=window.__gossamer_gui_backup;
+                \\    document.body.style.margin='';
+                \\    delete window.__gossamer_gui_backup;
+                \\  }
+                \\  window.__gossamer_emit&&window.__gossamer_emit('transmuted',{mode:'gui'});
+                \\})();
+            ;
+            platform.eval(&handle.webview, restore_js) catch {
+                setError("Transmute: gui restore JavaScript failed");
+                return .@"error";
+            };
         },
         .tui => {
             // TUI mode: walk the DOM, extract structured text, render with
@@ -1547,7 +1633,10 @@ pub export fn gossamer_transmute(handle_ptr: u64, mode: c_int) Result {
                 \\  window.__gossamer_emit&&window.__gossamer_emit('transmuted',{mode:'tui'});
                 \\})();
             ;
-            platform.eval(&handle.webview, tui_js) catch {};
+            platform.eval(&handle.webview, tui_js) catch {
+                setError("Transmute: tui transform JavaScript failed");
+                return .@"error";
+            };
         },
         .cli => {
             // CLI mode: strip all markup, plain text only.
@@ -1561,7 +1650,10 @@ pub export fn gossamer_transmute(handle_ptr: u64, mode: c_int) Result {
                 \\  window.__gossamer_emit&&window.__gossamer_emit('transmuted',{mode:'cli'});
                 \\})();
             ;
-            platform.eval(&handle.webview, cli_js) catch {};
+            platform.eval(&handle.webview, cli_js) catch {
+                setError("Transmute: cli transform JavaScript failed");
+                return .@"error";
+            };
         },
         .terminal_export => {
             // Extract text content and log to stdout
@@ -1572,26 +1664,34 @@ pub export fn gossamer_transmute(handle_ptr: u64, mode: c_int) Result {
                 \\  window.__gossamer_emit&&window.__gossamer_emit('transmuted',{mode:'terminal_export'});
                 \\})();
             ;
-            platform.eval(&handle.webview, export_js) catch {};
+            platform.eval(&handle.webview, export_js) catch {
+                setError("Transmute: terminal_export JavaScript failed");
+                return .@"error";
+            };
         },
         .panll_attach => {
-            // Send a groove registration to PanLL (target 4, port 8000 —
-            // PanLL's dev server; 4040 is gossamer's OWN devUrl port and was
-            // previously misnamed here).
-            // Message: {"action":"attach","window_id":N,"title":"..."}
-            // PanLL responds with a panel slot assignment.
-            const PANLL_TARGET: u32 = 4;
+            // Send a groove registration to PanLL (target 4 = "panll",
+            // well-known port 8000 — groove.zig targets[4]; 4040 is
+            // gossamer's OWN devUrl port and was previously misnamed here).
+            // Message: {"action":"attach","window_id":N,"source":"gossamer"}
+            // Attach ACQUIRES an external panel slot, so the send must
+            // succeed — otherwise the stored mode would claim an attachment
+            // that never happened (B2).
             var msg_buf: [256]u8 = undefined;
             const wid = handle.window_id;
             const msg = std.fmt.bufPrint(&msg_buf,
                 "{{\"action\":\"attach\",\"window_id\":{d},\"source\":\"gossamer\"}}", .{wid},
-            ) catch "";
-            if (msg.len > 0) {
-                msg_buf[msg.len] = 0;
-                const msg_z: [*:0]const u8 = msg_buf[0..msg.len :0];
-                _ = @import("groove.zig").gossamer_groove_send(PANLL_TARGET, msg_z);
+            ) catch {
+                setError("Transmute: PanLL attach message formatting failed");
+                return .@"error";
+            };
+            msg_buf[msg.len] = 0;
+            const msg_z: [*:0]const u8 = msg_buf[0..msg.len :0];
+            if (@import("groove.zig").gossamer_groove_send(PANLL_TARGET, msg_z) != 0) {
+                setError("Transmute: PanLL attach failed — groove send to target 4 (panll, port 8000) rejected");
+                return .@"error";
             }
-            // Also notify the local JS
+            // Local JS notify is best-effort: the attach itself succeeded.
             const attach_js =
                 \\(function(){
                 \\  window.__gossamer_emit&&window.__gossamer_emit('transmuted',{mode:'panll_attach'});
@@ -1600,8 +1700,11 @@ pub export fn gossamer_transmute(handle_ptr: u64, mode: c_int) Result {
             platform.eval(&handle.webview, attach_js) catch {};
         },
         .panll_detach => {
-            // Tell PanLL to release this window's panel slot.
-            const PANLL_TARGET: u32 = 4;
+            // Tell PanLL to release this window's panel slot. Detach is the
+            // RELEASE half of the bracket and is deliberately best-effort:
+            // if PanLL is dead, failing here would trap the window in
+            // panll_attach forever (violating everyModeHasExit in the
+            // proof). The mode is recorded regardless.
             var msg_buf: [256]u8 = undefined;
             const wid = handle.window_id;
             const msg = std.fmt.bufPrint(&msg_buf,
@@ -1621,14 +1724,24 @@ pub export fn gossamer_transmute(handle_ptr: u64, mode: c_int) Result {
         },
     }
 
+    // Record the new mode. Re-resolve the slot under the lock: the window
+    // may have been unregistered while the (lock-free) effects ran.
+    registry_mutex.lock();
+    defer registry_mutex.unlock();
+    const slot = getTransmuteSlot(handle) orelse {
+        setError("Window unregistered during transmute");
+        return .@"error";
+    };
     transmute_modes[slot] = new_mode;
     clearError();
     return .ok;
 }
 
-/// Get the current transmute mode for a window.
+/// Get the current transmute mode for a window (-1 if null/unregistered).
 pub export fn gossamer_transmute_get(handle_ptr: u64) c_int {
     const handle = ptrFromU64(handle_ptr) orelse return -1;
+    registry_mutex.lock();
+    defer registry_mutex.unlock();
     const slot = getTransmuteSlot(handle) orelse return -1;
     return @intFromEnum(transmute_modes[slot]);
 }
