@@ -613,6 +613,187 @@ test "transmute with invalid mode on fake handle returns invalid_param" {
     fake_handle.bindings.deinit();
 }
 
+// The transition relation is proved in
+// src/interface/abi/TransmuteStateMachine.idr (validSound/validComplete);
+// gossamer.validTransition mirrors validTransmute arm-for-arm. This matrix
+// is the THIRD, independent encoding of the same 36 pairs — if either mirror
+// drifts from the spec, this table catches it.
+test "transmute validTransition matrix matches the Idris relation" {
+    const M = gossamer.TransmuteMode;
+    const gui = M.gui;
+    const tui = M.tui;
+    const cli = M.cli;
+    const exp = M.terminal_export;
+    const att = M.panll_attach;
+    const det = M.panll_detach;
+
+    const Case = struct { from: M, to: M, legal: bool };
+    // All 36 ordered pairs, hand-enumerated from the proof module.
+    const matrix = [36]Case{
+        .{ .from = gui, .to = gui, .legal = true }, // SelfLoop gui
+        .{ .from = gui, .to = tui, .legal = true }, // GuiToTui
+        .{ .from = gui, .to = cli, .legal = true }, // GuiToCli
+        .{ .from = gui, .to = exp, .legal = true }, // GuiToExport
+        .{ .from = gui, .to = att, .legal = true }, // GuiToAttach
+        .{ .from = gui, .to = det, .legal = true }, // GuiToDetach
+        .{ .from = tui, .to = gui, .legal = true }, // TuiToGui
+        .{ .from = tui, .to = tui, .legal = true }, // SelfLoop tui
+        .{ .from = tui, .to = cli, .legal = false }, // noTuiToCli
+        .{ .from = tui, .to = exp, .legal = false },
+        .{ .from = tui, .to = att, .legal = false }, // noTuiToAttach
+        .{ .from = tui, .to = det, .legal = true }, // TuiToDetach
+        .{ .from = cli, .to = gui, .legal = true }, // CliToGui
+        .{ .from = cli, .to = tui, .legal = false }, // noCliToTui
+        .{ .from = cli, .to = cli, .legal = true }, // SelfLoop cli
+        .{ .from = cli, .to = exp, .legal = false },
+        .{ .from = cli, .to = att, .legal = false },
+        .{ .from = cli, .to = det, .legal = true }, // CliToDetach
+        .{ .from = exp, .to = gui, .legal = true }, // ExportToGui
+        .{ .from = exp, .to = tui, .legal = false },
+        .{ .from = exp, .to = cli, .legal = false },
+        .{ .from = exp, .to = exp, .legal = true }, // SelfLoop terminal_export
+        .{ .from = exp, .to = att, .legal = false },
+        .{ .from = exp, .to = det, .legal = true }, // ExportToDetach
+        .{ .from = att, .to = gui, .legal = false }, // noAttachToGui (bracket!)
+        .{ .from = att, .to = tui, .legal = false }, // noAttachToTui
+        .{ .from = att, .to = cli, .legal = false },
+        .{ .from = att, .to = exp, .legal = false },
+        .{ .from = att, .to = att, .legal = true }, // SelfLoop panll_attach
+        .{ .from = att, .to = det, .legal = true }, // AttachToDetach
+        .{ .from = det, .to = gui, .legal = true }, // DetachToGui
+        .{ .from = det, .to = tui, .legal = false },
+        .{ .from = det, .to = cli, .legal = false },
+        .{ .from = det, .to = exp, .legal = false },
+        .{ .from = det, .to = att, .legal = false }, // noDetachToAttach
+        .{ .from = det, .to = det, .legal = true }, // SelfLoop panll_detach
+    };
+
+    var legal_count: usize = 0;
+    for (matrix) |c| {
+        try testing.expectEqual(c.legal, gossamer.validTransition(c.from, c.to));
+        if (c.legal) legal_count += 1;
+    }
+    // 19 of 36 pairs are legal (proved: validSound/validComplete cover all).
+    try testing.expectEqual(@as(usize, 19), legal_count);
+}
+
+test "transmute self-loop is accepted and effect-free" {
+    var fake_handle = zeroedHandle();
+    fake_handle.initialized = true;
+    fake_handle.closed = false;
+    fake_handle.allocator = std.heap.c_allocator;
+    fake_handle.bindings = std.StringHashMap(gossamer.BindingEntry).init(std.heap.c_allocator);
+    defer fake_handle.bindings.deinit();
+    const hptr: u64 = @intFromPtr(&fake_handle);
+
+    const id = gossamer.gossamer_registry_add(hptr);
+    try testing.expect(id > 0);
+    defer gossamer.gossamer_registry_remove(hptr);
+
+    // Fresh registration starts in gui. Re-requesting gui is the SelfLoop:
+    // accepted, and returns BEFORE any JS/groove effect — this test passing
+    // headless (no display, fake webview) is itself the proof of that.
+    try testing.expectEqual(Result.ok, gossamer.gossamer_transmute(hptr, 0));
+    try testing.expectEqual(@as(c_int, 0), gossamer.gossamer_transmute_get(hptr));
+}
+
+test "transmute illegal transition returns invalid_param and preserves mode" {
+    var fake_handle = zeroedHandle();
+    fake_handle.initialized = true;
+    fake_handle.closed = false;
+    fake_handle.allocator = std.heap.c_allocator;
+    fake_handle.bindings = std.StringHashMap(gossamer.BindingEntry).init(std.heap.c_allocator);
+    defer fake_handle.bindings.deinit();
+    const hptr: u64 = @intFromPtr(&fake_handle);
+
+    const id = gossamer.gossamer_registry_add(hptr);
+    try testing.expect(id > 0);
+    defer gossamer.gossamer_registry_remove(hptr);
+
+    // Inject "currently in tui" (headless tests cannot run the tui JS).
+    const slot = gossamer.getTransmuteSlot(&fake_handle).?;
+    gossamer.transmute_modes[slot] = .tui;
+
+    // tui -> cli is illegal (noTuiToCli in the proof): rejected, mode kept.
+    try testing.expectEqual(Result.invalid_param, gossamer.gossamer_transmute(hptr, 2));
+    try testing.expectEqual(@as(c_int, 1), gossamer.gossamer_transmute_get(hptr));
+
+    // The rejection names the transition (surfaced to IPC clients).
+    const err = gossamer.gossamer_last_error() orelse return error.MissingError;
+    try testing.expect(std.mem.indexOf(u8, std.mem.span(err), "Illegal transmute transition") != null);
+    try testing.expect(std.mem.indexOf(u8, std.mem.span(err), "tui -> cli") != null);
+}
+
+test "transmute panll_attach without PanLL fails and does not record mode" {
+    var fake_handle = zeroedHandle();
+    fake_handle.initialized = true;
+    fake_handle.closed = false;
+    fake_handle.allocator = std.heap.c_allocator;
+    fake_handle.bindings = std.StringHashMap(gossamer.BindingEntry).init(std.heap.c_allocator);
+    defer fake_handle.bindings.deinit();
+    const hptr: u64 = @intFromPtr(&fake_handle);
+
+    const id = gossamer.gossamer_registry_add(hptr);
+    try testing.expect(id > 0);
+    defer gossamer.gossamer_registry_remove(hptr);
+
+    // gui -> panll_attach is LEGAL, but attach ACQUIRES an external panel
+    // slot: with no PanLL groove connected (headless — groove target 4 is
+    // not_found, send fails fast, no network), the call must fail and the
+    // stored mode must stay gui (B2: mode never desyncs from reality).
+    try testing.expectEqual(Result.@"error", gossamer.gossamer_transmute(hptr, 4));
+    try testing.expectEqual(@as(c_int, 0), gossamer.gossamer_transmute_get(hptr));
+}
+
+test "registry slot reuse resets transmute mode" {
+    var handle_a = zeroedHandle();
+    handle_a.initialized = true;
+    handle_a.closed = false;
+    handle_a.allocator = std.heap.c_allocator;
+    handle_a.bindings = std.StringHashMap(gossamer.BindingEntry).init(std.heap.c_allocator);
+    defer handle_a.bindings.deinit();
+    const aptr: u64 = @intFromPtr(&handle_a);
+
+    const id_a = gossamer.gossamer_registry_add(aptr);
+    try testing.expect(id_a > 0);
+
+    // Leave window A "in tui", then unregister it (B7: the slot must not
+    // carry the stale mode to its next occupant).
+    const slot_a = gossamer.getTransmuteSlot(&handle_a).?;
+    gossamer.transmute_modes[slot_a] = .tui;
+    gossamer.gossamer_registry_remove(aptr);
+
+    var handle_b = zeroedHandle();
+    handle_b.initialized = true;
+    handle_b.closed = false;
+    handle_b.allocator = std.heap.c_allocator;
+    handle_b.bindings = std.StringHashMap(gossamer.BindingEntry).init(std.heap.c_allocator);
+    defer handle_b.bindings.deinit();
+    const bptr: u64 = @intFromPtr(&handle_b);
+
+    const id_b = gossamer.gossamer_registry_add(bptr);
+    try testing.expect(id_b > 0);
+    defer gossamer.gossamer_registry_remove(bptr);
+
+    // B reuses A's slot (first-free scan) and must start pristine in gui.
+    try testing.expectEqual(slot_a, gossamer.getTransmuteSlot(&handle_b).?);
+    try testing.expectEqual(@as(c_int, 0), gossamer.gossamer_transmute_get(bptr));
+}
+
+test "transmute on open but unregistered handle returns error" {
+    var fake_handle = zeroedHandle();
+    fake_handle.initialized = true;
+    fake_handle.closed = false;
+    fake_handle.allocator = std.heap.c_allocator;
+    fake_handle.bindings = std.StringHashMap(gossamer.BindingEntry).init(std.heap.c_allocator);
+    defer fake_handle.bindings.deinit();
+    const hptr: u64 = @intFromPtr(&fake_handle);
+
+    // Never registered: legal-looking request still fails with a clear error.
+    try testing.expectEqual(Result.@"error", gossamer.gossamer_transmute(hptr, 5));
+    try testing.expectEqual(@as(c_int, -1), gossamer.gossamer_transmute_get(hptr));
+}
+
 //==============================================================================
 // Activity Level Tests
 //==============================================================================

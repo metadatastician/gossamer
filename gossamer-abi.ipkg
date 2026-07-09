@@ -35,6 +35,7 @@ modules = Gossamer.ABI.Types
         , Gossamer.ABI.IPCDispatch
         , Gossamer.ABI.HandleLinearity
         , Gossamer.ABI.WindowStateMachine
+        , Gossamer.ABI.TransmuteStateMachine
         , Gossamer.ABI.LayoutStability
         , Gossamer.ABI.IPCIntegrity
         , Gossamer.ABI.PanelIsolation

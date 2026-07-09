@@ -667,7 +667,7 @@ test "display: guard set/get cycle — locked blocks close/resize/minimize" {
     gossamer_destroy(ptr);
 }
 
-test "display: transmute gui -> tui -> gui round-trip" {
+test "display: transmute gui -> tui -> gui -> cli -> gui round-trip" {
     if (!displayAvailable()) {
         std.debug.print("SKIP: no display server available\n", .{});
         return;
@@ -681,10 +681,91 @@ test "display: transmute gui -> tui -> gui round-trip" {
     _ = gossamer_load_html(ptr, "<html><body><h1>Content</h1><p>Test</p></body></html>");
     _ = gossamer_registry_add(ptr);
 
+    // With B2 fixed, .ok now MEANS the transform JS was submitted
+    // successfully — each step below drives the real eval on a live webview.
     try testing.expectEqual(@as(c_int, 0), gossamer_transmute_get(ptr));
     try testing.expectEqual(Result.ok, gossamer_transmute(ptr, 1)); // tui
     try testing.expectEqual(@as(c_int, 1), gossamer_transmute_get(ptr));
-    try testing.expectEqual(Result.ok, gossamer_transmute(ptr, 0)); // back to gui
+    try testing.expectEqual(Result.ok, gossamer_transmute(ptr, 0)); // restore
+    try testing.expectEqual(@as(c_int, 0), gossamer_transmute_get(ptr));
+    try testing.expectEqual(Result.ok, gossamer_transmute(ptr, 2)); // cli
+    try testing.expectEqual(@as(c_int, 2), gossamer_transmute_get(ptr));
+    try testing.expectEqual(Result.ok, gossamer_transmute(ptr, 0)); // restore
+    try testing.expectEqual(@as(c_int, 0), gossamer_transmute_get(ptr));
+
+    gossamer_destroy(ptr);
+}
+
+test "display: illegal transmute rejected on a real window" {
+    if (!displayAvailable()) {
+        std.debug.print("SKIP: no display server available\n", .{});
+        return;
+    }
+
+    const handle = gossamer_create("Transmute Illegal", 400, 300, 1, 1, 0) orelse {
+        std.debug.print("SKIP: gossamer_create returned null\n", .{});
+        return;
+    };
+    const ptr = handleToU64(handle);
+    _ = gossamer_load_html(ptr, "<html><body><h1>Illegal</h1></body></html>");
+    _ = gossamer_registry_add(ptr);
+
+    // tui -> cli is illegal (transform-on-transform, noTuiToCli in the
+    // proof): rejected with invalid_param, window stays in tui.
+    try testing.expectEqual(Result.ok, gossamer_transmute(ptr, 1)); // tui
+    try testing.expectEqual(Result.invalid_param, gossamer_transmute(ptr, 2));
+    try testing.expectEqual(@as(c_int, 1), gossamer_transmute_get(ptr));
+    try testing.expectEqual(Result.ok, gossamer_transmute(ptr, 0)); // recover
+
+    gossamer_destroy(ptr);
+}
+
+test "display: detach path restores gui (B1 scenario)" {
+    if (!displayAvailable()) {
+        std.debug.print("SKIP: no display server available\n", .{});
+        return;
+    }
+
+    const handle = gossamer_create("Transmute Detach", 400, 300, 1, 1, 0) orelse {
+        std.debug.print("SKIP: gossamer_create returned null\n", .{});
+        return;
+    };
+    const ptr = handleToU64(handle);
+    _ = gossamer_load_html(ptr, "<html><body><h1>Detach</h1></body></html>");
+    _ = gossamer_registry_add(ptr);
+
+    // gui -> tui -> panll_detach -> gui: the exact B1 path. detach inherits
+    // tui's live backup (detach notify is best-effort, so .ok even without
+    // PanLL); the final gui entry MUST run the restore (guiHasNoBackup) —
+    // pre-fix, this left the window stuck rendering the TUI transform.
+    try testing.expectEqual(Result.ok, gossamer_transmute(ptr, 1)); // tui
+    try testing.expectEqual(Result.ok, gossamer_transmute(ptr, 5)); // detach
+    try testing.expectEqual(@as(c_int, 5), gossamer_transmute_get(ptr));
+    try testing.expectEqual(Result.ok, gossamer_transmute(ptr, 0)); // gui+restore
+    try testing.expectEqual(@as(c_int, 0), gossamer_transmute_get(ptr));
+
+    gossamer_destroy(ptr);
+}
+
+test "display: transmute gui -> terminal_export -> gui round-trip" {
+    if (!displayAvailable()) {
+        std.debug.print("SKIP: no display server available\n", .{});
+        return;
+    }
+
+    const handle = gossamer_create("Transmute Export", 400, 300, 1, 1, 0) orelse {
+        std.debug.print("SKIP: gossamer_create returned null\n", .{});
+        return;
+    };
+    const ptr = handleToU64(handle);
+    _ = gossamer_load_html(ptr, "<html><body><h1>Export</h1></body></html>");
+    _ = gossamer_registry_add(ptr);
+
+    // terminal_export is a one-shot export (no DOM transform, no backup);
+    // ExportToGui is the pure flag reset the proof licenses.
+    try testing.expectEqual(Result.ok, gossamer_transmute(ptr, 3)); // export
+    try testing.expectEqual(@as(c_int, 3), gossamer_transmute_get(ptr));
+    try testing.expectEqual(Result.ok, gossamer_transmute(ptr, 0)); // gui
     try testing.expectEqual(@as(c_int, 0), gossamer_transmute_get(ptr));
 
     gossamer_destroy(ptr);
