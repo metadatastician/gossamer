@@ -2214,8 +2214,9 @@ pub export fn gossamer_groove_disconnect_session(h: GrooveHandle) callconv(.c) R
 }
 
 /// Refresh a session lease: GET /.well-known/groove/heartbeat?handle=H.
-/// A 2xx (SPEC: 204) refreshes a hard lease's window; a soft lease may also
-/// heartbeat to keep a short TTL alive.
+/// A 2xx (SPEC: 204) refreshes a hard lease's window. A soft lease MUST be
+/// allowed to expire (SPEC §4.6): providers refuse its refresh (409), so
+/// expect an error result for soft sessions.
 pub export fn gossamer_groove_heartbeat(h: GrooveHandle) callconv(.c) Result {
     clearError();
     if (h == .invalid) {

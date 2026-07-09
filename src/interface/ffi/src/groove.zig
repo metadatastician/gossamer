@@ -595,12 +595,22 @@ pub fn wireConnect(target_id: u32, mode: []const u8, ttl_ms: u64, out: []u8) Wir
     }
 
     var body_buf: [192]u8 = undefined;
-    const body = std.fmt.bufPrint(&body_buf,
-        "{{\"service_id\":\"gossamer\",\"consumes\":[],\"lease\":{{\"mode\":\"{s}\",\"ttl_ms\":{d}}}}}",
-        .{ mode, ttl_ms }) catch {
-        main.setError("Groove connect body exceeds buffer");
-        return error.ProtocolError;
-    };
+    // ttl_ms == 0 means "no lease": legacy SPEC §4.3 semantics. A literal
+    // {"ttl_ms":0} would be rejected with 400 by conforming providers
+    // (SPEC §4.6 TTL bounds), so the lease member is omitted entirely.
+    const body = if (ttl_ms == 0)
+        std.fmt.bufPrint(&body_buf,
+            "{{\"service_id\":\"gossamer\",\"consumes\":[]}}", .{}) catch {
+            main.setError("Groove connect body exceeds buffer");
+            return error.ProtocolError;
+        }
+    else
+        std.fmt.bufPrint(&body_buf,
+            "{{\"service_id\":\"gossamer\",\"consumes\":[],\"lease\":{{\"mode\":\"{s}\",\"ttl_ms\":{d}}}}}",
+            .{ mode, ttl_ms }) catch {
+            main.setError("Groove connect body exceeds buffer");
+            return error.ProtocolError;
+        };
 
     // Sign the lease request exactly like gossamer_groove_send signs messages.
     var header_buf: [768]u8 = undefined;
