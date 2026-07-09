@@ -20,7 +20,8 @@ const std = @import("std");
 const main = @import("main.zig");
 
 /// Number of well-known groove targets.
-const TARGET_COUNT = 10;
+/// Pub so main.zig's session API can bounds-check target indices.
+pub const TARGET_COUNT = 10;
 
 /// Maximum manifest JSON size (16 KiB).
 const MAX_MANIFEST: usize = 16 * 1024;
@@ -35,17 +36,25 @@ const MAX_CAPS: usize = 32;
 const MAX_CAP_NAME: usize = 64;
 
 /// Well-known groove targets: index → (port, service_id).
+///
+/// Ports mirror groove/registry/groove-registry.json (the groove-registry),
+/// which is the source of truth — fix port drift there first, then here.
+///
+/// DO NOT REORDER OR RENUMBER: the indices are API. FFI consumers, the
+/// Idris2 ABI, and gossamer_transmute's PanLL attach (index 4, main.zig)
+/// all address targets by index. Append new targets at the end only.
+/// The "groove target table order is frozen" test below pins this.
 const targets = [TARGET_COUNT]struct { port: u16, name: []const u8 }{
     .{ .port = 6473, .name = "burble" },
     .{ .port = 6480, .name = "vext" },
-    .{ .port = 8080, .name = "verisimdb" },
+    .{ .port = 6475, .name = "verisimdb" },
     .{ .port = 9090, .name = "hypatia" },
     .{ .port = 8000, .name = "panll" },
     .{ .port = 9000, .name = "echidna" },
     .{ .port = 7800, .name = "rpa-elysium" },
     .{ .port = 7700, .name = "conflow" },
     .{ .port = 7600, .name = "panic-attack" },
-    .{ .port = 8080, .name = "gitbot-fleet" },
+    .{ .port = 9100, .name = "gitbot-fleet" },
 };
 
 /// Groove connection status.
@@ -80,6 +89,12 @@ threadlocal var out_buf: [MAX_MANIFEST]u8 = undefined;
 /// Probe a single groove target by TCP connecting and requesting
 /// GET /.well-known/groove.
 fn probeTarget(idx: usize) void {
+    // Fail closed: when TLS was requested we must not probe over plaintext.
+    if (refuseTlsPlaintext()) {
+        grooves[idx].status = .not_found;
+        return;
+    }
+
     const port = targets[idx].port;
 
     // Attempt TCP connection to localhost:port.
@@ -378,11 +393,13 @@ pub export fn gossamer_groove_check_compat(target_a: u32, target_b: u32) callcon
 /// Uses HTTP POST to /.well-known/groove/message on the target port.
 ///
 /// When GOSSAMER_GROOVE_SECRET is set, the message is signed with
-/// HMAC-SipHash128 and the X-Groove-Signature header is included.
-/// When GOSSAMER_GROOVE_TLS=1, the connection uses HTTPS (not yet
-/// implemented — currently logged as a warning and falls back to HTTP).
+/// HMAC-SHA256 and the X-Groove-Signature header is included.
+/// When GOSSAMER_GROOVE_TLS=1, the send is REFUSED (fail closed): TLS is
+/// not implemented yet, and silently falling back to plaintext would betray
+/// the caller's request. Check gossamer_last_error() on failure.
 pub export fn gossamer_groove_send(target_id: u32, msg_ptr: [*:0]const u8) callconv(.c) u32 {
     initGrooveSecurity();
+    if (refuseTlsPlaintext()) return 1;
     if (target_id >= TARGET_COUNT) return 1;
     if (grooves[target_id].status == .not_found) return 1;
 
@@ -424,7 +441,10 @@ pub export fn gossamer_groove_send(target_id: u32, msg_ptr: [*:0]const u8) callc
 /// Receive a pending message from a grooved service.
 /// Uses HTTP GET to /.well-known/groove/recv on the target port.
 /// Returns a pointer to the response body (thread-local buffer).
+/// Refused (empty string) when GOSSAMER_GROOVE_TLS=1 — fail closed, see
+/// gossamer_groove_send.
 pub export fn gossamer_groove_recv(target_id: u32) callconv(.c) [*:0]const u8 {
+    if (refuseTlsPlaintext()) return "";
     if (target_id >= TARGET_COUNT) return "";
     if (grooves[target_id].status == .not_found) return "";
 
@@ -503,6 +523,240 @@ pub export fn gossamer_groove_disconnect_all() callconv(.c) void {
 }
 
 //==============================================================================
+// Groove Session Wire Client (groove SPEC v0.3 lease endpoints)
+//==============================================================================
+//
+// The session API in main.zig (gossamer_groove_connect_session /
+// gossamer_groove_heartbeat / gossamer_groove_disconnect_session) speaks the
+// lease endpoints of the groove protocol:
+//
+//   POST /.well-known/groove/connect
+//        {"service_id":"gossamer","consumes":[...],"lease":{"mode":"soft"|"hard","ttl_ms":N}}
+//     → 200 {"handle":"...", ...}
+//   GET  /.well-known/groove/heartbeat?handle=H
+//     → 204 (refreshes a hard lease's window; any 2xx is accepted)
+//   POST /.well-known/groove/disconnect {"handle":"..."}
+//     → 2xx (releases the lease)
+//
+// Failures are reported through main.setError so FFI callers can surface
+// them via gossamer_last_error().
+
+/// Errors surfaced by the wire client. The caller decides how to map them
+/// to FFI result codes; the thread-local error message is already set.
+pub const WireError = error{
+    /// GOSSAMER_GROOVE_TLS=1 but TLS is not implemented — fail closed.
+    TlsRefused,
+    /// TCP connect or I/O to the target failed.
+    ConnectFailed,
+    /// The target answered, but not with what the SPEC promises.
+    ProtocolError,
+};
+
+/// Maximum lease-handle length accepted from a groove service.
+pub const MAX_WIRE_HANDLE: usize = 128;
+
+/// Send one plaintext HTTP request to localhost:port and read the full
+/// response into `buf`. Returns the response slice (status line + headers +
+/// body), or null on any I/O failure (connection refused, write error).
+fn httpExchange(port: u16, head: []const u8, body: []const u8, buf: []u8) ?[]const u8 {
+    const addr = std.net.Address.initIp4(.{ 127, 0, 0, 1 }, port);
+    const stream = std.net.tcpConnectToAddress(addr) catch return null;
+    defer stream.close();
+
+    stream.writeAll(head) catch return null;
+    if (body.len > 0) {
+        stream.writeAll(body) catch return null;
+    }
+
+    var total: usize = 0;
+    while (total < buf.len) {
+        const n = stream.read(buf[total..]) catch break;
+        if (n == 0) break;
+        total += n;
+    }
+    if (total == 0) return null;
+    return buf[0..total];
+}
+
+/// Parse the status code out of a raw HTTP response ("HTTP/1.x NNN ...").
+fn parseStatusCode(response: []const u8) ?u32 {
+    const sp = std.mem.indexOfScalar(u8, response, ' ') orelse return null;
+    if (sp + 4 > response.len) return null;
+    return std.fmt.parseInt(u32, response[sp + 1 .. sp + 4], 10) catch null;
+}
+
+/// POST /.well-known/groove/connect — acquire a lease from a target.
+/// Writes the returned lease handle into `out` and returns its length.
+pub fn wireConnect(target_id: u32, mode: []const u8, ttl_ms: u64, out: []u8) WireError!usize {
+    if (refuseTlsPlaintext()) return error.TlsRefused;
+    if (target_id >= TARGET_COUNT) {
+        main.setError("Invalid groove target index");
+        return error.ConnectFailed;
+    }
+
+    var body_buf: [192]u8 = undefined;
+    const body = std.fmt.bufPrint(&body_buf,
+        "{{\"service_id\":\"gossamer\",\"consumes\":[],\"lease\":{{\"mode\":\"{s}\",\"ttl_ms\":{d}}}}}",
+        .{ mode, ttl_ms }) catch {
+        main.setError("Groove connect body exceeds buffer");
+        return error.ProtocolError;
+    };
+
+    // Sign the lease request exactly like gossamer_groove_send signs messages.
+    var header_buf: [768]u8 = undefined;
+    const sig = computeHmac(body);
+    const header = if (sig) |s|
+        std.fmt.bufPrint(&header_buf,
+            "POST /.well-known/groove/connect HTTP/1.0\r\n" ++
+            "Host: localhost\r\n" ++
+            "Content-Type: application/json\r\n" ++
+            "Content-Length: {d}\r\n" ++
+            "X-Groove-Signature: {s}\r\n" ++
+            "Connection: close\r\n\r\n", .{ body.len, s }) catch {
+            main.setError("Groove connect header exceeds buffer");
+            return error.ProtocolError;
+        }
+    else
+        std.fmt.bufPrint(&header_buf,
+            "POST /.well-known/groove/connect HTTP/1.0\r\n" ++
+            "Host: localhost\r\n" ++
+            "Content-Type: application/json\r\n" ++
+            "Content-Length: {d}\r\n" ++
+            "Connection: close\r\n\r\n", .{body.len}) catch {
+            main.setError("Groove connect header exceeds buffer");
+            return error.ProtocolError;
+        };
+
+    var buf: [MAX_RESPONSE]u8 = undefined;
+    const response = httpExchange(targets[target_id].port, header, body, &buf) orelse {
+        main.setError("Groove connect failed: target unreachable");
+        return error.ConnectFailed;
+    };
+
+    const code = parseStatusCode(response) orelse {
+        main.setError("Groove connect: malformed HTTP response");
+        return error.ProtocolError;
+    };
+    if (code != 200) {
+        main.setError("Groove connect rejected by target");
+        return error.ProtocolError;
+    }
+
+    const sep = std.mem.indexOf(u8, response, "\r\n\r\n") orelse {
+        main.setError("Groove connect: response has no body");
+        return error.ProtocolError;
+    };
+    const resp_body = response[sep + 4 ..];
+
+    // Extract the "handle" string from the lease response.
+    var pos: usize = 0;
+    while (pos < resp_body.len) : (pos += 1) {
+        if (matchJsonKey(resp_body, pos, "handle")) |val_start| {
+            if (extractJsonString(resp_body, val_start)) |handle| {
+                if (handle.len > out.len) {
+                    main.setError("Groove lease handle exceeds buffer");
+                    return error.ProtocolError;
+                }
+                @memcpy(out[0..handle.len], handle);
+                return handle.len;
+            }
+        }
+    }
+    main.setError("Groove connect: response missing lease handle");
+    return error.ProtocolError;
+}
+
+/// GET /.well-known/groove/heartbeat?handle=H — refresh a lease.
+/// The SPEC answers 204 on success; any 2xx is accepted.
+pub fn wireHeartbeat(target_id: u32, handle: []const u8) WireError!void {
+    if (refuseTlsPlaintext()) return error.TlsRefused;
+    if (target_id >= TARGET_COUNT) {
+        main.setError("Invalid groove target index");
+        return error.ConnectFailed;
+    }
+
+    var req_buf: [512]u8 = undefined;
+    const request = std.fmt.bufPrint(&req_buf,
+        "GET /.well-known/groove/heartbeat?handle={s} HTTP/1.0\r\n" ++
+        "Host: localhost\r\n" ++
+        "Connection: close\r\n\r\n", .{handle}) catch {
+        main.setError("Groove heartbeat request exceeds buffer");
+        return error.ProtocolError;
+    };
+
+    var buf: [MAX_RESPONSE]u8 = undefined;
+    const response = httpExchange(targets[target_id].port, request, "", &buf) orelse {
+        main.setError("Groove heartbeat failed: target unreachable");
+        return error.ConnectFailed;
+    };
+
+    const code = parseStatusCode(response) orelse {
+        main.setError("Groove heartbeat: malformed HTTP response");
+        return error.ProtocolError;
+    };
+    if (code < 200 or code > 299) {
+        main.setError("Groove heartbeat rejected: lease lapsed or handle unknown");
+        return error.ProtocolError;
+    }
+}
+
+/// POST /.well-known/groove/disconnect — release a lease.
+/// Body is {"handle":"..."} per SPEC v0.3 (there is no older wire
+/// disconnect to stay compatible with — prior code never released remotely).
+pub fn wireDisconnect(target_id: u32, handle: []const u8) WireError!void {
+    if (refuseTlsPlaintext()) return error.TlsRefused;
+    if (target_id >= TARGET_COUNT) {
+        main.setError("Invalid groove target index");
+        return error.ConnectFailed;
+    }
+
+    var body_buf: [MAX_WIRE_HANDLE + 32]u8 = undefined;
+    const body = std.fmt.bufPrint(&body_buf, "{{\"handle\":\"{s}\"}}", .{handle}) catch {
+        main.setError("Groove disconnect body exceeds buffer");
+        return error.ProtocolError;
+    };
+
+    var header_buf: [768]u8 = undefined;
+    const sig = computeHmac(body);
+    const header = if (sig) |s|
+        std.fmt.bufPrint(&header_buf,
+            "POST /.well-known/groove/disconnect HTTP/1.0\r\n" ++
+            "Host: localhost\r\n" ++
+            "Content-Type: application/json\r\n" ++
+            "Content-Length: {d}\r\n" ++
+            "X-Groove-Signature: {s}\r\n" ++
+            "Connection: close\r\n\r\n", .{ body.len, s }) catch {
+            main.setError("Groove disconnect header exceeds buffer");
+            return error.ProtocolError;
+        }
+    else
+        std.fmt.bufPrint(&header_buf,
+            "POST /.well-known/groove/disconnect HTTP/1.0\r\n" ++
+            "Host: localhost\r\n" ++
+            "Content-Type: application/json\r\n" ++
+            "Content-Length: {d}\r\n" ++
+            "Connection: close\r\n\r\n", .{body.len}) catch {
+            main.setError("Groove disconnect header exceeds buffer");
+            return error.ProtocolError;
+        };
+
+    var buf: [MAX_RESPONSE]u8 = undefined;
+    const response = httpExchange(targets[target_id].port, header, body, &buf) orelse {
+        main.setError("Groove disconnect failed: target unreachable");
+        return error.ConnectFailed;
+    };
+
+    const code = parseStatusCode(response) orelse {
+        main.setError("Groove disconnect: malformed HTTP response");
+        return error.ProtocolError;
+    };
+    if (code < 200 or code > 299) {
+        main.setError("Groove disconnect rejected by target");
+        return error.ProtocolError;
+    }
+}
+
+//==============================================================================
 // Groove Message Signing (HMAC-SHA256)
 //==============================================================================
 //
@@ -511,8 +765,9 @@ pub export fn gossamer_groove_disconnect_all() callconv(.c) void {
 // X-Groove-Signature header on outbound requests and verified on inbound.
 //
 // This provides message authenticity even over unencrypted localhost connections.
-// For cross-host groove connections, set GOSSAMER_GROOVE_TLS=1 to use HTTPS
-// (requires the groove service to present a valid TLS certificate).
+// GOSSAMER_GROOVE_TLS=1 requests HTTPS for cross-host grooves; TLS is NOT
+// implemented yet, so setting it makes every groove network operation fail
+// closed ("refusing plaintext") rather than silently downgrade to HTTP.
 //
 // Design:
 //   - HMAC key: raw bytes of GOSSAMER_GROOVE_SECRET (max 256 bytes)
@@ -546,33 +801,39 @@ fn initGrooveSecurity() void {
         hmac_key_len = len;
     }
 
-    // Check for TLS mode
+    // Check for TLS mode (fail-closed — see refuseTlsPlaintext)
     if (std.posix.getenv("GOSSAMER_GROOVE_TLS")) |tls_val| {
         groove_tls_enabled = tls_val.len > 0 and tls_val[0] == '1';
     }
 }
 
+/// Refuse plaintext traffic when TLS was requested but is not implemented.
+/// Returns true (with the thread-local error set) when the operation must be
+/// aborted. Fail closed: a caller that asked for TLS must never be silently
+/// downgraded to HTTP.
+fn refuseTlsPlaintext() bool {
+    initGrooveSecurity();
+    if (groove_tls_enabled) {
+        main.setError("groove TLS requested but not implemented; refusing plaintext");
+        return true;
+    }
+    return false;
+}
+
 /// Compute HMAC-SHA256 of a message using the configured key.
-/// Returns hex-encoded signature (64 bytes), or null if no key configured.
+/// Returns hex-encoded signature (64 chars), or null if no key configured.
 fn computeHmac(message: []const u8) ?[64]u8 {
     if (hmac_key_len == 0) return null;
 
-    var mac: [std.crypto.auth.siphash.SipHash128(2, 4).mac_length]u8 = undefined;
-    // Use SipHash-2-4 (128-bit MAC) for message authentication.
-    // SipHash is the same algorithm used for IPC integrity stamps.
-    // This keeps the groove signing consistent with the IPC layer.
-    //
-    // SipHash128.init requires a comptime-known-length key ([16]u8).
-    // Copy hmac_key into a fixed-size buffer before passing.
-    var key16: [16]u8 = [_]u8{0} ** 16;
-    const copy_len = @min(hmac_key_len, 16);
-    @memcpy(key16[0..copy_len], hmac_key[0..copy_len]);
-    var hasher = std.crypto.auth.siphash.SipHash128(2, 4).init(&key16);
-    hasher.update(message);
-    hasher.final(&mac);
+    // Real HMAC-SHA256 (RFC 2104; test vectors from RFC 4231 below). HMAC
+    // itself handles arbitrary key lengths — keys longer than the SHA-256
+    // block are hashed first, shorter keys are zero-padded — so the full
+    // configured key is passed through with no truncation.
+    var mac: [std.crypto.auth.hmac.sha2.HmacSha256.mac_length]u8 = undefined;
+    std.crypto.auth.hmac.sha2.HmacSha256.create(&mac, message, hmac_key[0..hmac_key_len]);
 
-    // Hex-encode the MAC (128-bit = 32 hex chars, pad to 64 for header)
-    var hex: [64]u8 = [_]u8{'0'} ** 64;
+    // Hex-encode the MAC (256-bit = exactly 64 hex chars)
+    var hex: [64]u8 = undefined;
     const hex_chars = "0123456789abcdef";
     for (mac, 0..) |byte, i| {
         hex[i * 2] = hex_chars[byte >> 4];
@@ -590,6 +851,8 @@ pub export fn gossamer_groove_signing_active() callconv(.c) u32 {
 
 /// Query whether TLS is enabled for groove connections.
 /// Returns 1 if GOSSAMER_GROOVE_TLS=1 is set, 0 otherwise.
+/// NOTE: while TLS is unimplemented, enabled means every groove network
+/// operation fails closed (refusing plaintext) — see refuseTlsPlaintext.
 pub export fn gossamer_groove_tls_enabled() callconv(.c) u32 {
     initGrooveSecurity();
     return if (groove_tls_enabled) @as(u32, 1) else @as(u32, 0);
@@ -633,4 +896,78 @@ test "groove status defaults to not_found" {
     for (0..TARGET_COUNT) |i| {
         try std.testing.expectEqual(Status.not_found, grooves[i].status);
     }
+}
+
+test "computeHmac implements HMAC-SHA256 (RFC 4231 test case 2)" {
+    // key "Jefe", data "what do ya want for nothing?"
+    @memcpy(hmac_key[0..4], "Jefe");
+    hmac_key_len = 4;
+    defer hmac_key_len = 0;
+
+    const sig = computeHmac("what do ya want for nothing?").?;
+    try std.testing.expectEqualStrings(
+        "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843",
+        &sig,
+    );
+}
+
+test "computeHmac supports keys longer than the SHA-256 block (RFC 4231 test case 6)" {
+    // 131 bytes of 0xaa — HMAC must hash the key first, not truncate it.
+    @memset(hmac_key[0..131], 0xaa);
+    hmac_key_len = 131;
+    defer hmac_key_len = 0;
+
+    const sig = computeHmac("Test Using Larger Than Block-Size Key - Hash Key First").?;
+    try std.testing.expectEqualStrings(
+        "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54",
+        &sig,
+    );
+}
+
+test "groove target table order is frozen — indices are API" {
+    // PanLL attach (gossamer_transmute, main.zig) hard-codes index 4 and the
+    // Idris2 ABI addresses targets by the same indices. Ports mirror
+    // groove/registry/groove-registry.json; the ORDER here must never change.
+    const expected = [TARGET_COUNT]struct { port: u16, name: []const u8 }{
+        .{ .port = 6473, .name = "burble" },
+        .{ .port = 6480, .name = "vext" },
+        .{ .port = 6475, .name = "verisimdb" },
+        .{ .port = 9090, .name = "hypatia" },
+        .{ .port = 8000, .name = "panll" },
+        .{ .port = 9000, .name = "echidna" },
+        .{ .port = 7800, .name = "rpa-elysium" },
+        .{ .port = 7700, .name = "conflow" },
+        .{ .port = 7600, .name = "panic-attack" },
+        .{ .port = 9100, .name = "gitbot-fleet" },
+    };
+    for (targets, expected) |actual, want| {
+        try std.testing.expectEqualStrings(want.name, actual.name);
+        try std.testing.expectEqual(want.port, actual.port);
+    }
+}
+
+test "groove target ports are pairwise distinct (duplicate-port bug guard)" {
+    // verisimdb and gitbot-fleet both claimed 8080 before the registry sync.
+    for (targets, 0..) |a, i| {
+        for (targets[i + 1 ..]) |b| {
+            try std.testing.expect(a.port != b.port);
+        }
+    }
+}
+
+test "TLS-requested groove send fails closed (no plaintext fallback)" {
+    hmac_initialized = true; // pin state — skip the env re-read
+    groove_tls_enabled = true;
+    defer {
+        groove_tls_enabled = false;
+        hmac_initialized = false;
+        hmac_key_len = 0;
+    }
+
+    main.clearError();
+    try std.testing.expectEqual(@as(u32, 1), gossamer_groove_send(0, "{\"type\":\"ping\"}"));
+    const err = main.gossamer_last_error() orelse return error.TestUnexpectedResult;
+    try std.testing.expect(
+        std.mem.indexOf(u8, std.mem.span(err), "refusing plaintext") != null,
+    );
 }

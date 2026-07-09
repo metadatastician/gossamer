@@ -241,6 +241,13 @@ run-example name:
 hello: build-ffi
     {{ephapax}} run examples/hello/main.eph
 
+# Run the groove session-lease demo against a LIVE groove service: connects
+# soft (short TTL) and lets it lapse, connects hard, heartbeats 3 windows,
+# disconnects (handle once-guard), prints the teardown audit summary.
+# target = index into the groove target table (src/interface/ffi/src/groove.zig).
+groove-demo target="0":
+    cd src/interface/ffi && zig build groove-demo -- {{target}}
+
 # ═══════════════════════════════════════════════════════════════
 # Test
 # ═══════════════════════════════════════════════════════════════

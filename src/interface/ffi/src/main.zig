@@ -1575,7 +1575,9 @@ pub export fn gossamer_transmute(handle_ptr: u64, mode: c_int) Result {
             platform.eval(&handle.webview, export_js) catch {};
         },
         .panll_attach => {
-            // Send a groove registration to PanLL (target 4, port 4040).
+            // Send a groove registration to PanLL (target 4, port 8000 —
+            // PanLL's dev server; 4040 is gossamer's OWN devUrl port and was
+            // previously misnamed here).
             // Message: {"action":"attach","window_id":N,"title":"..."}
             // PanLL responds with a panel slot assignment.
             const PANLL_TARGET: u32 = 4;
@@ -1873,20 +1875,241 @@ pub const GrooveType = enum(c_int) {
     soft = 1,
 };
 
+/// Linear-ish groove session handle (G-3).
+///
+/// A distinct 64-bit newtype so a groove lease can never be confused with a
+/// window handle or capability token at the FFI boundary. Encoding: bits
+/// 0..7 hold slot+1, bits 8..63 hold the slot generation at connect time.
+///
+/// TRUE exactly-once linearity is enforced at the Idris2/Ephapax layer
+/// (GrooveLinearity.idr / Groove.eph); this Zig layer provides type
+/// distinctness plus a runtime once-guard: consuming a handle bumps the
+/// slot's generation, so a second disconnect with the same handle returns
+/// .already_consumed instead of silently double-freeing a reused slot.
+pub const GrooveHandle = enum(u64) {
+    invalid = 0,
+    _,
+};
+
 const GrooveConnection = struct {
     target_id: u32,
     groove_type: GrooveType,
     active: bool = false,
-    /// For soft grooves: auto-disconnect after this many seconds (0 = manual only)
+    /// Lease TTL in seconds (soft: auto-disconnect window; hard: heartbeat
+    /// window). 0 = manual only.
     ttl_seconds: u32 = 0,
+    /// Ownership: slot index of the owning connection, or null for a root.
+    /// Disconnecting a connection tears down its owned subtree
+    /// children-first — see disconnectDescent (G-2).
+    parent_slot: ?u8 = null,
+    /// Slot generation for the once-guard: bumped on every release so a
+    /// stale GrooveHandle can never address a reused slot.
+    generation: u32 = 1,
+    /// Wire lease handle returned by POST /.well-known/groove/connect.
+    /// Empty (len 0) when the connection was registered locally via the
+    /// deprecated typed API and holds no remote lease.
+    wire_handle: [groove.MAX_WIRE_HANDLE]u8 = [_]u8{0} ** groove.MAX_WIRE_HANDLE,
+    wire_handle_len: usize = 0,
 };
 
 const MAX_GROOVE_CONNECTIONS: usize = 32;
 var groove_connections: [MAX_GROOVE_CONNECTIONS]GrooveConnection = [_]GrooveConnection{.{ .target_id = 0, .groove_type = .hard }} ** MAX_GROOVE_CONNECTIONS;
 
+fn encodeGrooveHandle(slot: usize, generation: u32) GrooveHandle {
+    return @enumFromInt((@as(u64, generation) << 8) | (@as(u64, @intCast(slot)) + 1));
+}
+
+/// Decode and validate a session handle against the connection table.
+/// Returns the slot index, or null when the handle is out of range,
+/// inactive, or stale (generation mismatch — the once-guard).
+fn decodeGrooveHandle(h: GrooveHandle) ?usize {
+    const raw = @intFromEnum(h);
+    if (raw == 0) return null;
+    const slot_plus_one = raw & 0xff;
+    if (slot_plus_one == 0 or slot_plus_one > MAX_GROOVE_CONNECTIONS) return null;
+    const slot: usize = @intCast(slot_plus_one - 1);
+    const gc = &groove_connections[slot];
+    if (!gc.active) return null;
+    if ((raw >> 8) != gc.generation) return null;
+    return slot;
+}
+
+/// Find a free connection slot, or null when the table is full.
+fn allocGrooveSlot() ?usize {
+    for (&groove_connections, 0..) |*gc, i| {
+        if (!gc.active) return i;
+    }
+    return null;
+}
+
+//==============================================================================
+// Groove Teardown Audit Ring (G-2)
+//==============================================================================
+//
+// Every slot release performed by the ordered descent is recorded here, so a
+// caller (or the Idris2 proof harness) can audit that teardown really ran
+// children-first. Fixed-size ring: the oldest entries are overwritten.
+
+const AUDIT_RING_SIZE: usize = 64;
+
+const AuditEntry = struct {
+    slot: u8,
+    parent_slot: ?u8,
+    /// Monotonic release counter at the time of this release (global order).
+    order_index: u32,
+};
+
+var audit_ring: [AUDIT_RING_SIZE]AuditEntry = [_]AuditEntry{.{ .slot = 0, .parent_slot = null, .order_index = 0 }} ** AUDIT_RING_SIZE;
+
+/// Total releases ever recorded (monotonic; also the next order_index).
+var audit_total: u32 = 0;
+
+fn auditRecord(slot: usize, parent_slot: ?u8) void {
+    audit_ring[audit_total % AUDIT_RING_SIZE] = .{
+        .slot = @intCast(slot),
+        .parent_slot = parent_slot,
+        .order_index = audit_total,
+    };
+    audit_total +%= 1;
+}
+
+/// Write a human-readable summary of the teardown audit ring into buf.
+/// Lists the retained releases oldest-first. Returns the number of bytes
+/// written (0 when buf cannot hold even the header line).
+pub export fn gossamer_groove_audit_summary(buf: [*]u8, len: usize) callconv(.c) usize {
+    const cap: u32 = @intCast(AUDIT_RING_SIZE);
+    const out = buf[0..len];
+    var pos: usize = 0;
+
+    const shown: u32 = if (audit_total < cap) audit_total else cap;
+    const header = std.fmt.bufPrint(out[pos..],
+        "groove teardown audit: {d} release(s) total, showing last {d} (ring capacity {d})\n",
+        .{ audit_total, shown, cap }) catch return 0;
+    pos += header.len;
+
+    var i: u32 = audit_total - shown;
+    while (i < audit_total) : (i += 1) {
+        const e = audit_ring[i % cap];
+        const line = if (e.parent_slot) |p|
+            std.fmt.bufPrint(out[pos..], "  #{d} released slot {d} (parent slot {d})\n", .{ e.order_index, e.slot, p }) catch break
+        else
+            std.fmt.bufPrint(out[pos..], "  #{d} released slot {d} (root)\n", .{ e.order_index, e.slot }) catch break;
+        pos += line.len;
+    }
+    return pos;
+}
+
+//==============================================================================
+// Ordered Teardown Descent (G-2)
+//==============================================================================
+
+/// True when any live connection in the marked subtree lists `slot` as its
+/// parent.
+fn hasLiveChildIn(in_subtree: *const [MAX_GROOVE_CONNECTIONS]bool, slot: usize) bool {
+    for (&groove_connections, 0..) |*gc, i| {
+        if (!gc.active or !in_subtree[i]) continue;
+        if (gc.parent_slot) |p| {
+            if (p == slot) return true;
+        }
+    }
+    return false;
+}
+
+/// Release one connection slot: issue the per-node remote disconnect for its
+/// wire lease (best-effort — a lapsed lease, TLS refusal, or unreachable
+/// target must not block local cleanup), record the release in the audit
+/// ring, then clear the slot. A soft groove gets the full privacy wipe (peer
+/// identity erased); a hard groove is deactivated but keeps target_id for
+/// auto-reconnect — exactly the per-slot semantics proven in
+/// GrooveResidue.idr. Either way the generation is bumped so any outstanding
+/// GrooveHandle to this slot is dead (once-guard).
+fn releaseGrooveSlot(slot: usize) void {
+    const gc = &groove_connections[slot];
+    if (gc.wire_handle_len > 0) {
+        groove.wireDisconnect(gc.target_id, gc.wire_handle[0..gc.wire_handle_len]) catch {};
+    }
+    auditRecord(slot, gc.parent_slot);
+
+    const next_gen = gc.generation +% 1;
+    if (gc.groove_type == .soft) {
+        // Privacy wipe (GrooveResidue.idr softWipeFullyCleared).
+        gc.* = .{ .target_id = 0, .groove_type = .hard, .generation = next_gen };
+    } else {
+        // Hard groove: deactivate but retain the peer identity for
+        // auto-reconnect (GrooveResidue.idr hardDisconnectRetainsPeer).
+        gc.active = false;
+        gc.parent_slot = null;
+        gc.wire_handle_len = 0;
+        gc.generation = next_gen;
+    }
+}
+
+/// Ordered teardown descent (G-2 fix — replaces the old one-shot wipe).
+///
+/// Releases the connection in `root_slot` together with every connection it
+/// transitively OWNS (slots whose parent chain reaches root_slot),
+/// children-first (postorder): a slot is released only after its own subtree
+/// is empty. Each release issues the per-node remote disconnect and lands in
+/// the audit ring. The old path wiped a single slot in place, leaving owned
+/// children orphaned with no remote release and no audit trail.
+fn disconnectDescent(root_slot: usize) void {
+    // Mark the owned subtree: the root plus every live slot whose parent
+    // chain reaches it. Fixpoint iteration over a 32-slot table.
+    var in_subtree = [_]bool{false} ** MAX_GROOVE_CONNECTIONS;
+    in_subtree[root_slot] = true;
+    var changed = true;
+    while (changed) {
+        changed = false;
+        for (&groove_connections, 0..) |*gc, i| {
+            if (!gc.active or in_subtree[i]) continue;
+            if (gc.parent_slot) |p| {
+                if (in_subtree[p]) {
+                    in_subtree[i] = true;
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    // Postorder release: repeatedly release marked slots that have no live
+    // marked children. gossamer_groove_session_adopt rejects ownership
+    // cycles, so every pass releases at least one slot; the pass bound is
+    // defensive.
+    var passes: usize = 0;
+    while (passes < MAX_GROOVE_CONNECTIONS) : (passes += 1) {
+        var released_any = false;
+        for (&groove_connections, 0..) |*gc, i| {
+            if (!in_subtree[i] or !gc.active) continue;
+            if (hasLiveChildIn(&in_subtree, i)) continue;
+            releaseGrooveSlot(i);
+            released_any = true;
+        }
+        if (!released_any) break;
+    }
+
+    // Residue 0: after a subtree teardown no live member of the subtree may
+    // remain. (GrooveResidue.idr proves the per-slot wipe semantics; this
+    // asserts the descent covered the whole subtree.)
+    for (&groove_connections, 0..) |*gc, i| {
+        if (in_subtree[i]) std.debug.assert(!gc.active);
+    }
+}
+
+//==============================================================================
+// Typed Groove API (deprecated wrappers) + Session Lease API (G-3)
+//==============================================================================
+
 /// Establish a typed groove connection.
 /// type_: 0=hard, 1=soft
 /// ttl: for soft grooves, auto-disconnect after N seconds (0=manual)
+///
+/// DEPRECATED: see the session API (gossamer_groove_connect_session), which
+/// acquires a real wire lease and returns a linear-ish GrooveHandle. This
+/// wrapper keeps the historical local-registration semantics — it books a
+/// connection slot WITHOUT issuing POST /connect (target_id is not checked
+/// against the target table), because existing ABI consumers
+/// (ForeignGen.idr) register grooves for targets that are not
+/// network-reachable at registration time.
 pub export fn gossamer_groove_connect_typed(target_id: u32, groove_type: c_int, ttl: u32) Result {
     clearError();
     const gt = std.meta.intToEnum(GrooveType, groove_type) catch {
@@ -1894,37 +2117,164 @@ pub export fn gossamer_groove_connect_typed(target_id: u32, groove_type: c_int, 
         return .invalid_param;
     };
 
-    for (&groove_connections) |*gc| {
-        if (!gc.active) {
-            gc.* = .{
-                .target_id = target_id,
-                .groove_type = gt,
-                .active = true,
-                .ttl_seconds = if (gt == .soft) ttl else 0,
-            };
-            return .ok;
-        }
-    }
-
-    setError("Groove connection limit reached (max 32)");
-    return .@"error";
+    const slot = allocGrooveSlot() orelse {
+        setError("Groove connection limit reached (max 32)");
+        return .@"error";
+    };
+    const gen = groove_connections[slot].generation;
+    groove_connections[slot] = .{
+        .target_id = target_id,
+        .groove_type = gt,
+        .active = true,
+        .ttl_seconds = if (gt == .soft) ttl else 0,
+        .generation = gen,
+    };
+    return .ok;
 }
 
-/// Disconnect a typed groove. For soft grooves, this wipes all shared state.
+/// Disconnect a typed groove and its owned subtree via the ordered descent.
+/// For soft grooves the slot wipe is the privacy guarantee (GrooveResidue.idr).
+///
+/// DEPRECATED: see the session API (gossamer_groove_disconnect_session),
+/// which adds the once-guard on a per-lease handle. This wrapper keeps the
+/// target_id-addressed semantics for existing ABI consumers (ForeignGen.idr)
+/// and routes through the same descent.
 pub export fn gossamer_groove_disconnect_typed(target_id: u32) Result {
     clearError();
-    for (&groove_connections) |*gc| {
+    for (&groove_connections, 0..) |*gc, i| {
         if (gc.active and gc.target_id == target_id) {
-            // Soft groove disconnect: privacy guarantee — zero out state
-            if (gc.groove_type == .soft) {
-                gc.* = .{ .target_id = 0, .groove_type = .hard };
-            } else {
-                gc.active = false;
-            }
+            disconnectDescent(i);
+            clearError();
             return .ok;
         }
     }
     return .ok; // Idempotent
+}
+
+/// Establish a session groove lease (G-3).
+///
+/// Performs a REAL wire connect — POST /.well-known/groove/connect with a
+/// lease derived from groove_type (0=hard, 1=soft) and ttl_seconds — then
+/// books a connection slot and returns its GrooveHandle.
+///
+/// Returns GrooveHandle.invalid on failure; check gossamer_last_error().
+pub export fn gossamer_groove_connect_session(target_index: u32, groove_type: c_int, ttl_seconds: u32) callconv(.c) GrooveHandle {
+    clearError();
+    const gt = std.meta.intToEnum(GrooveType, groove_type) catch {
+        setError("Invalid groove type (0=hard, 1=soft)");
+        return .invalid;
+    };
+    if (target_index >= groove.TARGET_COUNT) {
+        setError("Invalid groove target index");
+        return .invalid;
+    }
+    const slot = allocGrooveSlot() orelse {
+        setError("Groove connection limit reached (max 32)");
+        return .invalid;
+    };
+
+    const mode: []const u8 = if (gt == .soft) "soft" else "hard";
+    var handle_buf: [groove.MAX_WIRE_HANDLE]u8 = undefined;
+    const hlen = groove.wireConnect(target_index, mode, @as(u64, ttl_seconds) * 1000, &handle_buf) catch {
+        // wireConnect already set the thread-local error (TLS refusal,
+        // unreachable target, or protocol failure).
+        return .invalid;
+    };
+
+    const gen = groove_connections[slot].generation;
+    groove_connections[slot] = .{
+        .target_id = target_index,
+        .groove_type = gt,
+        .active = true,
+        .ttl_seconds = ttl_seconds,
+        .generation = gen,
+    };
+    @memcpy(groove_connections[slot].wire_handle[0..hlen], handle_buf[0..hlen]);
+    groove_connections[slot].wire_handle_len = hlen;
+    return encodeGrooveHandle(slot, gen);
+}
+
+/// Disconnect a session groove lease and its owned subtree (consuming).
+///
+/// After a successful disconnect the slot generation changes, so a second
+/// call with the same handle returns .already_consumed (once-guard).
+pub export fn gossamer_groove_disconnect_session(h: GrooveHandle) callconv(.c) Result {
+    clearError();
+    if (h == .invalid) {
+        setError("Invalid groove handle");
+        return .invalid_param;
+    }
+    const slot = decodeGrooveHandle(h) orelse {
+        setError("Groove handle already consumed or stale");
+        return .already_consumed;
+    };
+    disconnectDescent(slot);
+    clearError();
+    return .ok;
+}
+
+/// Refresh a session lease: GET /.well-known/groove/heartbeat?handle=H.
+/// A 2xx (SPEC: 204) refreshes a hard lease's window; a soft lease may also
+/// heartbeat to keep a short TTL alive.
+pub export fn gossamer_groove_heartbeat(h: GrooveHandle) callconv(.c) Result {
+    clearError();
+    if (h == .invalid) {
+        setError("Invalid groove handle");
+        return .invalid_param;
+    }
+    const slot = decodeGrooveHandle(h) orelse {
+        setError("Groove handle already consumed or stale");
+        return .already_consumed;
+    };
+    const gc = &groove_connections[slot];
+    if (gc.wire_handle_len == 0) {
+        setError("Groove connection holds no wire lease (registered via deprecated typed API)");
+        return .@"error";
+    }
+    groove.wireHeartbeat(gc.target_id, gc.wire_handle[0..gc.wire_handle_len]) catch {
+        // wireHeartbeat already set the thread-local error.
+        return .@"error";
+    };
+    clearError();
+    return .ok;
+}
+
+/// Declare ownership: `child`'s slot becomes owned by `parent`'s slot, so
+/// disconnecting the parent tears the child down first (ordered descent).
+/// Rejects self-adoption and ownership cycles, which would starve the
+/// postorder walk.
+pub export fn gossamer_groove_session_adopt(parent: GrooveHandle, child: GrooveHandle) callconv(.c) Result {
+    clearError();
+    const parent_slot = decodeGrooveHandle(parent) orelse {
+        setError("Groove parent handle invalid, consumed, or stale");
+        return .already_consumed;
+    };
+    const child_slot = decodeGrooveHandle(child) orelse {
+        setError("Groove child handle invalid, consumed, or stale");
+        return .already_consumed;
+    };
+    if (parent_slot == child_slot) {
+        setError("Groove connection cannot own itself");
+        return .invalid_param;
+    }
+
+    // Reject cycles: walk up from the proposed parent; if the chain reaches
+    // the child, adopting would create a loop.
+    var cursor: ?u8 = @as(u8, @intCast(parent_slot));
+    var hops: usize = 0;
+    while (cursor) |c| {
+        if (c == child_slot) {
+            setError("Groove adoption would create an ownership cycle");
+            return .invalid_param;
+        }
+        hops += 1;
+        if (hops > MAX_GROOVE_CONNECTIONS) break; // defensive — cycles are rejected here
+        cursor = groove_connections[c].parent_slot;
+    }
+
+    groove_connections[child_slot].parent_slot = @as(u8, @intCast(parent_slot));
+    clearError();
+    return .ok;
 }
 
 /// Query groove type for a connected target.
@@ -3057,4 +3407,110 @@ test "Result enum has at least 10 variants and they are contiguous" {
     try std.testing.expectEqual(@as(c_int, 0), ok);
     try std.testing.expectEqual(@as(c_int, 1), err);
     try std.testing.expect(guard >= 10); // At least 11 variants (0..10)
+}
+
+test "groove session handle is consumed exactly once (slot reuse guard)" {
+    // The wire connect needs a live service; the once-guard is purely local,
+    // so this test books the slot by hand (as the session connect would).
+    const slot = allocGrooveSlot().?;
+    const gen = groove_connections[slot].generation;
+    groove_connections[slot] = .{
+        .target_id = 4,
+        .groove_type = .soft,
+        .active = true,
+        .ttl_seconds = 5,
+        .generation = gen,
+    };
+    const h = encodeGrooveHandle(slot, gen);
+
+    try std.testing.expectEqual(Result.ok, gossamer_groove_disconnect_session(h));
+    // Second consume: the generation changed, so the handle is dead.
+    try std.testing.expectEqual(Result.already_consumed, gossamer_groove_disconnect_session(h));
+
+    // Slot reuse: a fresh booking in the same slot must not resurrect h.
+    const gen2 = groove_connections[slot].generation;
+    try std.testing.expect(gen2 != gen);
+    groove_connections[slot] = .{
+        .target_id = 7,
+        .groove_type = .hard,
+        .active = true,
+        .generation = gen2,
+    };
+    try std.testing.expectEqual(Result.already_consumed, gossamer_groove_disconnect_session(h));
+
+    // The live handle for the reused slot still works.
+    const h2 = encodeGrooveHandle(slot, gen2);
+    try std.testing.expectEqual(Result.ok, gossamer_groove_disconnect_session(h2));
+}
+
+test "groove session heartbeat and disconnect reject the invalid handle" {
+    try std.testing.expectEqual(Result.invalid_param, gossamer_groove_heartbeat(.invalid));
+    try std.testing.expectEqual(Result.invalid_param, gossamer_groove_disconnect_session(.invalid));
+}
+
+test "groove disconnect descent releases children before parents (residue 0)" {
+    // Build root → child → grandchild by hand and tear down the root.
+    const root = allocGrooveSlot().?;
+    const g_root = groove_connections[root].generation;
+    groove_connections[root] = .{ .target_id = 100, .groove_type = .soft, .active = true, .generation = g_root };
+
+    const child = allocGrooveSlot().?;
+    const g_child = groove_connections[child].generation;
+    groove_connections[child] = .{ .target_id = 101, .groove_type = .soft, .active = true, .generation = g_child, .parent_slot = @as(u8, @intCast(root)) };
+
+    const grand = allocGrooveSlot().?;
+    const g_grand = groove_connections[grand].generation;
+    groove_connections[grand] = .{ .target_id = 102, .groove_type = .hard, .active = true, .generation = g_grand, .parent_slot = @as(u8, @intCast(child)) };
+
+    const before = audit_total;
+    try std.testing.expectEqual(Result.ok, gossamer_groove_disconnect_session(encodeGrooveHandle(root, g_root)));
+
+    // Three releases, children-first: grandchild, child, then the root.
+    const cap: u32 = @intCast(AUDIT_RING_SIZE);
+    try std.testing.expectEqual(before + 3, audit_total);
+    try std.testing.expectEqual(@as(u8, @intCast(grand)), audit_ring[(before + 0) % cap].slot);
+    try std.testing.expectEqual(@as(u8, @intCast(child)), audit_ring[(before + 1) % cap].slot);
+    try std.testing.expectEqual(@as(u8, @intCast(root)), audit_ring[(before + 2) % cap].slot);
+
+    // Residue 0: nothing in the subtree stays live.
+    try std.testing.expect(!groove_connections[root].active);
+    try std.testing.expect(!groove_connections[child].active);
+    try std.testing.expect(!groove_connections[grand].active);
+    // Soft slots got the privacy wipe; the hard grandchild keeps its peer id
+    // for auto-reconnect (GrooveResidue.idr).
+    try std.testing.expectEqual(@as(u32, 0), groove_connections[root].target_id);
+    try std.testing.expectEqual(@as(u32, 0), groove_connections[child].target_id);
+    try std.testing.expectEqual(@as(u32, 102), groove_connections[grand].target_id);
+}
+
+test "groove session adopt rejects self-adoption and ownership cycles" {
+    const a = allocGrooveSlot().?;
+    const gen_a = groove_connections[a].generation;
+    groove_connections[a] = .{ .target_id = 1, .groove_type = .soft, .active = true, .generation = gen_a };
+    const ha = encodeGrooveHandle(a, gen_a);
+
+    const b = allocGrooveSlot().?;
+    const gen_b = groove_connections[b].generation;
+    groove_connections[b] = .{ .target_id = 2, .groove_type = .soft, .active = true, .generation = gen_b };
+    const hb = encodeGrooveHandle(b, gen_b);
+
+    try std.testing.expectEqual(Result.invalid_param, gossamer_groove_session_adopt(ha, ha));
+    try std.testing.expectEqual(Result.ok, gossamer_groove_session_adopt(ha, hb)); // a owns b
+    try std.testing.expectEqual(Result.invalid_param, gossamer_groove_session_adopt(hb, ha)); // would cycle
+
+    // Tearing down a releases b first (owned subtree member), consuming hb.
+    try std.testing.expectEqual(Result.ok, gossamer_groove_disconnect_session(ha));
+    try std.testing.expect(!groove_connections[b].active);
+    try std.testing.expectEqual(Result.already_consumed, gossamer_groove_disconnect_session(hb));
+}
+
+test "gossamer_groove_audit_summary writes a readable summary" {
+    var buf: [4096]u8 = undefined;
+    const n = gossamer_groove_audit_summary(&buf, buf.len);
+    try std.testing.expect(n > 0);
+    try std.testing.expect(std.mem.startsWith(u8, buf[0..n], "groove teardown audit:"));
+
+    // A too-small buffer reports 0 rather than truncating mid-header.
+    var tiny: [8]u8 = undefined;
+    try std.testing.expectEqual(@as(usize, 0), gossamer_groove_audit_summary(&tiny, tiny.len));
 }
