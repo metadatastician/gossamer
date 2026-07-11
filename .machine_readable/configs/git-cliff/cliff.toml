@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 # https://keats.github.io/tera/docs/#introduction
 body = """
 {%- macro remote_url() -%}
-  https://github.com/hyperpolymath/gossamer
+  https://github.com/metadatastician/gossamer
 {%- endmacro -%}
 
 {% if version -%}
@@ -57,7 +57,7 @@ body = """
 # Template for the changelog footer
 footer = """
 {%- macro remote_url() -%}
-  https://github.com/hyperpolymath/gossamer
+  https://github.com/metadatastician/gossamer
 {%- endmacro -%}
 
 {% for release in releases -%}

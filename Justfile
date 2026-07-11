@@ -103,7 +103,7 @@ wiki-sync mode="push":
     set -euo pipefail
     ROOT="$(pwd)"
     SRC="${ROOT}/docs/wikis"
-    REMOTE="${GOSSAMER_WIKI_REMOTE:-git@github.com:hyperpolymath/gossamer.wiki.git}"
+    REMOTE="${GOSSAMER_WIKI_REMOTE:-git@github.com:metadatastician/gossamer.wiki.git}"
     MODE="{{mode}}"
     WORK="$(mktemp -d)"
     trap 'rm -rf "${WORK}"' EXIT

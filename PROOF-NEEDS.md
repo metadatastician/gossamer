@@ -54,10 +54,10 @@ This repo has **zero class-J axioms** (as of 2026-07-07).
 
 | Module | Discharged in | State |
 |---|---|---|
-| GrooveTermination | [gossamer#36](https://github.com/hyperpolymath/gossamer/pull/36) | **MERGED** |
-| LayoutStability | [gossamer#40](https://github.com/hyperpolymath/gossamer/pull/40) | **MERGED** |
-| IPCIntegrity | [gossamer#40](https://github.com/hyperpolymath/gossamer/pull/40) | **MERGED** |
-| PanelIsolation (+ class-J axiom) | [gossamer#41](https://github.com/hyperpolymath/gossamer/pull/41) | open, ready, idris2 ✓ 13/13 local |
-| ResourceCleanup | [gossamer#41](https://github.com/hyperpolymath/gossamer/pull/41) | same branch as #41 |
+| GrooveTermination | [gossamer#36](https://github.com/metadatastician/gossamer/pull/36) | **MERGED** |
+| LayoutStability | [gossamer#40](https://github.com/metadatastician/gossamer/pull/40) | **MERGED** |
+| IPCIntegrity | [gossamer#40](https://github.com/metadatastician/gossamer/pull/40) | **MERGED** |
+| PanelIsolation (+ class-J axiom) | [gossamer#41](https://github.com/metadatastician/gossamer/pull/41) | open, ready, idris2 ✓ 13/13 local |
+| ResourceCleanup | [gossamer#41](https://github.com/metadatastician/gossamer/pull/41) | same branch as #41 |
 
 **Lesson memorialised**: the OWED notes carried in the original gossamer#22 deferred-list misdiagnosed the root cause on every one of the four deferred items. The notes named `choose` / theorem restatement / axiom-vs-refactor; the actual fixes were `module-qualify the names` / `reorder + 0-quantity-mark + add accessors` / `import + capitalise the typo` / `class-J axiom` (the last one was right by accident). **Build is the only oracle for proof-bearing code; comment-only notes from never-built modules are hints, not specs.**

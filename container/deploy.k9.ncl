@@ -94,7 +94,7 @@ let deployment = {
 
   # Container configuration
   container = {
-    image = "ghcr.io/hyperpolymath/gossamer",
+    image = "ghcr.io/metadatastician/gossamer",
     port = 0,
     health_check = "/health",
     readiness_check = "/ready",

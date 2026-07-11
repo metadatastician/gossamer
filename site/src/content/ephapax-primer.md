@@ -79,4 +79,4 @@ region frame {
 
 - [Ephapax Language Reference](https://github.com/hyperpolymath/ephapax)
 - [Gossamer Architecture](architecture.html)
-- [arXiv Paper](https://github.com/hyperpolymath/gossamer/blob/main/docs/whitepapers/gossamer-arxiv-paper.tex)
+- [arXiv Paper](https://github.com/metadatastician/gossamer/blob/main/docs/whitepapers/gossamer-arxiv-paper.tex)

@@ -6,7 +6,7 @@ edition = "2021"
 description = "Rust bindings for the Gossamer webview shell — type-safe, linear-resource desktop apps"
 authors = ["Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>"]
 license = "AGPL-3.0-or-later"
-repository = "https://github.com/hyperpolymath/gossamer"
+repository = "https://github.com/metadatastician/gossamer"
 readme = "README.adoc"
 
 [dependencies]

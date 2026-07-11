@@ -12,7 +12,7 @@
 repository:
   name: "gossamer"
   description: "Gossamer — desktop webview shell with compile-time resource safety via Idris2 ABI and Zig FFI"
-  homepage: "https://github.com/hyperpolymath/gossamer"
+  homepage: "https://github.com/metadatastician/gossamer"
   private: false
   has_issues: true
   has_projects: true
