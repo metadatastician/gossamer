@@ -1,0 +1,140 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2025-2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= Gossamer — Marketing & Positioning
+:toc:
+
+Internal positioning guidance for Gossamer. Every claim below is backed by
+something in the repository — a proof module, a CI gate, a test count, or a
+shipped artifact. Gossamer is a research-estate component, not a commercial
+product; keep the messaging as honest as the compiler.
+
+== Positioning statement
+
+*Build desktop apps that can't leak resources. By design, not by discipline.*
+
+Gossamer wraps a web frontend in a native OS window — like Electron, Tauri, or
+Wails — but the compiler *proves* the app handles every resource correctly.
+Leaked handles, dangling references, and permission bypasses become *compile
+errors* instead of production incidents. The lever is
+link:https://github.com/hyperpolymath/ephapax[Ephapax]'s `let!` binding:
+resources that matter (windows, connections, file handles) are *linear* — used
+exactly once, compiler-enforced.
+
+== The differentiated category
+
+Gossamer does not compete on binary size or ergonomics alone; it opens a
+distinct category: *provable resource safety* for desktop shells. The
+comparison below is from the
+link:https://github.com/hyperpolymath/gossamer/blob/main/README.md#at-a-glance[project README]:
+
+[cols="2,1,1,1,1",options="header"]
+|===
+| Capability | Electron | Tauri | Wails | Gossamer
+
+| Handle leaks possible?   | Yes          | Yes            | Yes    | *No — compile error*
+| IPC type-safe?           | No           | Partial        | No     | *Yes — compile-time*
+| Permission enforcement   | Opt-in       | Runtime config | None   | *Compiler-enforced*
+| Garbage collector        | V8 + Node GC | None*          | Go GC  | *None, ever*
+| Smallest binary          | ~150 MB      | ~3 MB          | ~5 MB  | *~1 MB*
+|===
+
+*Tauri uses reference counting internally (`Arc<Mutex<…>>`).
+
+The distinction is categorical, not incremental: rival frameworks ask you to
+manage resources *carefully*; Gossamer makes the wrong program *fail to
+compile*. Memory is region-based (scoped arenas) with no GC, ever.
+
+== Who it's for
+
+[cols="1,2,2",options="header"]
+|===
+| Audience | What they need | The Gossamer hook
+
+| Safety-critical & resource-sensitive desktop builders
+| Handles that cannot leak; permissions that cannot be bypassed
+| Leaks and bypasses are compile errors, not runtime incidents; no GC pauses
+
+| Formal-methods-curious developers
+| Machine-checked guarantees they can read and re-run
+| 15 Idris2 ABI proof modules, zero axioms, `%default total`; an academic paper
+
+| Estate consumers (IDApTIK, neurophone, PanLL, burble)
+| A shared, proven shell to build on
+| Tauri→Gossamer desktop migration path; Android mobile shell; panels in webviews
+|===
+
+== Proof points
+
+The claims we can stand behind, with the evidence that backs each one:
+
+* *Machine-checked ABI.* All 15 Idris2 proof modules build green across two
+  de-conflated packages — an 11-module groove-agnostic *shell*
+  (`gossamer-abi.ipkg`) and a 4-module *groove* layer (`gossamer-groove.ipkg`)
+  that depends on the shell one-way only. `idris2 0.8.0 --typecheck` passes with
+  `%default total`. See the
+  link:https://github.com/hyperpolymath/gossamer/blob/main/README.md#formal-verification[formal-verification section].
+* *Zero axioms, zero `believe_me`.* No trusted escape hatches remain in the
+  audited surface; the one axiom the repo once carried was eliminated
+  constructively.
+* *The proofs can't drift from the code.* `Gossamer.ABI.ForeignGen` is generated
+  from the Zig `export fn` signatures, so every `gossamer_*` C export is mirrored
+  in the typechecked ABI, and a CI cleave gate fails if the FFI changes without
+  regeneration.
+* *Linearity is re-proved every CI run.* The Ephapax Linearity Gate type-checks
+  all 13 `src/core/*.eph` modules and, for each handle-owning module, deletes the
+  consuming call and asserts the compiler *rejects* it.
+* *Tested.* 192 headless integration tests, plus Idris2 proof suites and Xvfb
+  display tests driving the real WebKitGTK path.
+* *Published research.* _Gossamer: A Linearly-Typed Webview Shell with Provable
+  Resource Safety_ —
+  link:https://github.com/hyperpolymath/gossamer/blob/main/docs/whitepapers/gossamer-arxiv-paper.tex[paper source]
+  in-repo; preprint published on Zenodo; arXiv submission pending.
+
+== Honest messaging guardrails
+
+Gossamer is *alpha research software* (v0.3.x, ~92% MVP,
+link:https://github.com/hyperpolymath/gossamer/blob/main/docs/governance/CRG-CRITERIA.adoc[CRG]
+grade D, targeting C). It is a single-maintainer component of the hyperpolymath
+estate, licensed MPL-2.0 and used inside IDApTIK (AGPL-3.0-or-later). Message
+accordingly:
+
+[cols="1,1",options="header"]
+|===
+| Say | Don't say
+
+| "Proven resource-safe ABI, machine-checked in Idris2" | "Fully verified / bug-free application"
+| "Alpha; ~92% of MVP; targeting CRG C"                 | "Production-ready" / "1.0"
+| "Handle leaks are a compile error by construction"    | "Impossible to crash" / "unhackable"
+| "Two bindings: Rust and AffineScript (`@gossamer/api`)" | Any claim of ReScript/Gleam/Elixir/Julia bindings
+| "Comparison figures are from the README table"        | Invented benchmarks or head-to-head performance wins
+|===
+
+The proofs cover the *ABI and resource discipline* — not the whole application.
+Frontend logic, OS webview behaviour, and unproven glue remain ordinary
+software. Say what the compiler proves, and no more.
+
+== Channels & surfaces
+
+[cols="1,2",options="header"]
+|===
+| Surface | Purpose
+
+| Wiki *Lay-Public* page (entry via the link:https://github.com/hyperpolymath/gossamer/blob/main/docs/wikis/Home.md[wiki signpost])
+| Plain-language explainer for non-specialist readers
+
+| link:https://github.com/hyperpolymath/gossamer/blob/main/docs/whitepapers/README.adoc[Whitepapers] (academic / industry / outreach)
+| Depth for formal-methods and technical evaluators
+
+| link:https://github.com/hyperpolymath/gossamer/blob/main/brand/social-preview.svg[social-preview.svg] brand asset
+| GitHub / Open Graph card — the first impression
+
+| link:https://github.com/hyperpolymath/gossamer/blob/main/README.md#at-a-glance[README comparison] + wiki signpost
+| Canonical positioning and category framing
+
+| link:https://github.com/hyperpolymath/gossamer/blob/main/brand/BRAND.adoc[Brand pack]
+| Consistent mark, colours, and the "thread over a frame" story
+|===
+
+The positioning line for repository assets is _thin shell over native_ (the
+Electron/Tauri/Wails alternative). Per the brand rules, sales straplines never
+appear on repository assets — reserve those for the marketing surfaces above.
