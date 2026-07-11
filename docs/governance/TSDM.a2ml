@@ -2,6 +2,8 @@
 ---
 ### [TSDM_SPEC]
 id: "tsdm-standard"
+name: "Three-axis Software Development Model"
+project: "gossamer"
 version: "1.0.0"
 
 axes:

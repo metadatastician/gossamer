@@ -1,3 +1,4 @@
+K9!
 # SPDX-License-Identifier: MPL-2.0
 # deploy.k9.ncl — gossamer deployment component (Hunt level)
 #
@@ -143,7 +144,10 @@ echo "K9: Rollback complete."
 
 # Export the component
 {
-  pedigree = component_pedigree,
+  # `name` restated at the pedigree root (in addition to metadata.name)
+  # so contract validators that read pedigree.name directly can resolve
+  # identity without following the `component_pedigree` indirection.
+  pedigree = component_pedigree & { name = "gossamer-deploy" },
   deployment = deployment,
   scripts = scripts,
 
