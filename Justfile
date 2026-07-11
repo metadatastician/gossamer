@@ -233,19 +233,14 @@ android-test:
 # the service/receiver/widget native host are selected automatically for
 # *-android targets.
 android-build:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    : "${ANDROID_NDK_HOME:?set ANDROID_NDK_HOME to your NDK (r26+)}"
-    declare -A ABI=( [aarch64-linux-android]=arm64-v8a \
-                     [x86_64-linux-android]=x86_64 \
-                     [arm-linux-androideabi]=armeabi-v7a )
-    for tgt in "${!ABI[@]}"; do
-        echo "==> $tgt (${ABI[$tgt]})"
-        ( cd src/interface/ffi && zig build -Dtarget="$tgt" -Doptimize=ReleaseSafe )
-        mkdir -p "android/gossamer-android-services/src/main/jniLibs/${ABI[$tgt]}"
-        cp "src/interface/ffi/zig-out/lib/libgossamer.so" "android/gossamer-android-services/src/main/jniLibs/${ABI[$tgt]}/" 2>/dev/null || true
-    done
-    @echo "Android .so built for: arm64-v8a, x86_64, armeabi-v7a (see android/gossamer-android-services/src/main/jniLibs/)"
+    bash scripts/android-build.sh
+
+# Assemble a signed debug "smoke" APK, gradle-free (issue #68): javac (android.jar +
+# androidx.annotation) -> d8 -> aapt2 link -> zipalign -> apksigner. Bundles jniLibs
+# from `just android-build` when present. Requires ANDROID_HOME with
+# build-tools;34.0.0 + platforms;android-34.
+android-apk:
+    bash scripts/android-apk.sh
 
 # Show supported platform targets
 platforms:
