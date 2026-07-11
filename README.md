@@ -130,7 +130,7 @@ doesn’t interfere with real-time rendering performance.
 
 # Current Status
 
-- **v0.3.1 (current)**: 173 integration tests. Mobile bug fixes (iOS
+- **v0.3.1 (current)**: 192 integration tests. Mobile bug fixes (iOS
   screen size, Android JNI constructor). Package distribution
   (deb/rpm/flatpak/dmg/wix).
 

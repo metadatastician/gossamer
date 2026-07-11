@@ -1,0 +1,123 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2025-2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= Gossamer — Strategy & Operations
+:toc:
+
+Gossamer is an *infrastructure-tier open-source component* in a personal research
+estate, not a commercial product. There are no customers, no revenue, and no
+go-to-market plan to reason about here. "Strategy" means where Gossamer sits in
+the estate's dependency graph and why that position is load-bearing;
+"operations" means how the work actually gets done. Every claim below is sourced
+from the machine-readable state in
+https://github.com/hyperpolymath/gossamer/blob/main/.machine_readable/descriptiles/ECOSYSTEM.a2ml[`descriptiles/ECOSYSTEM.a2ml`]
+and
+https://github.com/hyperpolymath/gossamer/blob/main/.machine_readable/descriptiles/STATE.a2ml[`descriptiles/STATE.a2ml`].
+
+== Strategic position
+
+`ECOSYSTEM.a2ml` records `tier = "infrastructure"` and `role = "library"`.
+Gossamer is the estate's *desktop- and mobile-shell dependency*: the layer that
+wraps a web frontend in a native OS window and proves, at compile time, that the
+app handles every resource correctly. Because downstream projects build their
+shipping surface *on top of* Gossamer, its correctness and stability are
+inherited by everything above it. That is the strategic asset — not
+differentiation in a market, but a guarantee that propagates through the
+dependency graph.
+
+The estate splits cleanly into what Gossamer *depends on* and what *depends on
+it*:
+
+[cols="1,1,2",options="header"]
+|===
+| Direction | Project | Relationship (per `ECOSYSTEM.a2ml`)
+| Supply | ephapax | Backend language; `let!` enforces resource linearity
+| Supply | affinescript | Frontend language + `@gossamer/api` binding
+| Supply | proven | Sibling-standard: formal-verification posture for the ABI
+| Demand | idaptik | Potential consumer: Tauri → Gossamer desktop migration
+| Demand | neurophone | Dependent: banned-Kotlin Android app migrating onto Gossamer
+| Demand | panll | Dependent: PanLL panels run inside Gossamer webviews
+| Demand | burble | Potential consumer: voice platform may host Gossamer panels
+|===
+
+== Problem / solution thesis
+
+The category is *compile-time resource safety*. Established shells (Electron,
+Tauri, Wails) rely on developer discipline: a leaked window handle, a dangling
+IPC reference, or a bypassed permission is a runtime incident you hope review and
+testing catch. Gossamer's thesis is that these should be *compile errors*. The
+tagline states the wager plainly: "by design, not by discipline."
+
+Two mechanisms carry the claim:
+
+* *Linear backend.* The backend is written in Ephapax. Resources that matter —
+  windows, connections, file handles — are bound with `let!` (use exactly once,
+  compiler-enforced); everything else uses `let` (use at most once). You declare
+  intent; the compiler enforces it. Region-based memory means no GC, ever.
+* *Proven ABI.* The C ABI across the Zig FFI is mirrored by Idris2 proofs
+  (`--typecheck`, `%default total`). A generated foreign layer keeps the typed
+  ABI from drifting away from the ~135 exported `gossamer_*` symbols, and CI
+  enforces its freshness. This is what makes the compile-time guarantee credible
+  rather than aspirational.
+
+== Operational model
+
+Development is *session-based*: each work session reconciles the codebase against
+honest machine-readable state and appends a dated entry to the `session-history`
+in `STATE.a2ml`. This keeps the project legible to both the maintainer and to
+agents, and avoids the drift that discipline-based documentation accumulates.
+
+[cols="1,2",options="header"]
+|===
+| Operational surface | Where it lives
+| Machine-readable state | `.machine_readable/descriptiles/` (ECOSYSTEM, STATE, META, …)
+| Contractile governance | https://github.com/hyperpolymath/gossamer/blob/main/.machine_readable/contractiles/[`.machine_readable/contractiles/`] — six verbs: `adjust / bust / dust / intend / must / trust`
+| Governance grade | https://github.com/hyperpolymath/gossamer/blob/main/docs/governance/CRG-CRITERIA.adoc[CRG] — grade *D*, next target *C*
+| Build / CI | `just` recipes, GitHub Actions, Guix-first packaging
+|===
+
+Current checkpoint (`STATE.a2ml`, v0.3.1): ~92% MVP, phase *testing* / maturity
+*alpha*, ~192 integration tests, Idris2 ABI at 14/14 modules typechecking, no
+active blockers.
+
+== The consumer pipeline (strategic demand)
+
+The demand side is what justifies the investment: Gossamer exists because named
+estate projects need exactly this shell. The pipeline is concrete, not
+speculative.
+
+[cols="1,1,2",options="header"]
+|===
+| Consumer | Surface | Strategic pull
+| idaptik | Desktop | Migrate desktop builds off Tauri onto Gossamer, keeping the same AffineScript frontend (a `critical-next-action`)
+| neurophone | Android | Retire a banned-Kotlin app onto the `gossamer-android-services` mobile shell (neurophone#83)
+| panll | Panels | Panels run inside Gossamer webviews over sync/async/streaming IPC
+| burble | Voice UI | Potential host for Gossamer panels in the voice client
+|===
+
+These consumers also function as *dogfooding pressure*: each migration exercises a
+real code path (desktop windowing, Android JNI + services, panel IPC) and surfaces
+gaps back into Gossamer's own roadmap.
+
+== Roadmap alignment
+
+The strategic sequence — desktop-complete first, then mobile, then production
+hardening — is tracked in
+https://github.com/hyperpolymath/gossamer/blob/main/ROADMAP.adoc[ROADMAP.adoc].
+Desktop (Linux/macOS/Windows) and the plugin system are complete; the live front
+is *Phase 5 mobile* (Android at ~82%: NDK CI, APK/AAB signing, and Ephapax
+region-modelling of long-lived Service handles remain). Production hardening
+(auto-update, bundler, benchmarks vs. Tauri/Electron) is the Phase 4 / v1.0 tail.
+The idaptik desktop migration is the next demand-driven milestone that turns the
+strategic position into realised leverage.
+
+== Strategic risks
+
+[cols="1,2",options="header"]
+|===
+| Risk | Strategic character
+| Single-maintainer concentration | One author owns supply, the shell, and the consumers; capacity is the binding constraint, and session-based state is the mitigation, not a substitute for redundancy.
+| Deep verified toolchain | The guarantee depends on Ephapax, Idris2 0.8.0, Zig, and per-platform webviews aligning; any drift in a dependency propagates into Gossamer and then to every consumer.
+| ABI drift | The compile-time promise rests on the generated foreign layer staying in lockstep with ~135 Zig exports; the CI freshness gate is load-bearing and must not be weakened.
+| Mobile / production tail | Phase 5 (Android CI + signing) and the v1.0 hardening items gate the idaptik and neurophone migrations; slippage there stalls the demand side.
+| Governance maturity | CRG grade *D → C* is in progress; sustained legibility (dogfooding evidence, per-directory docs) is what keeps an infrastructure dependency trustworthy to its consumers.
+|===

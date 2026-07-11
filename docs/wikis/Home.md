@@ -17,8 +17,20 @@ This wiki is the *signpost* — canonical docs live in the repo at [`docs/`](htt
 | Understand the architecture | [docs/README.adoc](https://github.com/hyperpolymath/gossamer/blob/main/docs/README.adoc) |
 | Read the grammar reference | [docs/gossamer-conf-reference.adoc](https://github.com/hyperpolymath/gossamer/blob/main/docs/gossamer-conf-reference.adoc) |
 | Browse all docs by topic | [docs/README.adoc](https://github.com/hyperpolymath/gossamer/blob/main/docs/README.adoc) |
-| See the comparison against Tauri/Electron | [README.adoc](https://github.com/hyperpolymath/gossamer/blob/main/README.adoc#at-a-glance) |
-| See current project state | [.machine_readable/6a2/STATE.a2ml](https://github.com/hyperpolymath/gossamer/blob/main/.machine_readable/6a2/STATE.a2ml) |
+| See the comparison against Tauri/Electron | [README.md](https://github.com/hyperpolymath/gossamer/blob/main/README.md#at-a-glance) |
+| See current project state | [.machine_readable/descriptiles/STATE.a2ml](https://github.com/hyperpolymath/gossamer/blob/main/.machine_readable/descriptiles/STATE.a2ml) |
+
+---
+
+## Pick your track
+
+| You are a… | Read |
+|---|---|
+| **App developer** using Gossamer to build a desktop app | [User](User) |
+| **Contributor** hacking on the FFI / ABI proofs / Ephapax core | [Developer](Developer) |
+| **Maintainer** owning releases, governance, CI | [Maintainer](Maintainer) |
+| **Curious / non-technical** reader | [Lay-Public](Lay-Public) |
+| Anyone hitting an unfamiliar term | [Glossary](Glossary) |
 
 ---
 
@@ -47,7 +59,7 @@ Resources that matter (windows, file handles, IPC connections) use `let!`. Every
 | Frontend | Any web tech (HTML/CSS/JS or AffineScript → Wasm) |
 | Backend | [Ephapax](https://github.com/hyperpolymath/ephapax) (`let!` linear types) |
 | Native glue | Zig FFI (`src/interface/ffi/`) |
-| ABI proofs | Idris2 (`src/abi/Gossamer/`) |
+| ABI proofs | Idris2 (`src/interface/abi/`) |
 | IPC channel | `gossamer_channel_bind_async` (256-slot inflight) |
 | Permission model | Capability registry + `gossamer_grant` (compile-time enforced) |
 
@@ -56,7 +68,7 @@ Resources that matter (windows, file handles, IPC connections) use `let!`. Every
 - **Phase**: Testing / alpha (~92% MVP complete)
 - **Licence**: MPL-2.0 (component — used inside IDApTIK which is AGPL-3.0-or-later)
 - **CRG grade**: D, targeting C
-- **What's complete**: Core FFI, capability registry, async IPC, CSP enforcement, multiple window support, Rust+ReScript+Gleam+Elixir+Julia+Zig bindings, `gossamer.conf` DSL, CLI, Android Phase 1
+- **What's complete**: Core FFI, capability registry, async IPC, CSP enforcement, multiple window support, Rust + AffineScript bindings, `gossamer.conf` DSL, CLI, Android Phase 1
 - **What's pending**: IDApTIK desktop migration (Tauri → Gossamer), Android Phase 2, production hardening
 
 ## Relationship to other projects
@@ -69,7 +81,7 @@ Resources that matter (windows, file handles, IPC connections) use `let!`. Every
 ## Governance
 
 - **Licence**: MPL-2.0 (file-level copyleft, friendly to commercial integration)
-- **Machine-readable state**: [`.machine_readable/6a2/`](https://github.com/hyperpolymath/gossamer/tree/main/.machine_readable/6a2/) — updated each session
+- **Machine-readable state**: [`.machine_readable/descriptiles/`](https://github.com/hyperpolymath/gossamer/tree/main/.machine_readable/descriptiles/) — updated each session
 - **Contractiles**: 6-verb governance (`must/trust/bust/adjust/dust/intend`) in [`.machine_readable/contractiles/`](https://github.com/hyperpolymath/gossamer/tree/main/.machine_readable/contractiles/)
 - **Security policy**: [SECURITY.md](https://github.com/hyperpolymath/gossamer/blob/main/SECURITY.md)
 - **Open issues**: [github.com/hyperpolymath/gossamer/issues](https://github.com/hyperpolymath/gossamer/issues)
