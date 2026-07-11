@@ -132,7 +132,16 @@ const unsupported_clipboard = struct {
 };
 
 /// Compile-time platform dispatch for clipboard backend.
-const backend = switch (builtin.os.tag) {
+///
+/// Android reports `os.tag == .linux` (it runs a Linux kernel) but ships no
+/// GTK, so it is routed to the unsupported-platform stub BEFORE the os-tag
+/// switch — exactly as main.zig guards the webview backend with
+/// `abi == .android`. The comptime `if` means the `gtk_clipboard` struct (and
+/// its `@cImport("gtk/gtk.h")`) is never referenced, hence never analysed, on
+/// an Android target.
+const backend = if (builtin.abi == .android)
+    unsupported_clipboard
+else switch (builtin.os.tag) {
     .linux, .freebsd, .openbsd, .netbsd => gtk_clipboard,
     else => unsupported_clipboard,
 };

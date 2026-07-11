@@ -23,12 +23,8 @@
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 const std = @import("std");
+const builtin = @import("builtin");
 const main = @import("main.zig");
-
-/// GTK C bindings for file chooser dialogs.
-const c = @cImport({
-    @cInclude("gtk/gtk.h");
-});
 
 /// Set the thread-local error from main.zig.
 fn setError(msg: []const u8) void {
@@ -45,156 +41,320 @@ fn clearError() void {
 const allocator = std.heap.c_allocator;
 
 //==============================================================================
-// File Filters
+// Platform-Specific Dialog Backend
 //==============================================================================
 
-/// Maximum number of filter groups that can be parsed from a single filter
-/// string. Each group is a (name, patterns) pair.
-const MAX_FILTERS = 32;
-
-/// Parse a filter string and add file filters to a GtkFileChooser.
+/// GTK FileChooser backend (Linux, FreeBSD, OpenBSD, NetBSD).
 ///
-/// Filter format: "Name|pattern1;pattern2|Name2|pattern3"
-///   - Pairs of (name, patterns) separated by '|'
-///   - Multiple patterns within a group separated by ';'
-///   - Example: "JSON files|*.json;*.yaml|All files|*"
-///
-/// If the filter string is empty, no filters are added.
-fn addFiltersToChooser(chooser: *c.GtkFileChooser, filters: [*:0]const u8) void {
-    const filter_str = std.mem.span(filters);
-    if (filter_str.len == 0) return;
+/// The `@cImport("gtk/gtk.h")` and all chooser logic live inside this struct so
+/// they are only referenced (hence only analysed) on desktop targets. Android
+/// reports `os.tag == .linux` but has no GTK, so it selects `stub_dialog`.
+const gtk_dialog = struct {
+    /// GTK C bindings for file chooser dialogs.
+    const c = @cImport({
+        @cInclude("gtk/gtk.h");
+    });
 
-    // Split on '|' — alternating name/pattern pairs
-    var segment_iter = std.mem.splitScalar(u8, filter_str, '|');
-    var filter_count: usize = 0;
+    //==========================================================================
+    // File Filters
+    //==========================================================================
 
-    while (filter_count < MAX_FILTERS) {
-        // Get the filter display name
-        const name_segment = segment_iter.next() orelse break;
-        if (name_segment.len == 0) continue;
+    /// Maximum number of filter groups that can be parsed from a single filter
+    /// string. Each group is a (name, patterns) pair.
+    const MAX_FILTERS = 32;
 
-        // Get the glob pattern(s)
-        const pattern_segment = segment_iter.next() orelse break;
-        if (pattern_segment.len == 0) continue;
+    /// Parse a filter string and add file filters to a GtkFileChooser.
+    ///
+    /// Filter format: "Name|pattern1;pattern2|Name2|pattern3"
+    ///   - Pairs of (name, patterns) separated by '|'
+    ///   - Multiple patterns within a group separated by ';'
+    ///   - Example: "JSON files|*.json;*.yaml|All files|*"
+    ///
+    /// If the filter string is empty, no filters are added.
+    fn addFiltersToChooser(chooser: *c.GtkFileChooser, filters: [*:0]const u8) void {
+        const filter_str = std.mem.span(filters);
+        if (filter_str.len == 0) return;
 
-        // Create a GTK file filter
-        const file_filter = c.gtk_file_filter_new() orelse continue;
+        // Split on '|' — alternating name/pattern pairs
+        var segment_iter = std.mem.splitScalar(u8, filter_str, '|');
+        var filter_count: usize = 0;
 
-        // gtk_file_filter_set_name requires a null-terminated string.
-        // The segment from splitScalar is not null-terminated, so duplicate it.
-        const name_z = allocator.dupeZ(u8, name_segment) catch continue;
-        defer allocator.free(name_z);
-        c.gtk_file_filter_set_name(file_filter, name_z.ptr);
+        while (filter_count < MAX_FILTERS) {
+            // Get the filter display name
+            const name_segment = segment_iter.next() orelse break;
+            if (name_segment.len == 0) continue;
 
-        // Split patterns by ';' and add each one
-        var pattern_iter = std.mem.splitScalar(u8, pattern_segment, ';');
-        while (pattern_iter.next()) |pattern| {
-            if (pattern.len == 0) continue;
-            // Null-terminate each pattern for GTK
-            const pattern_z = allocator.dupeZ(u8, pattern) catch continue;
-            defer allocator.free(pattern_z);
-            c.gtk_file_filter_add_pattern(file_filter, pattern_z.ptr);
+            // Get the glob pattern(s)
+            const pattern_segment = segment_iter.next() orelse break;
+            if (pattern_segment.len == 0) continue;
+
+            // Create a GTK file filter
+            const file_filter = c.gtk_file_filter_new() orelse continue;
+
+            // gtk_file_filter_set_name requires a null-terminated string.
+            // The segment from splitScalar is not null-terminated, so duplicate it.
+            const name_z = allocator.dupeZ(u8, name_segment) catch continue;
+            defer allocator.free(name_z);
+            c.gtk_file_filter_set_name(file_filter, name_z.ptr);
+
+            // Split patterns by ';' and add each one
+            var pattern_iter = std.mem.splitScalar(u8, pattern_segment, ';');
+            while (pattern_iter.next()) |pattern| {
+                if (pattern.len == 0) continue;
+                // Null-terminate each pattern for GTK
+                const pattern_z = allocator.dupeZ(u8, pattern) catch continue;
+                defer allocator.free(pattern_z);
+                c.gtk_file_filter_add_pattern(file_filter, pattern_z.ptr);
+            }
+
+            c.gtk_file_chooser_add_filter(chooser, file_filter);
+            filter_count += 1;
+        }
+    }
+
+    //==========================================================================
+    // GTK Initialisation Guard
+    //==========================================================================
+
+    /// Check whether GTK is initialised. If not, attempt initialisation.
+    /// Returns true if GTK is ready, false if initialisation failed.
+    fn ensureGtkInit() bool {
+        return c.gtk_init_check(null, null) != 0;
+    }
+
+    //==========================================================================
+    // Core Dialog Runner
+    //==========================================================================
+
+    /// Run a file chooser dialog and return the selected path.
+    ///
+    /// Creates a GtkFileChooserDialog with the given action (OPEN/SAVE/SELECT_FOLDER),
+    /// adds filters, runs the dialog modally, and returns the selected filename as
+    /// a heap-allocated null-terminated C string.
+    ///
+    /// Returns 0 if the user cancels or an error occurs.
+    /// The caller is responsible for freeing the returned string via
+    /// gossamer_dialog_free_path() or libc free().
+    fn runFileChooserDialog(
+        title: [*:0]const u8,
+        filters: [*:0]const u8,
+        action: c_uint,
+        accept_label: [*:0]const u8,
+    ) u64 {
+        if (!ensureGtkInit()) {
+            setError("GTK not initialised — cannot show file dialog");
+            return 0;
         }
 
-        c.gtk_file_chooser_add_filter(chooser, file_filter);
-        filter_count += 1;
-    }
-}
+        // Create the file chooser dialog.
+        // gtk_file_chooser_dialog_new is variadic; we pass button label/response
+        // pairs terminated by a NULL sentinel.
+        const dialog = c.gtk_file_chooser_dialog_new(
+            title,
+            null, // parent window (transient-for) — null for standalone
+            @intCast(action),
+            @as([*:0]const u8, "_Cancel"),
+            @as(c_int, c.GTK_RESPONSE_CANCEL),
+            accept_label,
+            @as(c_int, c.GTK_RESPONSE_ACCEPT),
+            @as(?*anyopaque, null), // variadic sentinel
+        ) orelse {
+            setError("Failed to create file chooser dialog");
+            return 0;
+        };
 
-//==============================================================================
-// GTK Initialisation Guard
-//==============================================================================
+        // Configure the chooser
+        const chooser: *c.GtkFileChooser = @ptrCast(dialog);
+        addFiltersToChooser(chooser, filters);
 
-/// Check whether GTK is initialised. If not, attempt initialisation.
-/// Returns true if GTK is ready, false if initialisation failed.
-fn ensureGtkInit() bool {
-    return c.gtk_init_check(null, null) != 0;
-}
+        // For save dialogs, prompt before overwriting existing files
+        if (action == c.GTK_FILE_CHOOSER_ACTION_SAVE) {
+            c.gtk_file_chooser_set_do_overwrite_confirmation(chooser, 1);
+        }
 
-//==============================================================================
-// Core Dialog Runner
-//==============================================================================
+        // Run the dialog modally — blocks until the user responds
+        const response = c.gtk_dialog_run(@ptrCast(dialog));
 
-/// Run a file chooser dialog and return the selected path.
-///
-/// Creates a GtkFileChooserDialog with the given action (OPEN/SAVE/SELECT_FOLDER),
-/// adds filters, runs the dialog modally, and returns the selected filename as
-/// a heap-allocated null-terminated C string.
-///
-/// Returns 0 if the user cancels or an error occurs.
-/// The caller is responsible for freeing the returned string via
-/// gossamer_dialog_free_path() or libc free().
-fn runFileChooserDialog(
-    title: [*:0]const u8,
-    filters: [*:0]const u8,
-    action: c_uint,
-    accept_label: [*:0]const u8,
-) u64 {
-    if (!ensureGtkInit()) {
-        setError("GTK not initialised — cannot show file dialog");
-        return 0;
-    }
+        var result: u64 = 0;
 
-    // Create the file chooser dialog.
-    // gtk_file_chooser_dialog_new is variadic; we pass button label/response
-    // pairs terminated by a NULL sentinel.
-    const dialog = c.gtk_file_chooser_dialog_new(
-        title,
-        null, // parent window (transient-for) — null for standalone
-        @intCast(action),
-        @as([*:0]const u8, "_Cancel"),
-        @as(c_int, c.GTK_RESPONSE_CANCEL),
-        accept_label,
-        @as(c_int, c.GTK_RESPONSE_ACCEPT),
-        @as(?*anyopaque, null), // variadic sentinel
-    ) orelse {
-        setError("Failed to create file chooser dialog");
-        return 0;
-    };
-
-    // Configure the chooser
-    const chooser: *c.GtkFileChooser = @ptrCast(dialog);
-    addFiltersToChooser(chooser, filters);
-
-    // For save dialogs, prompt before overwriting existing files
-    if (action == c.GTK_FILE_CHOOSER_ACTION_SAVE) {
-        c.gtk_file_chooser_set_do_overwrite_confirmation(chooser, 1);
-    }
-
-    // Run the dialog modally — blocks until the user responds
-    const response = c.gtk_dialog_run(@ptrCast(dialog));
-
-    var result: u64 = 0;
-
-    if (response == c.GTK_RESPONSE_ACCEPT) {
-        // gtk_file_chooser_get_filename returns a g_malloc'd string
-        const filename: ?[*:0]u8 = c.gtk_file_chooser_get_filename(chooser);
-        if (filename) |gtk_path| {
-            // Copy to a libc-allocated string for consistent free() semantics
-            const path_slice = std.mem.span(gtk_path);
-            const path_copy = allocator.dupeZ(u8, path_slice) catch {
+        if (response == c.GTK_RESPONSE_ACCEPT) {
+            // gtk_file_chooser_get_filename returns a g_malloc'd string
+            const filename: ?[*:0]u8 = c.gtk_file_chooser_get_filename(chooser);
+            if (filename) |gtk_path| {
+                // Copy to a libc-allocated string for consistent free() semantics
+                const path_slice = std.mem.span(gtk_path);
+                const path_copy = allocator.dupeZ(u8, path_slice) catch {
+                    c.g_free(gtk_path);
+                    c.gtk_widget_destroy(dialog);
+                    setError("Out of memory copying file path");
+                    return 0;
+                };
+                // Free the GTK-allocated original
                 c.g_free(gtk_path);
-                c.gtk_widget_destroy(dialog);
-                setError("Out of memory copying file path");
-                return 0;
-            };
-            // Free the GTK-allocated original
-            c.g_free(gtk_path);
-            result = @intCast(@intFromPtr(path_copy.ptr));
-            clearError();
+                result = @intCast(@intFromPtr(path_copy.ptr));
+                clearError();
+            }
         }
+
+        // Destroy the dialog widget
+        c.gtk_widget_destroy(dialog);
+
+        // Drain pending GTK events so the dialog window fully closes
+        while (c.gtk_events_pending() != 0) {
+            _ = c.gtk_main_iteration();
+        }
+
+        return result;
     }
 
-    // Destroy the dialog widget
-    c.gtk_widget_destroy(dialog);
-
-    // Drain pending GTK events so the dialog window fully closes
-    while (c.gtk_events_pending() != 0) {
-        _ = c.gtk_main_iteration();
+    fn open(title: [*:0]const u8, filters: [*:0]const u8) u64 {
+        return runFileChooserDialog(
+            title,
+            filters,
+            c.GTK_FILE_CHOOSER_ACTION_OPEN,
+            "_Open",
+        );
     }
 
-    return result;
-}
+    fn save(title: [*:0]const u8, filters: [*:0]const u8) u64 {
+        return runFileChooserDialog(
+            title,
+            filters,
+            c.GTK_FILE_CHOOSER_ACTION_SAVE,
+            "_Save",
+        );
+    }
+
+    fn openDirectory(title: [*:0]const u8) u64 {
+        return runFileChooserDialog(
+            title,
+            "", // No file filters for directory selection
+            c.GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
+            "_Select",
+        );
+    }
+
+    fn openMultiple(title: [*:0]const u8, filters: [*:0]const u8) u64 {
+        if (!ensureGtkInit()) {
+            setError("GTK not initialised — cannot show file dialog");
+            return 0;
+        }
+
+        const dialog = c.gtk_file_chooser_dialog_new(
+            title,
+            null,
+            @intCast(c.GTK_FILE_CHOOSER_ACTION_OPEN),
+            @as([*:0]const u8, "_Cancel"),
+            @as(c_int, c.GTK_RESPONSE_CANCEL),
+            @as([*:0]const u8, "_Open"),
+            @as(c_int, c.GTK_RESPONSE_ACCEPT),
+            @as(?*anyopaque, null),
+        ) orelse {
+            setError("Failed to create file chooser dialog");
+            return 0;
+        };
+
+        const chooser: *c.GtkFileChooser = @ptrCast(dialog);
+
+        // Enable multiple file selection
+        c.gtk_file_chooser_set_select_multiple(chooser, 1);
+
+        // Add file filters
+        addFiltersToChooser(chooser, filters);
+
+        // Run the dialog modally
+        const response = c.gtk_dialog_run(@ptrCast(dialog));
+
+        var result: u64 = 0;
+
+        if (response == c.GTK_RESPONSE_ACCEPT) {
+            // Collect all selected filenames into a newline-separated string
+            var paths = std.ArrayListUnmanaged(u8){};
+            defer paths.deinit(allocator);
+
+            const file_list: ?*c.GSList = c.gtk_file_chooser_get_filenames(chooser);
+            var current = file_list;
+
+            var first = true;
+            while (current) |node| {
+                const filename: ?[*:0]u8 = @ptrCast(@alignCast(node.data));
+                if (filename) |f| {
+                    if (!first) {
+                        paths.append(allocator, '\n') catch break;
+                    }
+                    const path_slice = std.mem.span(f);
+                    paths.appendSlice(allocator, path_slice) catch break;
+                    first = false;
+                    // Free the individual filename (g_malloc'd by GTK)
+                    c.g_free(f);
+                }
+                current = node.next;
+            }
+
+            // Free the GSList container (nodes only — data already freed above)
+            if (file_list) |list| {
+                c.g_slist_free(list);
+            }
+
+            if (paths.items.len > 0) {
+                // Null-terminate and return
+                const result_str = allocator.dupeZ(u8, paths.items) catch {
+                    c.gtk_widget_destroy(dialog);
+                    setError("Out of memory building path list");
+                    return 0;
+                };
+                result = @intCast(@intFromPtr(result_str.ptr));
+                clearError();
+            }
+        }
+
+        // Destroy the dialog widget
+        c.gtk_widget_destroy(dialog);
+
+        // Drain pending GTK events
+        while (c.gtk_events_pending() != 0) {
+            _ = c.gtk_main_iteration();
+        }
+
+        return result;
+    }
+};
+
+/// Unsupported-platform dialog backend. Native file dialogs are a desktop
+/// concept; on Android file selection is performed via Intent.ACTION_GET_CONTENT
+/// from the Java layer, not from libgossamer. Each entry point returns 0, which
+/// callers already interpret as "user cancelled / no selection".
+const stub_dialog = struct {
+    fn open(title: [*:0]const u8, filters: [*:0]const u8) u64 {
+        _ = title;
+        _ = filters;
+        setError("File dialogs are not available on this platform");
+        return 0;
+    }
+
+    fn save(title: [*:0]const u8, filters: [*:0]const u8) u64 {
+        _ = title;
+        _ = filters;
+        setError("File dialogs are not available on this platform");
+        return 0;
+    }
+
+    fn openDirectory(title: [*:0]const u8) u64 {
+        _ = title;
+        setError("File dialogs are not available on this platform");
+        return 0;
+    }
+
+    fn openMultiple(title: [*:0]const u8, filters: [*:0]const u8) u64 {
+        _ = title;
+        _ = filters;
+        setError("File dialogs are not available on this platform");
+        return 0;
+    }
+};
+
+/// Compile-time platform dispatch for the dialog backend.
+const backend = if (builtin.abi == .android) stub_dialog else gtk_dialog;
 
 //==============================================================================
 // Exported FFI Functions
@@ -213,12 +373,7 @@ fn runFileChooserDialog(
 /// Matches: Gossamer.ABI.Foreign.prim__dialogOpen
 pub export fn gossamer_dialog_open(title: [*:0]const u8, filters: [*:0]const u8) u64 {
     clearError();
-    return runFileChooserDialog(
-        title,
-        filters,
-        c.GTK_FILE_CHOOSER_ACTION_OPEN,
-        "_Open",
-    );
+    return backend.open(title, filters);
 }
 
 /// Show a file save dialog.
@@ -234,12 +389,7 @@ pub export fn gossamer_dialog_open(title: [*:0]const u8, filters: [*:0]const u8)
 /// Matches: Gossamer.ABI.Foreign.prim__dialogSave
 pub export fn gossamer_dialog_save(title: [*:0]const u8, filters: [*:0]const u8) u64 {
     clearError();
-    return runFileChooserDialog(
-        title,
-        filters,
-        c.GTK_FILE_CHOOSER_ACTION_SAVE,
-        "_Save",
-    );
+    return backend.save(title, filters);
 }
 
 /// Show a directory picker dialog.
@@ -254,12 +404,7 @@ pub export fn gossamer_dialog_save(title: [*:0]const u8, filters: [*:0]const u8)
 /// Matches: Gossamer.ABI.Foreign.prim__dialogOpenDirectory
 pub export fn gossamer_dialog_open_directory(title: [*:0]const u8) u64 {
     clearError();
-    return runFileChooserDialog(
-        title,
-        "", // No file filters for directory selection
-        c.GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
-        "_Select",
-    );
+    return backend.openDirectory(title);
 }
 
 /// Show a file open dialog with multiple file selection.
@@ -276,88 +421,7 @@ pub export fn gossamer_dialog_open_directory(title: [*:0]const u8) u64 {
 /// Matches: Gossamer.ABI.Foreign.prim__dialogOpenMultiple
 pub export fn gossamer_dialog_open_multiple(title: [*:0]const u8, filters: [*:0]const u8) u64 {
     clearError();
-    if (!ensureGtkInit()) {
-        setError("GTK not initialised — cannot show file dialog");
-        return 0;
-    }
-
-    const dialog = c.gtk_file_chooser_dialog_new(
-        title,
-        null,
-        @intCast(c.GTK_FILE_CHOOSER_ACTION_OPEN),
-        @as([*:0]const u8, "_Cancel"),
-        @as(c_int, c.GTK_RESPONSE_CANCEL),
-        @as([*:0]const u8, "_Open"),
-        @as(c_int, c.GTK_RESPONSE_ACCEPT),
-        @as(?*anyopaque, null),
-    ) orelse {
-        setError("Failed to create file chooser dialog");
-        return 0;
-    };
-
-    const chooser: *c.GtkFileChooser = @ptrCast(dialog);
-
-    // Enable multiple file selection
-    c.gtk_file_chooser_set_select_multiple(chooser, 1);
-
-    // Add file filters
-    addFiltersToChooser(chooser, filters);
-
-    // Run the dialog modally
-    const response = c.gtk_dialog_run(@ptrCast(dialog));
-
-    var result: u64 = 0;
-
-    if (response == c.GTK_RESPONSE_ACCEPT) {
-        // Collect all selected filenames into a newline-separated string
-        var paths = std.ArrayListUnmanaged(u8){};
-        defer paths.deinit(allocator);
-
-        const file_list: ?*c.GSList = c.gtk_file_chooser_get_filenames(chooser);
-        var current = file_list;
-
-        var first = true;
-        while (current) |node| {
-            const filename: ?[*:0]u8 = @ptrCast(@alignCast(node.data));
-            if (filename) |f| {
-                if (!first) {
-                    paths.append(allocator, '\n') catch break;
-                }
-                const path_slice = std.mem.span(f);
-                paths.appendSlice(allocator, path_slice) catch break;
-                first = false;
-                // Free the individual filename (g_malloc'd by GTK)
-                c.g_free(f);
-            }
-            current = node.next;
-        }
-
-        // Free the GSList container (nodes only — data already freed above)
-        if (file_list) |list| {
-            c.g_slist_free(list);
-        }
-
-        if (paths.items.len > 0) {
-            // Null-terminate and return
-            const result_str = allocator.dupeZ(u8, paths.items) catch {
-                c.gtk_widget_destroy(dialog);
-                setError("Out of memory building path list");
-                return 0;
-            };
-            result = @intCast(@intFromPtr(result_str.ptr));
-            clearError();
-        }
-    }
-
-    // Destroy the dialog widget
-    c.gtk_widget_destroy(dialog);
-
-    // Drain pending GTK events
-    while (c.gtk_events_pending() != 0) {
-        _ = c.gtk_main_iteration();
-    }
-
-    return result;
+    return backend.openMultiple(title, filters);
 }
 
 /// Free a path string returned by any gossamer_dialog_* function.
