@@ -16,9 +16,9 @@ assigned = "2026-03-16"
 rationale = "Gossamer is a webview/GUI-layer project; gv (graphical/visual) clade."
 
 [forges]
-github = "hyperpolymath/gossamer"
-gitlab = "hyperpolymath/gossamer"
-bitbucket = "hyperpolymath/gossamer"
+github = "metadatastician/gossamer"
+gitlab = "metadatastician/gossamer"
+bitbucket = "metadatastician/gossamer"
 
 [lineage]
 type = "standalone"

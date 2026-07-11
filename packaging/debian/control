@@ -8,7 +8,7 @@ Priority: optional
 Architecture: amd64
 Depends: libwebkit2gtk-4.1-0 (>= 2.40), libgtk-3-0 (>= 3.22)
 Maintainer: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
-Homepage: https://github.com/hyperpolymath/gossamer
+Homepage: https://github.com/metadatastician/gossamer
 Description: Linearly-typed webview shell framework with provable resource safety
  Gossamer is a webview shell framework that uses linear types to guarantee
  no resource leaks at compile time. It provides a C-ABI shared library

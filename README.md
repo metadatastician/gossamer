@@ -3,9 +3,9 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 SPDX-FileCopyrightText: 2025-2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 -->
 
-[![OpenSSF Best Practices](https://img.shields.io/badge/OpenSSF-Best_Practices-green?logo=opensourcesecurity)](https://www.bestpractices.dev/en/projects/new?repo_url=https://github.com/hyperpolymath/gossamer)
-[![License: PMPL-1.0](https://img.shields.io/badge/License-MPL--2.0-blue.svg)](https://github.com/hyperpolymath/palimpsest-license) [![Release](https://img.shields.io/github/v/release/hyperpolymath/gossamer)](https://github.com/hyperpolymath/gossamer/releases) ![Zig
-FFI](https://img.shields.io/badge/FFI-Zig-orange.svg) [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/hyperpolymath/gossamer/badge)](https://securityscorecards.dev/viewer/?uri=github.com/hyperpolymath/gossamer) ![Idris2
+[![OpenSSF Best Practices](https://img.shields.io/badge/OpenSSF-Best_Practices-green?logo=opensourcesecurity)](https://www.bestpractices.dev/en/projects/new?repo_url=https://github.com/metadatastician/gossamer)
+[![License: PMPL-1.0](https://img.shields.io/badge/License-MPL--2.0-blue.svg)](https://github.com/hyperpolymath/palimpsest-license) [![Release](https://img.shields.io/github/v/release/metadatastician/gossamer)](https://github.com/metadatastician/gossamer/releases) ![Zig
+FFI](https://img.shields.io/badge/FFI-Zig-orange.svg) [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/metadatastician/gossamer/badge)](https://securityscorecards.dev/viewer/?uri=github.com/metadatastician/gossamer) ![Idris2
 ABI](https://img.shields.io/badge/ABI-Idris2-purple.svg) [![Green Hosting](https://api.thegreenwebfoundation.org/greencheckimage/jewell.nexus)](https://www.thegreenwebfoundation.org/green-web-check/?url=jewell.nexus)
 
 <p align="center"><img src="brand/social-preview.svg" alt="gossamer" width="720"></p>

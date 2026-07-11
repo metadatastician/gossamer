@@ -5,7 +5,7 @@
 
 Gossamer wraps your web frontend in a native window — like Tauri or Electron — but the compiler proves your app handles every resource correctly. Leaked handles, dangling references, and permission bypasses become compile errors instead of production incidents.
 
-This wiki is the *signpost* — canonical docs live in the repo at [`docs/`](https://github.com/hyperpolymath/gossamer/tree/main/docs). Don't edit pages directly in the wiki UI; edit [`docs/wikis/`](https://github.com/hyperpolymath/gossamer/tree/main/docs/wikis) in the code repo.
+This wiki is the *signpost* — canonical docs live in the repo at [`docs/`](https://github.com/metadatastician/gossamer/tree/main/docs). Don't edit pages directly in the wiki UI; edit [`docs/wikis/`](https://github.com/metadatastician/gossamer/tree/main/docs/wikis) in the code repo.
 
 ---
 
@@ -13,12 +13,12 @@ This wiki is the *signpost* — canonical docs live in the repo at [`docs/`](htt
 
 | If you want to… | Go to |
 |---|---|
-| Build a desktop app with Gossamer | [docs/QUICKSTART.adoc](https://github.com/hyperpolymath/gossamer/blob/main/docs/QUICKSTART.adoc) |
-| Understand the architecture | [docs/README.adoc](https://github.com/hyperpolymath/gossamer/blob/main/docs/README.adoc) |
-| Read the grammar reference | [docs/gossamer-conf-reference.adoc](https://github.com/hyperpolymath/gossamer/blob/main/docs/gossamer-conf-reference.adoc) |
-| Browse all docs by topic | [docs/README.adoc](https://github.com/hyperpolymath/gossamer/blob/main/docs/README.adoc) |
-| See the comparison against Tauri/Electron | [README.md](https://github.com/hyperpolymath/gossamer/blob/main/README.md#at-a-glance) |
-| See current project state | [.machine_readable/descriptiles/STATE.a2ml](https://github.com/hyperpolymath/gossamer/blob/main/.machine_readable/descriptiles/STATE.a2ml) |
+| Build a desktop app with Gossamer | [docs/QUICKSTART.adoc](https://github.com/metadatastician/gossamer/blob/main/docs/QUICKSTART.adoc) |
+| Understand the architecture | [docs/README.adoc](https://github.com/metadatastician/gossamer/blob/main/docs/README.adoc) |
+| Read the grammar reference | [docs/gossamer-conf-reference.adoc](https://github.com/metadatastician/gossamer/blob/main/docs/gossamer-conf-reference.adoc) |
+| Browse all docs by topic | [docs/README.adoc](https://github.com/metadatastician/gossamer/blob/main/docs/README.adoc) |
+| See the comparison against Tauri/Electron | [README.md](https://github.com/metadatastician/gossamer/blob/main/README.md#at-a-glance) |
+| See current project state | [.machine_readable/descriptiles/STATE.a2ml](https://github.com/metadatastician/gossamer/blob/main/.machine_readable/descriptiles/STATE.a2ml) |
 
 ---
 
@@ -81,7 +81,7 @@ Resources that matter (windows, file handles, IPC connections) use `let!`. Every
 ## Governance
 
 - **Licence**: MPL-2.0 (file-level copyleft, friendly to commercial integration)
-- **Machine-readable state**: [`.machine_readable/descriptiles/`](https://github.com/hyperpolymath/gossamer/tree/main/.machine_readable/descriptiles/) — updated each session
-- **Contractiles**: 6-verb governance (`must/trust/bust/adjust/dust/intend`) in [`.machine_readable/contractiles/`](https://github.com/hyperpolymath/gossamer/tree/main/.machine_readable/contractiles/)
-- **Security policy**: [SECURITY.md](https://github.com/hyperpolymath/gossamer/blob/main/SECURITY.md)
-- **Open issues**: [github.com/hyperpolymath/gossamer/issues](https://github.com/hyperpolymath/gossamer/issues)
+- **Machine-readable state**: [`.machine_readable/descriptiles/`](https://github.com/metadatastician/gossamer/tree/main/.machine_readable/descriptiles/) — updated each session
+- **Contractiles**: 6-verb governance (`must/trust/bust/adjust/dust/intend`) in [`.machine_readable/contractiles/`](https://github.com/metadatastician/gossamer/tree/main/.machine_readable/contractiles/)
+- **Security policy**: [SECURITY.md](https://github.com/metadatastician/gossamer/blob/main/SECURITY.md)
+- **Open issues**: [github.com/metadatastician/gossamer/issues](https://github.com/metadatastician/gossamer/issues)

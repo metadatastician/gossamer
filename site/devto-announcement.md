@@ -94,10 +94,10 @@ I even wrapped an existing application (a game level editor) with Gossamer, repl
 
 ## Links
 
-- **GitHub**: [hyperpolymath/gossamer](https://github.com/hyperpolymath/gossamer)
-- **Paper**: [Gossamer: A Linearly-Typed Webview Shell with Provable Resource Safety](https://github.com/hyperpolymath/gossamer/blob/main/docs/whitepapers/gossamer-arxiv-paper.tex) (arXiv submission pending)
+- **GitHub**: [metadatastician/gossamer](https://github.com/metadatastician/gossamer)
+- **Paper**: [Gossamer: A Linearly-Typed Webview Shell with Provable Resource Safety](https://github.com/metadatastician/gossamer/blob/main/docs/whitepapers/gossamer-arxiv-paper.tex) (arXiv submission pending)
 - **Language**: [Ephapax](https://github.com/hyperpolymath/ephapax) — the dyadic linear/affine language
-- **Release**: [v0.1.0](https://github.com/hyperpolymath/gossamer/releases/tag/v0.1.0)
+- **Release**: [v0.1.0](https://github.com/metadatastician/gossamer/releases/tag/v0.1.0)
 
 ---
 
