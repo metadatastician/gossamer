@@ -16,11 +16,11 @@ cerro-torre .ctp bundle with Ed25519 signing and full provenance
 tracking.
 """
 license = "MPL-2.0"
-homepage = "https://github.com/hyperpolymath/gossamer"
+homepage = "https://github.com/metadatastician/gossamer"
 maintainer = "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>"
 
 [provenance]
-upstream = "https://github.com/hyperpolymath/gossamer"
+upstream = "https://github.com/metadatastician/gossamer"
 import_date = 2026-03-22T00:00:00Z
 
 [dependencies]

@@ -63,7 +63,7 @@
    (list
     ;; TODO: Add runtime dependencies
     ))
-  (home-page "https://github.com/hyperpolymath/gossamer")
+  (home-page "https://github.com/metadatastician/gossamer")
   (synopsis "Linearly-typed webview shell with formal ABI proofs")
   (description "RSR-compliant project. See README.adoc for details.")
   (license (list

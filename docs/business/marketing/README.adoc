@@ -25,7 +25,7 @@ exactly once, compiler-enforced.
 Gossamer does not compete on binary size or ergonomics alone; it opens a
 distinct category: *provable resource safety* for desktop shells. The
 comparison below is from the
-link:https://github.com/hyperpolymath/gossamer/blob/main/README.md#at-a-glance[project README]:
+link:https://github.com/metadatastician/gossamer/blob/main/README.md#at-a-glance[project README]:
 
 [cols="2,1,1,1,1",options="header"]
 |===
@@ -72,7 +72,7 @@ The claims we can stand behind, with the evidence that backs each one:
   (`gossamer-abi.ipkg`) and a 4-module *groove* layer (`gossamer-groove.ipkg`)
   that depends on the shell one-way only. `idris2 0.8.0 --typecheck` passes with
   `%default total`. See the
-  link:https://github.com/hyperpolymath/gossamer/blob/main/README.md#formal-verification[formal-verification section].
+  link:https://github.com/metadatastician/gossamer/blob/main/README.md#formal-verification[formal-verification section].
 * *Zero axioms, zero `believe_me`.* No trusted escape hatches remain in the
   audited surface; the one axiom the repo once carried was eliminated
   constructively.
@@ -87,13 +87,13 @@ The claims we can stand behind, with the evidence that backs each one:
   display tests driving the real WebKitGTK path.
 * *Published research.* _Gossamer: A Linearly-Typed Webview Shell with Provable
   Resource Safety_ —
-  link:https://github.com/hyperpolymath/gossamer/blob/main/docs/whitepapers/gossamer-arxiv-paper.tex[paper source]
+  link:https://github.com/metadatastician/gossamer/blob/main/docs/whitepapers/gossamer-arxiv-paper.tex[paper source]
   in-repo; preprint published on Zenodo; arXiv submission pending.
 
 == Honest messaging guardrails
 
 Gossamer is *alpha research software* (v0.3.x, ~92% MVP,
-link:https://github.com/hyperpolymath/gossamer/blob/main/docs/governance/CRG-CRITERIA.adoc[CRG]
+link:https://github.com/metadatastician/gossamer/blob/main/docs/governance/CRG-CRITERIA.adoc[CRG]
 grade D, targeting C). It is a single-maintainer component of the hyperpolymath
 estate, licensed MPL-2.0 and used inside IDApTIK (AGPL-3.0-or-later). Message
 accordingly:
@@ -119,19 +119,19 @@ software. Say what the compiler proves, and no more.
 |===
 | Surface | Purpose
 
-| Wiki *Lay-Public* page (entry via the link:https://github.com/hyperpolymath/gossamer/blob/main/docs/wikis/Home.md[wiki signpost])
+| Wiki *Lay-Public* page (entry via the link:https://github.com/metadatastician/gossamer/blob/main/docs/wikis/Home.md[wiki signpost])
 | Plain-language explainer for non-specialist readers
 
-| link:https://github.com/hyperpolymath/gossamer/blob/main/docs/whitepapers/README.adoc[Whitepapers] (academic / industry / outreach)
+| link:https://github.com/metadatastician/gossamer/blob/main/docs/whitepapers/README.adoc[Whitepapers] (academic / industry / outreach)
 | Depth for formal-methods and technical evaluators
 
-| link:https://github.com/hyperpolymath/gossamer/blob/main/brand/social-preview.svg[social-preview.svg] brand asset
+| link:https://github.com/metadatastician/gossamer/blob/main/brand/social-preview.svg[social-preview.svg] brand asset
 | GitHub / Open Graph card — the first impression
 
-| link:https://github.com/hyperpolymath/gossamer/blob/main/README.md#at-a-glance[README comparison] + wiki signpost
+| link:https://github.com/metadatastician/gossamer/blob/main/README.md#at-a-glance[README comparison] + wiki signpost
 | Canonical positioning and category framing
 
-| link:https://github.com/hyperpolymath/gossamer/blob/main/brand/BRAND.adoc[Brand pack]
+| link:https://github.com/metadatastician/gossamer/blob/main/brand/BRAND.adoc[Brand pack]
 | Consistent mark, colours, and the "thread over a frame" story
 |===
 

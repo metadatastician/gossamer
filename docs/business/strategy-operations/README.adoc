@@ -9,9 +9,9 @@ go-to-market plan to reason about here. "Strategy" means where Gossamer sits in
 the estate's dependency graph and why that position is load-bearing;
 "operations" means how the work actually gets done. Every claim below is sourced
 from the machine-readable state in
-https://github.com/hyperpolymath/gossamer/blob/main/.machine_readable/descriptiles/ECOSYSTEM.a2ml[`descriptiles/ECOSYSTEM.a2ml`]
+https://github.com/metadatastician/gossamer/blob/main/.machine_readable/descriptiles/ECOSYSTEM.a2ml[`descriptiles/ECOSYSTEM.a2ml`]
 and
-https://github.com/hyperpolymath/gossamer/blob/main/.machine_readable/descriptiles/STATE.a2ml[`descriptiles/STATE.a2ml`].
+https://github.com/metadatastician/gossamer/blob/main/.machine_readable/descriptiles/STATE.a2ml[`descriptiles/STATE.a2ml`].
 
 == Strategic position
 
@@ -70,8 +70,8 @@ agents, and avoids the drift that discipline-based documentation accumulates.
 |===
 | Operational surface | Where it lives
 | Machine-readable state | `.machine_readable/descriptiles/` (ECOSYSTEM, STATE, META, …)
-| Contractile governance | https://github.com/hyperpolymath/gossamer/blob/main/.machine_readable/contractiles/[`.machine_readable/contractiles/`] — six verbs: `adjust / bust / dust / intend / must / trust`
-| Governance grade | https://github.com/hyperpolymath/gossamer/blob/main/docs/governance/CRG-CRITERIA.adoc[CRG] — grade *D*, next target *C*
+| Contractile governance | https://github.com/metadatastician/gossamer/blob/main/.machine_readable/contractiles/[`.machine_readable/contractiles/`] — six verbs: `adjust / bust / dust / intend / must / trust`
+| Governance grade | https://github.com/metadatastician/gossamer/blob/main/docs/governance/CRG-CRITERIA.adoc[CRG] — grade *D*, next target *C*
 | Build / CI | `just` recipes, GitHub Actions, Guix-first packaging
 |===
 
@@ -102,7 +102,7 @@ gaps back into Gossamer's own roadmap.
 
 The strategic sequence — desktop-complete first, then mobile, then production
 hardening — is tracked in
-https://github.com/hyperpolymath/gossamer/blob/main/ROADMAP.adoc[ROADMAP.adoc].
+https://github.com/metadatastician/gossamer/blob/main/ROADMAP.adoc[ROADMAP.adoc].
 Desktop (Linux/macOS/Windows) and the plugin system are complete; the live front
 is *Phase 5 mobile* (Android at ~82%: NDK CI, APK/AAB signing, and Ephapax
 region-modelling of long-lived Service handles remain). Production hardening

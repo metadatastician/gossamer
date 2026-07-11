@@ -13,7 +13,7 @@ Clone, build, test, contribute.
 
 [source,bash]
 ----
-git clone https://github.com/hyperpolymath/gossamer
+git clone https://github.com/metadatastician/gossamer
 cd gossamer
 just doctor    # verify toolchain
 just heal      # auto-install missing tools

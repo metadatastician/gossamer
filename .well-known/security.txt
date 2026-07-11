@@ -5,5 +5,5 @@
 Contact: mailto:j.d.a.jewell@open.ac.uk
 Expires: 2027-12-31T23:59:59.000Z
 Preferred-Languages: en
-Canonical: https://github.com/hyperpolymath/gossamer/.well-known/security.txt
-Policy: https://github.com/hyperpolymath/gossamer/blob/main/SECURITY.md
+Canonical: https://github.com/metadatastician/gossamer/.well-known/security.txt
+Policy: https://github.com/metadatastician/gossamer/blob/main/SECURITY.md
