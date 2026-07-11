@@ -1,0 +1,154 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2025-2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+
+= Supply Chain — Business Case
+:toc:
+
+This is the *signpost* for Gossamer's supply chain: what it depends on, what
+depends on it, how those edges are wired, and how provenance is kept honest.
+The machine-readable source of truth is
+https://github.com/hyperpolymath/gossamer/blob/main/.machine_readable/descriptiles/ECOSYSTEM.a2ml[`ECOSYSTEM.a2ml`];
+this document narrates it for a business and assurance audience. Nothing here
+is aspirational — every edge below resolves to a file in the repo.
+
+Gossamer sits at the *infrastructure tier* of the estate. Its case for supply-chain
+trust rests on three deliberate choices: a small build-time toolchain, runtime
+webview engines that are *inherited from the host OS rather than vendored*, and a
+machine-checked ABI that is pinned to the actually-exported symbols.
+
+== Supply Chain
+
+=== Upstream dependencies
+
+Gossamer separates *build-time* tools (compilers and proof checkers, none of which
+ship in the artifact) from *runtime* dependencies (the OS webview engine, which the
+host already patches). Unlike Electron, Gossamer vendors no browser engine.
+
+[cols="1,1,2,3",options="header"]
+|===
+| Dependency | Phase | Nature | Supply-chain notes
+
+| https://github.com/hyperpolymath/ephapax[Ephapax] (language + compiler)
+| Build
+| Backend language with affine (`let`) / linear (`let!`) binding modes; enforces resource linearity
+| Built from source (`cargo build -p ephapax-cli`); type-checks `src/core/*.eph` in linear mode. Not redistributed — a build-host tool.
+
+| https://github.com/hyperpolymath/affinescript[AffineScript] (language + `@gossamer/api`)
+| Build (optional)
+| Frontend language compiled to Wasm; also the language of the shipped `@gossamer/api` binding
+| `affinescript` on PATH (0.1.x). Only needed for AffineScript frontends and to rebuild the binding — plain HTML/CSS/JS frontends need none of it.
+
+| https://ziglang.org[Zig toolchain]
+| Build
+| Implements the `libgossamer` C ABI and is the *sole cross-compiler* for every platform artifact
+| Zig 0.15.x. One toolchain targets Linux/macOS/Windows/BSD and all Android ABIs, shrinking build-environment diversity.
+
+| https://www.idris-lang.org[Idris2] 0.8.0
+| Build / verification
+| Type-checks the formal ABI proof packages (`--typecheck`, `%default total`, zero `believe_me` / zero axioms)
+| Verification-only; not linked into any shipped binary. Pins the ABI spec to the FFI surface (see Provenance).
+
+| WebKitGTK (Linux/BSD)
+| Runtime
+| OS webview engine reached outbound over the C ABI via Zig FFI
+| Not vendored — supplied and security-patched by the host distribution (`webkit2gtk-4.1`).
+
+| WKWebView (macOS/iOS)
+| Runtime
+| OS webview engine reached via Obj-C/C through Zig FFI
+| Part of the OS; inherits Apple's update cadence.
+
+| WebView2 (Windows)
+| Runtime
+| OS webview engine reached via COM through Zig FFI
+| Microsoft-distributed Evergreen runtime; patched outside Gossamer's release cycle.
+
+| Android WebView
+| Runtime
+| OS webview engine reached via JNI through the pure-Zig `jni.zig` vtable model
+| System component updated via the Play Store / OEM.
+|===
+
+=== Integration points
+
+Directly from `ECOSYSTEM.a2ml [integration-points]` — the concrete seams across
+which code and data cross the Gossamer boundary.
+
+[cols="2,1,3",options="header"]
+|===
+| System | Direction | Protocol
+
+| WebKitGTK / WKWebView / WebView2 | outbound | C ABI (Zig FFI), one backend per platform
+| Android WebView + native components | outbound | JNI via the `jni.zig` vtable model
+| https://github.com/hyperpolymath/panll[PanLL] | inbound | IPC channels (sync + async + streaming `gossamer_emit`)
+| `gossamer.conf.json` | inbound | JSON configuration (CSP, build paths) — see the https://github.com/hyperpolymath/gossamer/blob/main/docs/gossamer-conf-reference.adoc[conf reference]
+| `@gossamer/api` (AffineScript) | inbound | Deno ESM binding shipped from `bindings/affinescript/`
+|===
+
+The only two supported bindings are *Rust* (`bindings/rust/`) and *AffineScript*
+(`bindings/affinescript/`, the Deno-ESM `@gossamer/api`). Earlier ReScript / Gleam /
+Elixir / Julia bindings have been retired and are not part of the supported surface.
+
+=== Downstream consumers
+
+[cols="1,1,3",options="header"]
+|===
+| Project | Relationship | How it consumes Gossamer
+
+| https://github.com/hyperpolymath/panll[PanLL] | dependent | Panels run *inside* Gossamer webviews and drive it over IPC
+| https://github.com/hyperpolymath/neurophone[neurophone] | dependent | Android app migrating off banned Kotlin onto the Gossamer mobile shell (unblocked by `gossamer-android-services`)
+| https://github.com/hyperpolymath/idaptik[IDApTIK] | potential-consumer | Desktop-shell migration target (Tauri → Gossamer), in progress
+| https://github.com/hyperpolymath/burble[burble] | potential-consumer | Voice platform that may host Gossamer panels
+|===
+
+The two *potential-consumer* edges are honest labels: the migrations are scheduled
+and staged, not yet shipping on Gossamer. `proven` is a sibling-standard (formal-
+verification counterpart), not a consumer.
+
+=== Provenance & integrity posture
+
+* *Public scorecards.* The repo carries an
+https://www.bestpractices.dev[OpenSSF Best Practices] badge and an
+https://securityscorecards.dev[OpenSSF Scorecard] badge (rendered on
+https://github.com/hyperpolymath/gossamer/blob/main/README.md[README]) — continuous,
+externally-visible supply-chain signals.
+* *Generated + CI-checked ABI mirror.* `Gossamer.ABI.ForeignGen`
+(https://github.com/hyperpolymath/gossamer/blob/main/src/interface/abi/ForeignGen.idr[`ForeignGen.idr`])
+mirrors *every* Zig `export fn gossamer_*` in the
+https://github.com/hyperpolymath/gossamer/blob/main/src/interface/ffi/src/main.zig[FFI surface]
+(~135 exported symbols). It is regenerated by `just abi-gen` (`scripts/gen-abi-foreign.sh`)
+and CI (`check-abi-ffi-cleave.sh`) *fails the build if the checked-in mirror drifts*.
+This is a genuine integrity control: the machine-checked, axiom-free ABI proofs
+cannot silently diverge from the symbols the binary actually ships.
+* *File-level licensing.* MPL-2.0 applies per file, keeping the component friendly to
+integration inside AGPL-3.0-or-later IDApTIK while making each file's licence
+self-evident to downstream auditors.
+
+=== Packaging & distribution outputs
+
+The shipped artifact is `libgossamer` (`.so` / `.a` / `.dylib`) plus the
+launcher-hosted CLI. Platform installers wrap those; every recipe lives in the
+https://github.com/hyperpolymath/gossamer/blob/main/Justfile[Justfile].
+
+[cols="1,1,2",options="header"]
+|===
+| Output | Platform | Build path
+
+| `.deb` | Debian / Ubuntu | `just package-deb` → `dpkg-buildpackage` (`packaging/debian`)
+| `.rpm` | Fedora / RHEL | `just package-rpm` → `rpmbuild` (`packaging/rpm/gossamer.spec`)
+| `.flatpak` | Universal Linux | `just package-flatpak` → `flatpak-builder` (`io.gossamer.Gossamer`)
+| `.dmg` | macOS (universal, `lipo` x64 + arm64) | `just package-macos`
+| `.msi` | Windows (WiX 4) | `just package-windows`
+|===
+
+Because Zig is the single cross-compiler, each of these targets is produced from one
+build environment rather than a per-OS matrix of native toolchains.
+
+== Where to look next
+
+* Ecosystem source of truth — https://github.com/hyperpolymath/gossamer/blob/main/.machine_readable/descriptiles/ECOSYSTEM.a2ml[`ECOSYSTEM.a2ml`]
+* Current project state — https://github.com/hyperpolymath/gossamer/blob/main/.machine_readable/descriptiles/STATE.a2ml[`STATE.a2ml`]
+* ABI / FFI internals — https://github.com/hyperpolymath/gossamer/blob/main/docs/developer/ABI-FFI-README.adoc[ABI-FFI-README]
+* Threat model — https://github.com/hyperpolymath/gossamer/blob/main/docs/architecture/THREAT-MODEL.adoc[THREAT-MODEL]
+* Android native components — https://github.com/hyperpolymath/gossamer/blob/main/docs/architecture/android-components.adoc[android-components]
+* Governance grade criteria — https://github.com/hyperpolymath/gossamer/blob/main/docs/governance/CRG-CRITERIA.adoc[CRG-CRITERIA]

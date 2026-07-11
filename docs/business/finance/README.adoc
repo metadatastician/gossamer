@@ -1,0 +1,136 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2025-2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+
+= Gossamer: Finance & Sustainability
+:toc:
+
+Gossamer is a self- and grant-funded open-source research component, not a
+revenue business. This document is the *signpost* for how the project is
+resourced, what drives its cost, and why its licensing and reuse posture keep
+it sustainable. It contains no revenue projections, ARR, or customer counts,
+because there are none to report. Any monetary figures below are explicitly
+labelled *illustrative* — they exist to frame orders of magnitude, not to
+forecast income.
+
+For what Gossamer *is*, start with
+https://github.com/hyperpolymath/gossamer/blob/main/docs/README.adoc[docs/README.adoc].
+For where it sits in the estate, see
+https://github.com/hyperpolymath/gossamer/blob/main/.machine_readable/descriptiles/ECOSYSTEM.a2ml[ECOSYSTEM.a2ml].
+
+== Resourcing model
+
+The project is funded by maintainer time and compute, not by sales. There is a
+single maintainer of record (see
+https://github.com/hyperpolymath/gossamer/blob/main/docs/attribution/MAINTAINERS.adoc[MAINTAINERS.adoc]),
+and the two consumable inputs are:
+
+[cols="1,3",options="header"]
+|===
+| Input | What it pays for
+
+| Maintainer time | Design, Ephapax/Zig implementation, Idris2 ABI proofs, docs, review, release engineering.
+| Compute | CI runs across platforms, typechecking the ABI proofs, package builds (deb/rpm/flatpak/dmg/wix), Android NDK builds.
+|===
+
+There is no infrastructure to run for users: Gossamer is a library that
+compiles into the consumer's binary. At runtime there is no VM, interpreter, or
+GC to host, so the project carries no per-user operating cost.
+
+== Cost drivers
+
+The distinctive costs come from Gossamer's guarantees, not from scale.
+
+[cols="1,3",options="header"]
+|===
+| Driver | Why it costs
+
+| Formal-methods verification | The 15 Idris2 ABI proof modules (11 shell + 4 groove, two de-conflated packages) must typecheck green under `idris2 0.8.0 --typecheck` with `%default total`, zero axioms, zero `believe_me`. Proof work is skilled, up-front effort.
+| Multi-platform support | Native glue targets four webview backends — WebKitGTK (Linux), WKWebView (macOS), WebView2/COM (Windows), and JNI (Android) — each with its own quirks and CI lane.
+| Toolchain maintenance | The build depends on external languages and tools that move: Ephapax (backend), AffineScript (`@gossamer/api` binding), Zig, and idris2. Version bumps and API drift require ongoing attention.
+|===
+
+These are *fixed, front-loaded* costs. They are paid mostly once per capability
+and then amortized over every consumer and every release — which is what makes
+the model sustainable.
+
+== Licensing and monetization posture
+
+Gossamer is licensed *MPL-2.0*. That choice is deliberate and financially
+material.
+
+MPL-2.0 is *file-level copyleft*: modifications to Gossamer's own files must be
+shared back, but a downstream product may link Gossamer into a larger,
+differently-licensed (including proprietary or commercially-sold) application
+*without* being forced to disclose that application's source. This lowers the
+barrier to commercial adoption while keeping improvements to Gossamer itself in
+the commons.
+
+The contrast with its flagship consumer is instructive:
+
+[cols="1,1,3",options="header"]
+|===
+| Layer | Licence | Effect
+
+| Gossamer (component) | MPL-2.0 | Commercial-integration-friendly; embed freely, share back only file-level changes.
+| IDApTIK (product embedding it) | AGPL-3.0-or-later | Strong network copyleft at the product boundary.
+|===
+
+The component is permissive enough to be adopted widely; the *product* built on
+it can still choose strong copyleft. Gossamer is not monetized directly — its
+"return" is measured in reuse and defects prevented, below.
+
+== Sustainability levers
+
+Two structural properties keep long-run cost falling rather than rising.
+
+*Reuse amortizes cost across the estate.* Gossamer is infrastructure-tier and
+already has multiple in-estate consumers and dependents — PanLL panels run
+inside its webviews, IDApTIK and Burble are consumer/potential-consumer desktop
+and voice shells, and Neurophone is migrating its Android app onto it (see
+https://github.com/hyperpolymath/gossamer/blob/main/.machine_readable/descriptiles/ECOSYSTEM.a2ml[ECOSYSTEM.a2ml]).
+Every fixed cost above is divided across all of them.
+
+*Generated ABI + machine-checked proofs cut long-run maintenance.* The
+`Gossamer.ABI.ForeignGen` module
+(https://github.com/hyperpolymath/gossamer/blob/main/src/interface/abi/ForeignGen.idr[ForeignGen.idr],
+regenerated via `just abi-gen`) mirrors every exported Zig C symbol so the
+typechecked ABI cannot silently drift from the native layer — CI enforces
+freshness. Whole classes of integration bugs are therefore caught by the
+compiler rather than by expensive human review or downstream incident triage.
+
+== Value delivered (plain English)
+
+Gossamer's value is not income; it is *cost avoided downstream*. Because the
+compiler proves resource handling, three failure classes that normally reach
+production become compile errors instead:
+
+* leaked webview/file/IPC handles,
+* mismatched IPC message shapes between frontend and backend,
+* bypassed capability permissions.
+
+A defect caught at compile time costs a developer a red build. The same defect
+shipped costs support time, an incident, a patch release, and user trust across
+*every* consumer of the shared component. That asymmetry — one fix upstream
+versus many failures downstream — is the core of the value case.
+
+[NOTE]
+====
+*Illustrative only.* If a single shipped resource-leak incident conservatively
+costs an afternoon of triage plus a patch release, and Gossamer's type system
+forecloses that class across N estate consumers, the avoided-cost multiplier
+scales with N. These figures are illustrative framing, not measured savings or
+a financial forecast.
+====
+
+== Status and honest caveats
+
+Gossamer is v0.3.x, roughly 92% of MVP, with 192 integration tests and CRG
+governance grade *D* (targeting *C*; see
+https://github.com/hyperpolymath/gossamer/blob/main/docs/governance/CRG-CRITERIA.adoc[CRG-CRITERIA.adoc]).
+It is alpha-stage research software. The sustainability argument rests on
+continued maintainer availability and on the estate reuse actually
+materializing; both are assumptions, not guarantees. The roadmap that this
+funding supports is tracked in
+https://github.com/hyperpolymath/gossamer/blob/main/ROADMAP.adoc[ROADMAP.adoc],
+and the research basis in
+https://github.com/hyperpolymath/gossamer/blob/main/docs/whitepapers/gossamer-arxiv-paper.tex[the arXiv paper source].

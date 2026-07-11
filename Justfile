@@ -90,6 +90,48 @@ build-launcher-release: build-ffi-release
 build: build-ffi build-cli check
 
 # ═══════════════════════════════════════════════════════════════
+# Documentation / Wiki
+# ═══════════════════════════════════════════════════════════════
+
+# Sync docs/wikis/*.md → the forge-hosted wiki (GitHub Wiki). docs/wikis/ is the
+# SOURCE OF TRUTH; never edit pages in the wiki UI. Override the target with the
+# GOSSAMER_WIKI_REMOTE env var. Usage:
+#   just wiki-sync        # commit + push the wiki pages
+#   just wiki-sync dry    # show what would change, push nothing
+wiki-sync mode="push":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ROOT="$(pwd)"
+    SRC="${ROOT}/docs/wikis"
+    REMOTE="${GOSSAMER_WIKI_REMOTE:-git@github.com:hyperpolymath/gossamer.wiki.git}"
+    MODE="{{mode}}"
+    WORK="$(mktemp -d)"
+    trap 'rm -rf "${WORK}"' EXIT
+    echo "=== gossamer wiki-sync (${MODE}) → ${REMOTE} ==="
+    if ! git clone --quiet --depth 1 "${REMOTE}" "${WORK}"; then
+        echo "!! wiki remote not initialised yet." >&2
+        echo "   Visit the repo Wiki tab, save any page once to create it, then re-run." >&2
+        exit 1
+    fi
+    # Publish every Markdown page (the .a2ml manifest stays in-repo only).
+    cp "${SRC}"/*.md "${WORK}/"
+    cd "${WORK}"
+    git add -A
+    if git diff --cached --quiet; then
+        echo "wiki already up to date."
+        exit 0
+    fi
+    echo "--- pending wiki changes ---"
+    git status --short
+    if [ "${MODE}" = "dry" ]; then
+        echo "(dry run — nothing pushed)"
+        exit 0
+    fi
+    git commit --quiet -m "docs(wiki): sync from docs/wikis/ @ $(git -C "${ROOT}" rev-parse --short HEAD)"
+    git push --quiet origin HEAD
+    echo "✔ wiki synced."
+
+# ═══════════════════════════════════════════════════════════════
 # Static Site Generator
 # ═══════════════════════════════════════════════════════════════
 

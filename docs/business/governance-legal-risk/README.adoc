@@ -1,0 +1,120 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2025-2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= Gossamer — Governance, Legal & Risk
+:toc:
+
+This page is the *signpost* for how Gossamer is governed, licensed, and kept
+honest about its own risk — a business-case summary pointing to the canonical
+documents, not replacing them. Gossamer is a research-estate component (v0.3.x,
+alpha, ~92% MVP, 192 integration tests), not a commercial product; this document
+holds to that standard: evidence first, no aspirational claims.
+
+== Licensing
+
+Gossamer ships under **MPL-2.0** — file-level copyleft that keeps changes to
+Gossamer's own files open while staying friendly to commercial integration.
+Copyright (c) 2025-2026 Jonathan D.A. Jewell.
+
+* Licence text and its Palimpsest-MPL exhibits are maintained centrally at
+https://github.com/hyperpolymath/palimpsest-license[hyperpolymath/palimpsest-license].
+The ethical-use and quantum-safe exhibits under `docs/legal/` are *non-binding*
+guidance, not additional licence terms.
+* Gossamer is built to be embedded. Its principal consumer,
+https://github.com/hyperpolymath/idaptik[IDApTIK], is **AGPL-3.0-or-later**;
+MPL-2.0's file-level scope composes with that stronger copyleft at the boundary,
+so Gossamer can live inside an AGPL application without relicensing either side.
+* Documentation (this file included) is CC-BY-SA-4.0. Tracked housekeeping:
+Gossamer's own tree was reconciled to MPL-2.0 (394 files + `.ipkg`) in the
+2026-06-02 sweep; residual AGPL-vs-MPL header drift in sibling repos is logged.
+
+== Governance apparatus
+
+Gossamer follows the **Rhodium Standard Repository (RSR)** template, adopted in
+https://github.com/hyperpolymath/gossamer/blob/main/docs/decisions/0001-adopt-rsr-standard.adoc[ADR-0001].
+RSR fixes repository shape (machine-readable state, security/governance files,
+SHA-pinned workflows) so structure does not drift per-repo. Policy is enforced
+by **contractiles** — a six-verb, machine-readable model
+(https://github.com/hyperpolymath/gossamer/blob/main/.machine_readable/contractiles/INDEX.a2ml[INDEX.a2ml]):
+
+[cols="1,4,2",options="header"]
+|===
+| Verb | Semantics | Authority
+| `must`   | release-blocking invariants | blocking
+| `trust`  | security + provenance + safe-hacking | blocking
+| `bust`   | hard-stop / deprecated-path-reintroduction guards | blocking
+| `adjust` | drift tolerances + corrective actions | advisory
+| `dust`   | rollback / recovery / audit-trail preservation | advisory
+| `intend` | north-star commitments + horizon aspirations | reporting
+|===
+
+Component health uses **Component Readiness Grades (CRG)**, an evidence-required
+scale
+(https://github.com/hyperpolymath/gossamer/blob/main/docs/governance/CRG-CRITERIA.adoc[criteria]).
+Gossamer is graded **D** (Partial / alpha), targeting **C** (Self-Validated /
+dogfooded); the D→C path is recorded in the
+https://github.com/hyperpolymath/gossamer/blob/main/docs/governance/CRG-AUDIT-2026-04-18.adoc[2026-04-18 audit]
+and STATE.a2ml.
+
+== Compliance & security posture
+
+* **Threat model** — STRIDE analysis, quarterly review:
+https://github.com/hyperpolymath/gossamer/blob/main/docs/architecture/THREAT-MODEL.adoc[THREAT-MODEL.adoc].
+* **Security policy** — coordinated disclosure via `SECURITY.md` (RSR file).
+* **Supply chain** — OpenSSF Scorecard wired (`scorecard.yml` +
+`scorecard-enforcer.yml`); OpenSSF Best Practices enrollment initiated. Actions
+SHA-pinned; lockfiles committed; TruffleHog + secret-scanner, CodeQL, and SLSA
+provenance + SBOM on releases.
+* **Machine-readable state** — ecosystem position and session state in
+https://github.com/hyperpolymath/gossamer/blob/main/.machine_readable/descriptiles/ECOSYSTEM.a2ml[ECOSYSTEM.a2ml]
+and STATE.a2ml, updated each session.
+
+== Attribution & ownership
+
+* **Maintainer** —
+https://github.com/hyperpolymath/gossamer/blob/main/docs/attribution/MAINTAINERS.adoc[MAINTAINERS.adoc]:
+Jonathan D.A. Jewell (`@hyperpolymath`), Lead Maintainer.
+* **Code ownership** — three-perimeter model (Core / Extensions / Community) in
+https://github.com/hyperpolymath/gossamer/blob/main/docs/attribution/CODEOWNERS.adoc[CODEOWNERS.adoc],
+enforced by `.github/CODEOWNERS`.
+* **Formal-methods sibling** — proof obligations shared with the
+https://github.com/hyperpolymath/proven[proven] verification standard.
+
+== Risk register
+
+Likelihood and impact are Low / Medium / High. Mitigations are those already in
+place, not planned.
+
+[cols="4,1,1,6",options="header"]
+|===
+| Risk | Likelihood | Impact | Mitigation (in place)
+| **Formal-methods maturity** — alpha (~92% MVP); the proof surface could lag
+the shipped ABI or harbour unproven obligations.
+| Medium | High
+| 15 ABI proof modules build green across two de-conflated packages
+(`gossamer-abi.ipkg` + `gossamer-groove.ipkg`, one-way dependency);
+`idris2 0.8.0 --typecheck`, `%default total`, **zero `believe_me`, zero axioms**.
+| **Single-maintainer / bus-factor** — one Lead Maintainer owns core review and
+release.
+| High | Medium
+| Machine-readable state + RSR structure keep the repo self-describing and
+resumable; contractile gates encode policy for handover; CRG audits keep the true state visible.
+| **Toolchain dependency** — pre-1.0 Ephapax and Idris2 0.8.0; upstream churn
+could break builds or proofs.
+| Medium | High
+| Toolchains pinned (`idris2 0.8.0`, `zig 0.15.2`), verified locally and
+re-typechecked in CI; the ABI is decoupled via the stable C symbol surface.
+| **Platform-webview API drift** — WebKitGTK / WKWebView / WebView2 / Android JNI
+evolve independently and can break native glue.
+| Medium | Medium
+| Per-platform Zig FFI behind one C ABI, dispatch routed by target; 192
+integration tests plus Zig and Deno suites exercise the handler paths.
+| **Supply-chain / ABI drift** — a hand-edited binding could diverge from native
+exports, or a poisoned dependency/action could enter the build.
+| Medium | High
+| https://github.com/hyperpolymath/gossamer/blob/main/src/interface/abi/ForeignGen.idr[`Gossamer.ABI.ForeignGen`]
+is *generated* (`just abi-gen`) to mirror every one of the ~135 `gossamer_*` exports, and CI enforces its freshness so the typechecked ABI cannot drift from the Zig FFI; actions are SHA-pinned and lockfiles + secret-scanning cover the rest.
+| **Consumer-migration dependency** — headline adoption (IDApTIK, neurophone) is
+in progress, so field-proven evidence is still thin.
+| Medium | Medium
+| Dogfooding tracked with grep-checkable evidence in STATE.a2ml; CRG held honestly at D until external targets confirm.
+|===
