@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SPDX-License-Identifier: MPL-2.0
+  Minimal manifest template for the gossamer-android-services smoke APK (issue #68).
+
+  It declares the sample Service / BroadcastReceiver / AppWidgetProvider
+  subclasses so the gradle-free packaging pipeline (aapt2 -> d8 -> zipalign ->
+  apksigner, see `just android-apk`) has a real, self-contained target with no
+  external consumer. A downstream app (e.g. neurophone) supplies its OWN manifest
+  declaring its OWN concrete subclasses; this one exists to exercise the pipeline.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          package="io.gossamer.sample">
+
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
+
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <application android:label="Gossamer Smoke" android:hasCode="true">
+
+        <service
+            android:name="io.gossamer.sample.SampleService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <receiver
+            android:name="io.gossamer.sample.SampleBootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name="io.gossamer.sample.SampleWidget"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+</manifest>

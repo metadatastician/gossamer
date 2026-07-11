@@ -1,0 +1,54 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) 2025-2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= Gradle-free Android packaging (issues #67, #68)
+:toc: preamble
+
+Gossamer targets Android without Gradle (the estate language policy discourages
+Groovy/Kotlin DSLs). This directory holds the manifest template and the entry
+points for building + packaging an Android artifact using the Android SDK
+command-line tools directly.
+
+== Pipeline
+
+[cols="1,2,1",options="header"]
+|===
+| Step | Tool | Status
+
+| Cross-compile `libgossamer.so` (per ABI) | `zig build -Dtarget=<abi>-linux-android -Dndk=…` | *Blocked* — see below
+| Compile shims + samples | `javac` (`android.jar` + `androidx.annotation`) | ✅ verified
+| Dex | `d8 --min-api 26` | ✅ verified
+| Link manifest → base APK | `aapt2 link` | ✅ verified
+| Bundle `classes.dex` + `jniLibs` | `zip` | ✅ verified
+| Align + sign | `zipalign` + `apksigner` (v2/v3) | ✅ verified
+|===
+
+* `scripts/android-build.sh` (`just android-build`) — per-ABI native build → `jniLibs/`.
+* `scripts/android-apk.sh` (`just android-apk`) — the javac→d8→aapt2→zipalign→apksigner
+  pipeline → a debug-signed smoke APK from the sample subclasses.
+
+Prerequisites: `ANDROID_HOME` (SDK) with `build-tools;34.0.0` + `platforms;android-34`;
+`ANDROID_NDK_HOME` (r26+) for the native build. `minSdk 26`, `targetSdk 34`,
+ABIs arm64-v8a / x86_64 / armeabi-v7a.
+
+NOTE: `androidx.annotation` (`@LayoutRes`) is not in `android.jar`; the pipeline
+fetches `annotation-jvm` from Google Maven onto the `javac` classpath.
+
+== Known blocker — native cross-compile (issue #67)
+
+`build.zig` now wires the NDK sysroot (liblog/libandroid) for `.android` **and**
+`.androideabi` targets, so the *link path* resolves. The build still fails to
+*compile* because several desktop modules pulled into the shared library via
+`main.zig` `@cImport` GTK/glib headers unconditionally:
+
+  `clipboard.zig` (`gtk/gtk.h`), `csp.zig` (`glib.h`), `dialog.zig`, `tray.zig`,
+  `file_watcher.zig`
+
+These have no header on Android. Producing a real `libgossamer.so` needs those
+modules target-guarded (JNI/stub Android paths) plus bionic-libc provisioning for
+the `*-linux-android` target. Until then the `ndk-build` CI job is non-blocking
+and the smoke APK packages without a native lib (the packaging path still validates).
+
+== Signing
+
+The smoke APK is signed with a throwaway debug keystore. Play/upload signing
+(keystore + secrets in CI) is a follow-up; keep the keystore out of the repo.
