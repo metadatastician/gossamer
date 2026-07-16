@@ -3,9 +3,40 @@
 # See: https://github.com/hyperpolymath/gv-clade-index
 
 [identity]
-uuid = "62caa738-137e-5390-bdff-453f475e94b7"
+# CORRECTED 2026-07-16 — this file used to contradict itself.
+#
+# It declared primary-owner = "hyperpolymath" while [forges] below already said
+# metadatastician/gossamer. The uuid was correctly derived from the owner it
+# declared:
+#
+#     uuidgen --sha1 --namespace @url --name "github.com/hyperpolymath/gossamer"
+#     -> 62caa738-137e-5390-bdff-453f475e94b7    <- the OLD value
+#
+# but that URL 404s. gossamer does not exist in the hyperpolymath org; it exists
+# at metadatastician/gossamer, which is what `git remote get-url origin` says and
+# what [forges] already said. So the uuid was derived from a repo that isn't
+# there. Not a typo — the registry's own sync script (gv-clade-index:
+# sync/deploy-clade-a2ml.sh:80) hardcoded the owner segment to "hyperpolymath"
+# for every repo it wrote, so any repo hosted elsewhere got an identity belonging
+# to nothing. Fixed upstream in gv-clade-index PR #48.
+#
+# The uuid is DERIVED, not allocated (gv-clade-index:
+# docs/SPEC-clade-verisim-portal.adoc §Identity Model):
+#
+#     uuid = UUIDv5(namespace = URL, name = "github.com/<owner>/<name>")
+#     uuidgen --sha1 --namespace @url --name "github.com/metadatastician/gossamer"
+#     -> 16eef45c-0690-5b12-8018-904891430cae
+#
+# Method verified by reproducing the registry's own worked examples byte-for-byte
+# before it was trusted (januskey -> e216170e-…, gv-clade-index -> c88e9ff3-…,
+# rsr-template-repo -> a5ea1382-…).
+#
+# Nothing depended on the old value: gossamer is not in the gv-clade-index seed
+# (verisim/seed/repos.a2ml) and not in worker/data/repos.json. Registering it is
+# outward-facing and the owner's act (doctrine 11), so it is not done here.
+uuid = "16eef45c-0690-5b12-8018-904891430cae"
 primary-forge = "github"
-primary-owner = "hyperpolymath"
+primary-owner = "metadatastician"
 canonical-name = "gossamer"
 prefixed-name = "gv-gossamer"
 
