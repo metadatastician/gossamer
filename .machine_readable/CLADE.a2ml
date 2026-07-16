@@ -38,13 +38,24 @@ uuid = "16eef45c-0690-5b12-8018-904891430cae"
 primary-forge = "github"
 primary-owner = "metadatastician"
 canonical-name = "gossamer"
-prefixed-name = "gv-gossamer"
+prefixed-name = "dx-gossamer"
 
 [clade]
-primary = "gv"
+# CORRECTED 2026-07-17: was primary = "gv", rationale "gv (graphical/visual)
+# clade". There is no graphical/visual clade. The two letters abbreviate the NAME
+# OF THE CLADE, never a description of the repo, and `gv` is GoVernance &
+# Standards — "licensing, compliance, architectural boundaries, policy
+# enforcement". gossamer is a webview shell. It sat filed beside
+# palimpsest-license, standards, manifesto and the-metadatastician, which is not
+# what it is. Nothing caught it: `gv` is a valid code, so every check passed.
+# (paint-type had the identical failure with `pt`, read as "PainT-type", which is
+# actually Protocols & Interop.) The 12 codes: gv-clade-index
+# verisim/seed/clades.a2ml.
+primary = "dx"
+primary-name = "Developer Ecosystem"
 secondary = []
-assigned = "2026-03-16"
-rationale = "Gossamer is a webview/GUI-layer project; gv (graphical/visual) clade."
+assigned = "2026-07-17"
+rationale = "Developer Ecosystem (`dx`): \"developer tools, package managers, editor integrations, bindings\". The core value proposition is a shell that DEVELOPERS build GUI applications on — a linearly-typed webview with async IPC, CSP enforcement, streaming/binary events and multi-window support, exposed across an ABI. It is not itself an end-user application, so not `ap`; the formal ABI proofs are how it is built, not what it is for, so not `fv`; and per the spec the primary clade reflects the value proposition, not implementation details. If you read gossamer as app-facing rather than developer-facing, `ap` is the defensible alternative — that call is the owner's."
 
 [forges]
 github = "metadatastician/gossamer"
