@@ -99,7 +99,7 @@ Publication requires B+. Long alpha is discipline, not shame.
 | `.machine_readable/`, root
 
 | Remote
-| `git@github.com:hyperpolymath/gossamer.git` (origin) + 4 mirrors
+| `git@github.com:metadatastician/gossamer.git` (origin) + 4 mirrors
 | `git remote -v`
 |===
 

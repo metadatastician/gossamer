@@ -389,4 +389,4 @@ MPL-2.0
 - https://idris2.readthedocs.io[Idris2 Documentation]
 - https://ziglang.org/documentation/master/[Zig Documentation]
 - https://github.com/hyperpolymath/rhodium-standard-repositories[Rhodium Standard Repositories]
-- https://github.com/hyperpolymath/gossamer[Gossamer Repository]
+- https://github.com/metadatastician/gossamer[Gossamer Repository]

@@ -262,7 +262,7 @@ pub fn requestClose(_: *WebviewState) PlatformError!void {
 /// native run-thread until Activity.onDestroy sets the shutdown flag.
 pub fn run(state: *WebviewState) void {
     while (!state.shutdown) {
-        std.time.sleep(50 * std.time.ns_per_ms);
+        std.Thread.sleep(50 * std.time.ns_per_ms);
     }
 }
 

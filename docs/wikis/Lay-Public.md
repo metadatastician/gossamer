@@ -77,7 +77,7 @@ It is a good fit for teams who ship desktop or mobile software where reliability
 
 ## The research behind it
 
-Gossamer's core promise isn't just a design goal — it is **mathematically checked**. The rules that make leaks impossible are written out as formal proofs in a proof assistant called Idris2, which verifies them the way a referee checks every step of a calculation. Those proofs use **zero shortcuts** (no unproven assumptions smuggled in). The work is written up in an academic paper, *Gossamer: A Linearly-Typed Webview Shell with Provable Resource Safety* ([paper source](https://github.com/hyperpolymath/gossamer/blob/main/docs/whitepapers/gossamer-arxiv-paper.tex)).
+Gossamer's core promise isn't just a design goal — it is **mathematically checked**. The rules that make leaks impossible are written out as formal proofs in a proof assistant called Idris2, which verifies them the way a referee checks every step of a calculation. Those proofs use **zero shortcuts** (no unproven assumptions smuggled in). The work is written up in an academic paper, *Gossamer: A Linearly-Typed Webview Shell with Provable Resource Safety* ([paper source](https://github.com/metadatastician/gossamer/blob/main/docs/whitepapers/gossamer-arxiv-paper.tex)).
 
 ---
 
@@ -92,7 +92,7 @@ Gossamer is **alpha research software**, version 0.3.x, about 92% of the way to 
 | If you want to… | Go to |
 |---|---|
 | Get the developer overview | [Home](Home) |
-| See the full feature comparison | [README.md](https://github.com/hyperpolymath/gossamer/blob/main/README.md) |
-| Read the research paper | [gossamer-arxiv-paper.tex](https://github.com/hyperpolymath/gossamer/blob/main/docs/whitepapers/gossamer-arxiv-paper.tex) |
-| Understand the architecture in depth | [docs/README.adoc](https://github.com/hyperpolymath/gossamer/blob/main/docs/README.adoc) |
-| Try building something | [docs/QUICKSTART.adoc](https://github.com/hyperpolymath/gossamer/blob/main/docs/QUICKSTART.adoc) |
+| See the full feature comparison | [README.md](https://github.com/metadatastician/gossamer/blob/main/README.md) |
+| Read the research paper | [gossamer-arxiv-paper.tex](https://github.com/metadatastician/gossamer/blob/main/docs/whitepapers/gossamer-arxiv-paper.tex) |
+| Understand the architecture in depth | [docs/README.adoc](https://github.com/metadatastician/gossamer/blob/main/docs/README.adoc) |
+| Try building something | [docs/QUICKSTART.adoc](https://github.com/metadatastician/gossamer/blob/main/docs/QUICKSTART.adoc) |

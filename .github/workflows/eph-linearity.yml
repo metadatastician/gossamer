@@ -2,7 +2,7 @@
 # Ephapax Linearity Gate — machine-checks that the src/core/*.eph bindings to
 # the libgossamer C ABI genuinely type-check under Ephapax's linear discipline,
 # and that leaking a linear resource handle is a compile error. Refs
-# hyperpolymath/gossamer#82.
+# metadatastician/gossamer#82.
 #
 # Ephapax is a sibling estate repo (hyperpolymath/ephapax); this gate builds it
 # from source to use its `check` subcommand as the oracle. If Ephapax cannot be

@@ -37,7 +37,7 @@ At runtime: just Zig + GTK. Binary size 1-3 MB. No GC runtime, no VM, no interpr
 
 ```
 sudo dnf install gtk3-devel webkit2gtk4.1-devel zig
-git clone https://github.com/hyperpolymath/gossamer
+git clone https://github.com/metadatastician/gossamer
 cd gossamer
 just build-ffi
 just hello
@@ -45,7 +45,7 @@ just hello
 
 ## Links
 
-- [GitHub](https://github.com/hyperpolymath/gossamer)
-- [GitLab](https://gitlab.com/hyperpolymath/gossamer)
-- [Bitbucket](https://bitbucket.org/hyperpolymath/gossamer)
-- [arXiv Paper](https://github.com/hyperpolymath/gossamer/blob/main/docs/whitepapers/gossamer-arxiv-paper.tex)
+- [GitHub](https://github.com/metadatastician/gossamer)
+- [GitLab](https://gitlab.com/metadatastician/gossamer)
+- [Bitbucket](https://bitbucket.org/metadatastician/gossamer)
+- [arXiv Paper](https://github.com/metadatastician/gossamer/blob/main/docs/whitepapers/gossamer-arxiv-paper.tex)

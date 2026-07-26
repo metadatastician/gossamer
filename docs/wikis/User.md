@@ -3,17 +3,17 @@
 
 This page is for people **building a desktop app with Gossamer** — not hacking on Gossamer itself. You bring a web frontend (HTML/CSS/JS, or [AffineScript](https://github.com/hyperpolymath/affinescript) → Wasm); Gossamer wraps it in a native window and the compiler proves your backend never leaks a window, connection, or file handle. If you want to work on Gossamer's internals instead, see [Developer](Developer).
 
-Canonical docs live in the repo under [`docs/`](https://github.com/hyperpolymath/gossamer/tree/main/docs). This wiki is the *signpost*.
+Canonical docs live in the repo under [`docs/`](https://github.com/metadatastician/gossamer/tree/main/docs). This wiki is the *signpost*.
 
 ## Start here
 
 | If you want to… | Go to |
 |---|---|
-| Get running in 60 seconds | [docs/QUICKSTART.adoc](https://github.com/hyperpolymath/gossamer/blob/main/docs/QUICKSTART.adoc) |
-| Copy a working starter | [examples/hello/run.sh](https://github.com/hyperpolymath/gossamer/blob/main/examples/hello/run.sh) |
-| Configure your app | [docs/gossamer-conf-reference.adoc](https://github.com/hyperpolymath/gossamer/blob/main/docs/gossamer-conf-reference.adoc) |
-| Understand `let!` linear types | [docs/EPHAPAX-GRAMMAR.adoc](https://github.com/hyperpolymath/gossamer/blob/main/docs/EPHAPAX-GRAMMAR.adoc) |
-| See how Gossamer compares to Tauri/Electron | [README.md#at-a-glance](https://github.com/hyperpolymath/gossamer/blob/main/README.md#at-a-glance) |
+| Get running in 60 seconds | [docs/QUICKSTART.adoc](https://github.com/metadatastician/gossamer/blob/main/docs/QUICKSTART.adoc) |
+| Copy a working starter | [examples/hello/run.sh](https://github.com/metadatastician/gossamer/blob/main/examples/hello/run.sh) |
+| Configure your app | [docs/gossamer-conf-reference.adoc](https://github.com/metadatastician/gossamer/blob/main/docs/gossamer-conf-reference.adoc) |
+| Understand `let!` linear types | [docs/EPHAPAX-GRAMMAR.adoc](https://github.com/metadatastician/gossamer/blob/main/docs/EPHAPAX-GRAMMAR.adoc) |
+| See how Gossamer compares to Tauri/Electron | [README.md#at-a-glance](https://github.com/metadatastician/gossamer/blob/main/README.md#at-a-glance) |
 
 ## Prerequisites
 
@@ -47,7 +47,7 @@ cd ephapax && cargo build -p ephapax-cli
 cd gossamer && bash examples/hello/run.sh
 ```
 
-Full walkthrough: [docs/QUICKSTART.adoc](https://github.com/hyperpolymath/gossamer/blob/main/docs/QUICKSTART.adoc).
+Full walkthrough: [docs/QUICKSTART.adoc](https://github.com/metadatastician/gossamer/blob/main/docs/QUICKSTART.adoc).
 
 ## The minimal program
 
@@ -60,11 +60,11 @@ fn main(): I64 =
   __ffi("gossamer_run", window)
 ```
 
-`let!` means `window` is **linear** — it must be used exactly once. Delete the last line and the compiler rejects your program; use `window` again after `gossamer_run` and it rejects your program. No leaked handle can compile. Resources that matter (windows, connections, file handles) use `let!`; everything else uses `let` (use at most once). See [docs/EPHAPAX-GRAMMAR.adoc](https://github.com/hyperpolymath/gossamer/blob/main/docs/EPHAPAX-GRAMMAR.adoc).
+`let!` means `window` is **linear** — it must be used exactly once. Delete the last line and the compiler rejects your program; use `window` again after `gossamer_run` and it rejects your program. No leaked handle can compile. Resources that matter (windows, connections, file handles) use `let!`; everything else uses `let` (use at most once). See [docs/EPHAPAX-GRAMMAR.adoc](https://github.com/metadatastician/gossamer/blob/main/docs/EPHAPAX-GRAMMAR.adoc).
 
 ## Configuration: `gossamer.conf.json`
 
-Everything else — windows, security, IPC, packaging — is declared in `gossamer.conf.json` at your project root. It plays the role Tauri's `tauri.conf.json` does. Full field reference: [docs/gossamer-conf-reference.adoc](https://github.com/hyperpolymath/gossamer/blob/main/docs/gossamer-conf-reference.adoc).
+Everything else — windows, security, IPC, packaging — is declared in `gossamer.conf.json` at your project root. It plays the role Tauri's `tauri.conf.json` does. Full field reference: [docs/gossamer-conf-reference.adoc](https://github.com/metadatastician/gossamer/blob/main/docs/gossamer-conf-reference.adoc).
 
 Required top-level fields: `productName`, `version`, `identifier` (reverse-domain). A window and a Content Security Policy:
 
@@ -136,4 +136,4 @@ Bundle metadata (targets, icons, license, per-platform options such as Windows `
 | Ship an installer | Run the matching `just package-*` recipe |
 | Migrate from Tauri | Translate `tauri.conf.json` → `gossamer.conf.json` (see the reference's "Differences from Tauri") |
 
-Stuck? Open an issue at [github.com/hyperpolymath/gossamer/issues](https://github.com/hyperpolymath/gossamer/issues).
+Stuck? Open an issue at [github.com/metadatastician/gossamer/issues](https://github.com/metadatastician/gossamer/issues).

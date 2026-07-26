@@ -15,33 +15,84 @@
 //   zig build -Dtarget=x86_64-windows   # Windows
 //   zig build -Dtarget=riscv64-linux    # Linux RISC-V
 //   zig build -Dtarget=aarch64-linux    # Linux ARM64
+//   zig build -Dtarget=aarch64-linux-android   # Android (needs ANDROID_NDK_HOME)
 //
 // Platform dependencies:
 //   Linux/BSD: gtk3-devel webkit2gtk4.1-devel (Fedora) or equivalent
 //   macOS:     Cocoa.framework WebKit.framework (system)
 //   Windows:   WebView2Loader.dll ole32.lib user32.lib
 //   iOS:       UIKit.framework WebKit.framework (Xcode SDK)
-//   Android:   Android NDK (separate build target)
+//   Android:   Android NDK r26+ (set ANDROID_NDK_HOME; see `just android-build`)
 //
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 const std = @import("std");
+const builtin = @import("builtin");
+
+/// minSdk / min API level for the Android build.
+/// Matches docs/architecture/android-components.adoc (minSdk 26).
+const ANDROID_API = "26";
+
+/// The NDK sysroot "lib triple" directory name for an Android CPU arch.
+fn androidLibTriple(arch: std.Target.Cpu.Arch) []const u8 {
+    return switch (arch) {
+        .aarch64 => "aarch64-linux-android",
+        .x86_64 => "x86_64-linux-android",
+        .arm => "arm-linux-androideabi",
+        .x86 => "i686-linux-android",
+        .riscv64 => "riscv64-linux-android",
+        else => "x86_64-linux-android",
+    };
+}
+
+/// Point the linker at the Android NDK sysroot so `-llog` / `-landroid` resolve.
+///
+/// Zig supplies Bionic libc for `*-linux-android`, but the platform stubs the
+/// shell needs (liblog, libandroid) live in the NDK sysroot, keyed by lib-triple
+/// and API level:
+///   <ndk>/toolchains/llvm/prebuilt/<host>/sysroot/usr/lib/<triple>/<api>/
+/// Reads ANDROID_NDK_HOME, which `just android-build` and the NDK CI job set.
+fn addAndroidNdk(b: *std.Build, module: *std.Build.Module, arch: std.Target.Cpu.Arch, ndk: []const u8) void {
+    // Prebuilt toolchains ship under a host-tagged directory.
+    const host = switch (builtin.os.tag) {
+        .macos => "darwin-x86_64",
+        else => "linux-x86_64",
+    };
+    const lib_dir = b.fmt(
+        "{s}/toolchains/llvm/prebuilt/{s}/sysroot/usr/lib/{s}/{s}",
+        .{ ndk, host, androidLibTriple(arch), ANDROID_API },
+    );
+    module.addLibraryPath(.{ .cwd_relative = lib_dir });
+}
 
 /// Link platform-specific system libraries to a module.
 ///
-/// `abi` is consulted first because an Android target reports `os == .linux`
-/// (it runs a Linux kernel) yet must NOT link GTK/WebKitGTK — its WebView and
-/// component hosts are reached entirely over JNI. The only NDK libraries the
-/// shell needs are liblog (diagnostics) and libandroid; libc is linked by the
-/// module itself.
-fn linkPlatformLibs(module: *std.Build.Module, os: std.Target.Os.Tag, abi: std.Target.Abi) void {
-    if (abi == .android) {
+/// The Android ABI is consulted first because an Android target reports
+/// `os == .linux` (it runs a Linux kernel) yet must NOT link GTK/WebKitGTK — its
+/// WebView and component hosts are reached entirely over JNI. The only NDK
+/// libraries the shell needs are liblog (diagnostics) and libandroid; Bionic
+/// libc is supplied by Zig.
+fn linkPlatformLibs(b: *std.Build, module: *std.Build.Module, target: std.Build.ResolvedTarget, ndk: ?[]const u8) void {
+    const t = target.result;
+    // `.android` is reported by aarch64/x86_64 targets; 32-bit ARM reports
+    // `.androideabi`. Both must route to the JNI backend, never GTK/WebKitGTK.
+    if (t.abi == .android or t.abi == .androideabi) {
+        if (ndk) |ndk_path| {
+            addAndroidNdk(b, module, t.cpu.arch, ndk_path);
+        } else {
+            std.debug.print(
+                "gossamer: building an *-linux-android target but -Dndk was not given — " ++
+                    "liblog/libandroid will not resolve. Pass -Dndk=$ANDROID_NDK_HOME " ++
+                    "(NDK r26+); `just android-build` does this for you.\n",
+                .{},
+            );
+        }
         module.linkSystemLibrary("log", .{});
         module.linkSystemLibrary("android", .{});
         return;
     }
-    switch (os) {
+    switch (t.os.tag) {
         .linux, .freebsd, .openbsd, .netbsd => {
             // GTK 3 + WebKitGTK 4.1 (same across Linux and BSD)
             module.linkSystemLibrary("gtk+-3.0", .{});
@@ -74,8 +125,11 @@ fn linkPlatformLibs(module: *std.Build.Module, os: std.Target.Os.Tag, abi: std.T
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    const os = target.query.os_tag orelse builtin.os.tag;
-    const abi = target.result.abi;
+
+    // Path to the Android NDK (r26+), required only for `*-linux-android`
+    // targets so the linker can find liblog/libandroid. `just android-build`
+    // passes `-Dndk=$ANDROID_NDK_HOME`; ignored for every other target.
+    const android_ndk = b.option([]const u8, "ndk", "Path to Android NDK r26+ (required for *-linux-android targets)");
 
     // Create the root module (shared between shared/static/test)
     const root_module = b.createModule(.{
@@ -85,7 +139,7 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
 
-    linkPlatformLibs(root_module, os, abi);
+    linkPlatformLibs(b, root_module, target, android_ndk);
 
     // --- Shared library (.so / .dylib / .dll) ---
     const shared_lib = b.addLibrary(.{
@@ -105,7 +159,7 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
 
-    linkPlatformLibs(static_module, os, abi);
+    linkPlatformLibs(b, static_module, target, android_ndk);
 
     const static_lib = b.addLibrary(.{
         .name = "gossamer",
@@ -123,7 +177,7 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
 
-    linkPlatformLibs(test_module, os, abi);
+    linkPlatformLibs(b, test_module, target, android_ndk);
 
     const unit_tests = b.addTest(.{
         .root_module = test_module,
@@ -148,7 +202,7 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
 
-    linkPlatformLibs(gossamer_module, os, abi);
+    linkPlatformLibs(b, gossamer_module, target, android_ndk);
 
     const display_test_module = b.createModule(.{
         .root_source_file = b.path("test/display_test.zig"),
@@ -160,7 +214,7 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    linkPlatformLibs(display_test_module, os, abi);
+    linkPlatformLibs(b, display_test_module, target, android_ndk);
 
     const display_tests = b.addTest(.{
         .root_module = display_test_module,
@@ -188,7 +242,7 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    linkPlatformLibs(integration_test_module, os, abi);
+    linkPlatformLibs(b, integration_test_module, target, android_ndk);
 
     const integration_tests = b.addTest(.{
         .root_module = integration_test_module,
@@ -215,7 +269,7 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    linkPlatformLibs(groove_demo_module, os, abi);
+    linkPlatformLibs(b, groove_demo_module, target, android_ndk);
 
     const groove_demo = b.addExecutable(.{
         .name = "groove-demo",
@@ -256,13 +310,10 @@ pub fn build(b: *std.Build) void {
 
     // --- Android cross-compilation (requires the Android NDK) ---
     // Produces libgossamer.so for each ABI neurophone (and other downstreams)
-    // ship. This is a thin wrapper over the standard target options; the
-    // per-ABI loop and jniLibs packaging live in the Justfile (`just
-    // android-build`). Selected purely so `zig build -Dtarget=<abi>-linux-android`
-    // routes through the JNI WebView backend and the component hosts.
+    // ship. `linkPlatformLibs` wires the NDK sysroot (liblog/libandroid) when the
+    // ABI is `.android`, reading ANDROID_NDK_HOME; the per-ABI loop and jniLibs
+    // packaging live in the Justfile (`just android-build`).
     //   zig build -Dtarget=aarch64-linux-android      # arm64-v8a
     //   zig build -Dtarget=x86_64-linux-android       # x86_64 (emulator)
     //   zig build -Dtarget=arm-linux-androideabi      # armeabi-v7a
 }
-
-const builtin = @import("builtin");

@@ -9,26 +9,26 @@
   author = {Jewell, Jonathan D.A.},
   title = {gossamer},
   year = {2026},
-  url = {https://github.com/hyperpolymath/gossamer},
+  url = {https://github.com/metadatastician/gossamer},
   license = {MPL-2.0}
 }
 ----
 
 == Harvard Style
 
-Jewell, J.D.A. (2026) _gossamer_ [Computer software]. Available at: https://github.com/hyperpolymath/gossamer
+Jewell, J.D.A. (2026) _gossamer_ [Computer software]. Available at: https://github.com/metadatastician/gossamer
 
 == OSCOLA
 
-Jonathan D.A. Jewell, 'gossamer' (2026) <https://github.com/hyperpolymath/gossamer>
+Jonathan D.A. Jewell, 'gossamer' (2026) <https://github.com/metadatastician/gossamer>
 
 == MLA
 
-Jewell, Jonathan D.A. "gossamer." 2026, github.com/hyperpolymath/gossamer.
+Jewell, Jonathan D.A. "gossamer." 2026, github.com/metadatastician/gossamer.
 
 == APA 7
 
-Jewell, J.D.A. (2026). _gossamer_ [Computer software]. GitHub. https://github.com/hyperpolymath/gossamer
+Jewell, J.D.A. (2026). _gossamer_ [Computer software]. GitHub. https://github.com/metadatastician/gossamer
 
 == See Also
 

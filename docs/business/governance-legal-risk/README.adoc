@@ -30,11 +30,11 @@ Gossamer's own tree was reconciled to MPL-2.0 (394 files + `.ipkg`) in the
 == Governance apparatus
 
 Gossamer follows the **Rhodium Standard Repository (RSR)** template, adopted in
-https://github.com/hyperpolymath/gossamer/blob/main/docs/decisions/0001-adopt-rsr-standard.adoc[ADR-0001].
+https://github.com/metadatastician/gossamer/blob/main/docs/decisions/0001-adopt-rsr-standard.adoc[ADR-0001].
 RSR fixes repository shape (machine-readable state, security/governance files,
 SHA-pinned workflows) so structure does not drift per-repo. Policy is enforced
 by **contractiles** — a six-verb, machine-readable model
-(https://github.com/hyperpolymath/gossamer/blob/main/.machine_readable/contractiles/INDEX.a2ml[INDEX.a2ml]):
+(https://github.com/metadatastician/gossamer/blob/main/.machine_readable/contractiles/INDEX.a2ml[INDEX.a2ml]):
 
 [cols="1,4,2",options="header"]
 |===
@@ -49,32 +49,32 @@ by **contractiles** — a six-verb, machine-readable model
 
 Component health uses **Component Readiness Grades (CRG)**, an evidence-required
 scale
-(https://github.com/hyperpolymath/gossamer/blob/main/docs/governance/CRG-CRITERIA.adoc[criteria]).
+(https://github.com/metadatastician/gossamer/blob/main/docs/governance/CRG-CRITERIA.adoc[criteria]).
 Gossamer is graded **D** (Partial / alpha), targeting **C** (Self-Validated /
 dogfooded); the D→C path is recorded in the
-https://github.com/hyperpolymath/gossamer/blob/main/docs/governance/CRG-AUDIT-2026-04-18.adoc[2026-04-18 audit]
+https://github.com/metadatastician/gossamer/blob/main/docs/governance/CRG-AUDIT-2026-04-18.adoc[2026-04-18 audit]
 and STATE.a2ml.
 
 == Compliance & security posture
 
 * **Threat model** — STRIDE analysis, quarterly review:
-https://github.com/hyperpolymath/gossamer/blob/main/docs/architecture/THREAT-MODEL.adoc[THREAT-MODEL.adoc].
+https://github.com/metadatastician/gossamer/blob/main/docs/architecture/THREAT-MODEL.adoc[THREAT-MODEL.adoc].
 * **Security policy** — coordinated disclosure via `SECURITY.md` (RSR file).
 * **Supply chain** — OpenSSF Scorecard wired (`scorecard.yml` +
 `scorecard-enforcer.yml`); OpenSSF Best Practices enrollment initiated. Actions
 SHA-pinned; lockfiles committed; TruffleHog + secret-scanner, CodeQL, and SLSA
 provenance + SBOM on releases.
 * **Machine-readable state** — ecosystem position and session state in
-https://github.com/hyperpolymath/gossamer/blob/main/.machine_readable/descriptiles/ECOSYSTEM.a2ml[ECOSYSTEM.a2ml]
+https://github.com/metadatastician/gossamer/blob/main/.machine_readable/descriptiles/ECOSYSTEM.a2ml[ECOSYSTEM.a2ml]
 and STATE.a2ml, updated each session.
 
 == Attribution & ownership
 
 * **Maintainer** —
-https://github.com/hyperpolymath/gossamer/blob/main/docs/attribution/MAINTAINERS.adoc[MAINTAINERS.adoc]:
+https://github.com/metadatastician/gossamer/blob/main/docs/attribution/MAINTAINERS.adoc[MAINTAINERS.adoc]:
 Jonathan D.A. Jewell (`@hyperpolymath`), Lead Maintainer.
 * **Code ownership** — three-perimeter model (Core / Extensions / Community) in
-https://github.com/hyperpolymath/gossamer/blob/main/docs/attribution/CODEOWNERS.adoc[CODEOWNERS.adoc],
+https://github.com/metadatastician/gossamer/blob/main/docs/attribution/CODEOWNERS.adoc[CODEOWNERS.adoc],
 enforced by `.github/CODEOWNERS`.
 * **Formal-methods sibling** — proof obligations shared with the
 https://github.com/hyperpolymath/proven[proven] verification standard.
@@ -111,7 +111,7 @@ integration tests plus Zig and Deno suites exercise the handler paths.
 | **Supply-chain / ABI drift** — a hand-edited binding could diverge from native
 exports, or a poisoned dependency/action could enter the build.
 | Medium | High
-| https://github.com/hyperpolymath/gossamer/blob/main/src/interface/abi/ForeignGen.idr[`Gossamer.ABI.ForeignGen`]
+| https://github.com/metadatastician/gossamer/blob/main/src/interface/abi/ForeignGen.idr[`Gossamer.ABI.ForeignGen`]
 is *generated* (`just abi-gen`) to mirror every one of the ~135 `gossamer_*` exports, and CI enforces its freshness so the typechecked ABI cannot drift from the Zig FFI; actions are SHA-pinned and lockfiles + secret-scanning cover the rest.
 | **Consumer-migration dependency** — headline adoption (IDApTIK, neurophone) is
 in progress, so field-proven evidence is still thin.
