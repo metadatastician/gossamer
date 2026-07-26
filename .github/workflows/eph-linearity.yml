@@ -30,6 +30,7 @@ on:
       - '.github/workflows/eph-linearity.yml'
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:

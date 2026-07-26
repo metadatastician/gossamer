@@ -23,6 +23,7 @@ on:
       - '.github/workflows/android.yml'
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:

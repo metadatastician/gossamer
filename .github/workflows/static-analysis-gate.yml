@@ -8,6 +8,7 @@ on:
   push:
     branches: [main, master]
 permissions:
+  actions: read
   contents: read
 env:
   REPO_OWNER: ${{ github.repository_owner }}
