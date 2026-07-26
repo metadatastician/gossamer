@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640">
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="circle-glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="text-glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <radialGradient id="bg-glow" cx="50%" cy="38%" r="52%">
+      <stop offset="0%" stop-color="#10151c"/>
+      <stop offset="70%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#080c10"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1280" height="640" fill="#0d1117"/>
+  <rect width="1280" height="640" fill="url(#bg-glow)"/>
+
+  <!-- Native window frame: the OS webview the shell wraps -->
+  <rect x="552" y="150" width="176" height="164" rx="14" fill="none" stroke="#94a3b8" stroke-width="2.5" opacity="0.30" filter="url(#circle-glow)"/>
+  <line x1="552" y1="182" x2="728" y2="182" stroke="#94a3b8" stroke-width="2" opacity="0.28"/>
+  <circle cx="568" cy="166" r="3.5" fill="#94a3b8" opacity="0.4"/>
+  <circle cx="582" cy="166" r="3.5" fill="#94a3b8" opacity="0.4"/>
+  <circle cx="596" cy="166" r="3.5" fill="#94a3b8" opacity="0.4"/>
+
+  <!-- Gossamer filament (let! — exactly once): one unbroken strand, enters → traces three edges → exits once -->
+  <path d="M 470,200 L 552,200 L 552,314 L 728,314 L 728,150 L 810,150"
+        fill="none" stroke="#cbd5e1" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"
+        filter="url(#glow)"/>
+  <circle cx="470" cy="200" r="6" fill="#cbd5e1" filter="url(#glow)"/>
+  <path d="M 810,150 l -16,-10 l 0,20 z" fill="#cbd5e1" filter="url(#glow)"/>
+  <circle cx="640" cy="314" r="4" fill="#cbd5e1" opacity="0.6"/>
+
+  <!-- Wordmark -->
+  <text x="640" y="470" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="104" font-weight="300" fill="#e6edf3" letter-spacing="3" filter="url(#text-glow)">gossamer</text>
+  <!-- Tagline subtitle (the positioning: a thin shell over native) -->
+  <text x="640" y="524" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="30" font-weight="300" fill="#cbd5e1" letter-spacing="6" opacity="0.85">thin shell over native · handles can't leak</text>
+
+  <!-- Accent rule -->
+  <line x1="500" y1="556" x2="610" y2="556" stroke="#cbd5e1" stroke-width="1" opacity="0.3"/>
+  <circle cx="640" cy="556" r="4" fill="#cbd5e1" opacity="0.6"/>
+  <line x1="670" y1="556" x2="780" y2="556" stroke="#cbd5e1" stroke-width="1" opacity="0.3"/>
+</svg>

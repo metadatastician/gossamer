@@ -1,7 +1,7 @@
 {
   "groove_version": "1",
   "service_id": "gossamer",
-  "service_version": "0.1.0",
+  "service_version": "0.3.1",
   "capabilities": {
     "panel-ui": {
       "type": "panel-ui",

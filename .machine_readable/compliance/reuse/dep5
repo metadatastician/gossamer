@@ -1,7 +1,7 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: gossamer
 Upstream-Contact: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
-Source: https://github.com/hyperpolymath/gossamer
+Source: https://github.com/metadatastician/gossamer
 
 # Default: all files are MPL-2.0
 Files: *

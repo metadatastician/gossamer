@@ -4,6 +4,8 @@ Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 -->
 # Gossamer — Next Steps
 
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+
 ## Completed (2026-03-21/22)
 
 - [x] Gossamer repo created (RSR template, all workflows)
