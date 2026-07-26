@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MPL-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # Repository settings for probot/settings GitHub App.
 # https://github.com/probot/settings
@@ -6,13 +6,15 @@
 # This file defines repository-level configuration that is automatically
 # applied by the probot/settings app when changes are pushed to the default
 # branch. Install the app at: https://github.com/apps/settings
+#
+# Repository settings — configured for paint-type.
 
 # ─── Repository Settings ───────────────────────────────────────────────────────
 
 repository:
-  name: "gossamer"
-  description: "Gossamer — desktop webview shell with compile-time resource safety via Idris2 ABI and Zig FFI"
-  homepage: "https://github.com/metadatastician/gossamer"
+  name: "paint-type"
+  description: "Cross-platform open-source image editor — capable enough for real work, simple enough to reach for without thinking"
+  homepage: "https://github.com/metadatastician/paint-type"
   private: false
   has_issues: true
   has_projects: true
@@ -101,6 +103,14 @@ labels:
     color: "c5def5"
     description: "Code refactoring with no functional change"
 
+  - name: "proof needed"
+    color: "fbcca0"
+    description: "Formal proof required for verification"
+
+  - name: "proof complete"
+    color: "006b75"
+    description: "Formal proof has been completed and verified"
+
 # ─── Branch Protection ─────────────────────────────────────────────────────────
 
 branches:
@@ -110,11 +120,15 @@ branches:
         required_approving_review_count: 1
         dismiss_stale_reviews: true
         require_code_owner_reviews: true
+        require_last_push_approval: true
+        required_review_thread_resolution: true
       required_status_checks:
         strict: true
         contexts:
-          - "hypatia-scan"
-          - "codeql"
+          - "Cargo check + clippy + fmt"
+          - "Cargo test"
+          - "analyze (javascript-typescript, none)"
+          - "openssf-compliance"
       enforce_admins: true
       required_signatures: true
       restrictions: null

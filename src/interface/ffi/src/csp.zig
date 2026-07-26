@@ -35,19 +35,320 @@
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 const std = @import("std");
+const builtin = @import("builtin");
 const main = @import("main.zig");
-const platform = switch (@import("builtin").os.tag) {
-    .linux, .freebsd, .openbsd, .netbsd => @import("webview_gtk.zig"),
-    .macos => @import("webview_cocoa.zig"),
-    .windows => @import("webview_win32.zig"),
-    .ios => @import("webview_ios.zig"),
-    else => @compileError("Gossamer: unsupported platform"),
+
+//==============================================================================
+// Platform-Specific CSP / Streaming-IPC Backend
+//==============================================================================
+
+/// GTK/GLib backend (Linux, FreeBSD, OpenBSD, NetBSD, macOS, Windows, iOS).
+///
+/// The webview backend import and the `@cImport("glib.h")` used for
+/// g_idle_add thread marshalling live inside this struct, so they are only
+/// referenced — and only analysed — on non-Android targets. Android reports
+/// `os.tag == .linux` but ships no GLib and has no GTK main loop, so it selects
+/// `stub_csp` below, exactly as main.zig routes the webview backend via
+/// `abi == .android`.
+const gtk_csp = struct {
+    const platform = switch (builtin.os.tag) {
+        .linux, .freebsd, .openbsd, .netbsd => @import("webview_gtk.zig"),
+        .macos => @import("webview_cocoa.zig"),
+        .windows => @import("webview_win32.zig"),
+        .ios => @import("webview_ios.zig"),
+        else => @compileError("Gossamer: unsupported platform"),
+    };
+
+    /// GTK/GLib C bindings for g_idle_add (thread-safe main-loop dispatch).
+    const c = @cImport({
+        @cInclude("glib.h");
+    });
+
+    /// Context for a deferred emit delivered via g_idle_add.
+    /// Heap-allocated, self-freeing in the idle callback.
+    const EmitContext = struct {
+        /// Allocator for self-cleanup
+        allocator: std.mem.Allocator,
+        /// Back-reference to the webview handle
+        handle: *main.GossamerHandle,
+        /// Null-terminated JS string to evaluate (owned)
+        js: [:0]u8,
+    };
+
+    fn setCsp(handle_ptr: u64, csp: [*:0]const u8) main.Result {
+        main.clearError();
+        const handle = main.ptrFromU64(handle_ptr) orelse {
+            main.setError("Null webview handle");
+            return .null_pointer;
+        };
+
+        if (!handle.initialized) {
+            main.setError("Webview not initialized");
+            return .@"error";
+        }
+
+        if (handle.closed) {
+            main.setError("Webview already closed");
+            return .already_consumed;
+        }
+
+        const allocator = std.heap.c_allocator;
+        const csp_slice = std.mem.span(csp);
+
+        // Escape the CSP string for embedding in a JS string literal.
+        // CSP values may contain single quotes (e.g. 'self', 'unsafe-inline').
+        const escaped = escapeForJSSingleQuote(allocator, csp_slice) catch {
+            main.setError("Out of memory escaping CSP string");
+            return .out_of_memory;
+        };
+        defer allocator.free(escaped);
+
+        // Build JS that removes any existing CSP meta and injects a new one.
+        // Uses single-quoted JS strings to avoid conflicts with CSP single quotes.
+        const js = std.fmt.allocPrintSentinel(
+            allocator,
+            "(function(){{var old=document.querySelector('meta[http-equiv=\"Content-Security-Policy\"]');if(old)old.remove();var m=document.createElement('meta');m.httpEquiv='Content-Security-Policy';m.content='{s}';var h=document.head||document.getElementsByTagName('head')[0];if(h)h.appendChild(m);}})()",
+            .{escaped},
+            0,
+        ) catch {
+            main.setError("Out of memory building CSP injection JS");
+            return .out_of_memory;
+        };
+        defer allocator.free(js);
+
+        platform.eval(&handle.webview, js) catch {
+            main.setError("Failed to evaluate CSP injection JS");
+            return .@"error";
+        };
+
+        main.clearError();
+        return .ok;
+    }
+
+    fn emit(
+        handle_ptr: u64,
+        event_name: [*:0]const u8,
+        payload_json: [*:0]const u8,
+    ) main.Result {
+        main.clearError();
+        const handle = main.ptrFromU64(handle_ptr) orelse {
+            main.setError("Null webview handle");
+            return .null_pointer;
+        };
+
+        if (!handle.initialized) {
+            main.setError("Webview not initialized");
+            return .@"error";
+        }
+
+        if (handle.closed) {
+            main.setError("Webview already closed");
+            return .already_consumed;
+        }
+
+        const allocator = std.heap.c_allocator;
+        const event_slice = std.mem.span(event_name);
+        const payload_slice = std.mem.span(payload_json);
+
+        // Escape event name for JS string embedding
+        const escaped_event = escapeForJSSingleQuote(allocator, event_slice) catch {
+            main.setError("Out of memory escaping event name");
+            return .out_of_memory;
+        };
+        defer allocator.free(escaped_event);
+
+        // Escape payload for JS string embedding
+        const escaped_payload = escapeForJSSingleQuote(allocator, payload_slice) catch {
+            main.setError("Out of memory escaping payload");
+            return .out_of_memory;
+        };
+        defer allocator.free(escaped_payload);
+
+        // Build JS: window.__gossamer_emit('event_name', JSON.parse('payload'))
+        // We parse the payload on the frontend so listeners get a real object.
+        const js = std.fmt.allocPrintSentinel(
+            allocator,
+            "if(window.__gossamer_emit){{window.__gossamer_emit('{s}',JSON.parse('{s}'))}}",
+            .{ escaped_event, escaped_payload },
+            0,
+        ) catch {
+            main.setError("Out of memory building emit JS");
+            return .out_of_memory;
+        };
+
+        // Allocate context for g_idle_add delivery on the GTK main thread.
+        // This ensures thread safety — the caller may be on any thread.
+        const ctx = allocator.create(EmitContext) catch {
+            allocator.free(js);
+            main.setError("Out of memory allocating emit context");
+            return .out_of_memory;
+        };
+
+        ctx.* = .{
+            .allocator = allocator,
+            .handle = handle,
+            .js = js,
+        };
+
+        // Schedule JS evaluation on the GTK main thread.
+        // g_idle_add is documented as thread-safe in GLib.
+        _ = c.g_idle_add(@ptrCast(&emitIdleCallback), @ptrCast(ctx));
+
+        main.clearError();
+        return .ok;
+    }
+
+    fn emitBinary(
+        handle_ptr: u64,
+        event_name: [*:0]const u8,
+        data: [*]const u8,
+        data_len: u32,
+    ) main.Result {
+        main.clearError();
+        const handle = main.ptrFromU64(handle_ptr) orelse {
+            main.setError("Null webview handle");
+            return .null_pointer;
+        };
+
+        if (!handle.initialized) {
+            main.setError("Webview not initialized");
+            return .@"error";
+        }
+
+        if (handle.closed) {
+            main.setError("Webview already closed");
+            return .already_consumed;
+        }
+
+        const allocator = std.heap.c_allocator;
+        const raw: []const u8 = data[0..data_len];
+        const event_slice = std.mem.span(event_name);
+
+        // Escape the event name (base64 chars are safe as-is; event name may not be).
+        const escaped_event = escapeForJSSingleQuote(allocator, event_slice) catch {
+            main.setError("Out of memory escaping event name");
+            return .out_of_memory;
+        };
+        defer allocator.free(escaped_event);
+
+        // Base64-encode the binary payload.
+        const b64_len = std.base64.standard.Encoder.calcSize(raw.len);
+        const b64_buf = allocator.alloc(u8, b64_len) catch {
+            main.setError("Out of memory encoding binary data");
+            return .out_of_memory;
+        };
+        defer allocator.free(b64_buf);
+        _ = std.base64.standard.Encoder.encode(b64_buf, raw);
+
+        // Build JS: if(window.__gossamer_emit_binary){window.__gossamer_emit_binary('event','B64')}
+        // Base64 alphabet (A-Z a-z 0-9 + / =) is JS-string-safe — no escaping needed.
+        const js = std.fmt.allocPrintSentinel(
+            allocator,
+            "if(window.__gossamer_emit_binary){{window.__gossamer_emit_binary('{s}','{s}')}}",
+            .{ escaped_event, b64_buf },
+            0,
+        ) catch {
+            main.setError("Out of memory building binary emit JS");
+            return .out_of_memory;
+        };
+
+        const ctx = allocator.create(EmitContext) catch {
+            allocator.free(js);
+            main.setError("Out of memory allocating binary emit context");
+            return .out_of_memory;
+        };
+
+        ctx.* = .{
+            .allocator = allocator,
+            .handle = handle,
+            .js = js,
+        };
+
+        _ = c.g_idle_add(@ptrCast(&emitIdleCallback), @ptrCast(ctx));
+
+        main.clearError();
+        return .ok;
+    }
+
+    /// GLib idle callback — runs on the GTK main thread.
+    /// Evaluates the emit JS and frees the context.
+    /// Returns G_SOURCE_REMOVE (0) for single invocation.
+    fn emitIdleCallback(user_data: ?*anyopaque) callconv(.c) c_int {
+        const ctx: *EmitContext = @ptrCast(@alignCast(user_data orelse return 0));
+        const allocator = ctx.allocator;
+
+        // Evaluate the JS on the webview (now safe — we are on the GTK thread).
+        // Skip if the window has already been closed.
+        if (ctx.handle.initialized and !ctx.handle.closed) {
+            platform.eval(&ctx.handle.webview, ctx.js) catch {};
+        }
+
+        // Clean up
+        allocator.free(ctx.js);
+        allocator.destroy(ctx);
+
+        // G_SOURCE_REMOVE — do not call again
+        return 0;
+    }
 };
 
-/// GTK/GLib C bindings for g_idle_add (thread-safe main-loop dispatch).
-const c = @cImport({
-    @cInclude("glib.h");
-});
+/// Unsupported-platform backend. CSP injection and backend→frontend streaming
+/// IPC are delivered through the GTK main loop (g_idle_add) on desktop. The
+/// Android JNI WebView backend has no equivalent marshalling primitive here, so
+/// these are accepted no-ops: each still validates the handle so callers see
+/// consistent error codes, then returns ok without emitting. A future JNI-side
+/// implementation can replace this backend.
+const stub_csp = struct {
+    fn guard(handle_ptr: u64) ?main.Result {
+        main.clearError();
+        const handle = main.ptrFromU64(handle_ptr) orelse {
+            main.setError("Null webview handle");
+            return .null_pointer;
+        };
+        if (!handle.initialized) {
+            main.setError("Webview not initialized");
+            return .@"error";
+        }
+        if (handle.closed) {
+            main.setError("Webview already closed");
+            return .already_consumed;
+        }
+        return null;
+    }
+
+    fn setCsp(handle_ptr: u64, csp: [*:0]const u8) main.Result {
+        _ = csp;
+        if (guard(handle_ptr)) |err| return err;
+        return .ok;
+    }
+
+    fn emit(
+        handle_ptr: u64,
+        event_name: [*:0]const u8,
+        payload_json: [*:0]const u8,
+    ) main.Result {
+        _ = event_name;
+        _ = payload_json;
+        if (guard(handle_ptr)) |err| return err;
+        return .ok;
+    }
+
+    fn emitBinary(
+        handle_ptr: u64,
+        event_name: [*:0]const u8,
+        data: [*]const u8,
+        data_len: u32,
+    ) main.Result {
+        _ = event_name;
+        _ = data;
+        _ = data_len;
+        if (guard(handle_ptr)) |err| return err;
+        return .ok;
+    }
+};
+
+/// Compile-time platform dispatch for the CSP / streaming-IPC backend.
+const backend = if (builtin.abi == .android) stub_csp else gtk_csp;
 
 //==============================================================================
 // CSP Enforcement
@@ -67,69 +368,12 @@ const c = @cImport({
 /// Thread safety: if called from a non-GTK thread, uses g_idle_add to marshal
 /// the JS evaluation onto the GTK main thread.
 pub export fn gossamer_set_csp(handle_ptr: u64, csp: [*:0]const u8) main.Result {
-    main.clearError();
-    const handle = main.ptrFromU64(handle_ptr) orelse {
-        main.setError("Null webview handle");
-        return .null_pointer;
-    };
-
-    if (!handle.initialized) {
-        main.setError("Webview not initialized");
-        return .@"error";
-    }
-
-    if (handle.closed) {
-        main.setError("Webview already closed");
-        return .already_consumed;
-    }
-
-    const allocator = std.heap.c_allocator;
-    const csp_slice = std.mem.span(csp);
-
-    // Escape the CSP string for embedding in a JS string literal.
-    // CSP values may contain single quotes (e.g. 'self', 'unsafe-inline').
-    const escaped = escapeForJSSingleQuote(allocator, csp_slice) catch {
-        main.setError("Out of memory escaping CSP string");
-        return .out_of_memory;
-    };
-    defer allocator.free(escaped);
-
-    // Build JS that removes any existing CSP meta and injects a new one.
-    // Uses single-quoted JS strings to avoid conflicts with CSP single quotes.
-    const js = std.fmt.allocPrintSentinel(
-        allocator,
-        "(function(){{var old=document.querySelector('meta[http-equiv=\"Content-Security-Policy\"]');if(old)old.remove();var m=document.createElement('meta');m.httpEquiv='Content-Security-Policy';m.content='{s}';var h=document.head||document.getElementsByTagName('head')[0];if(h)h.appendChild(m);}})()",
-        .{escaped},
-        0,
-    ) catch {
-        main.setError("Out of memory building CSP injection JS");
-        return .out_of_memory;
-    };
-    defer allocator.free(js);
-
-    platform.eval(&handle.webview, js) catch {
-        main.setError("Failed to evaluate CSP injection JS");
-        return .@"error";
-    };
-
-    main.clearError();
-    return .ok;
+    return backend.setCsp(handle_ptr, csp);
 }
 
 //==============================================================================
 // Streaming IPC — Backend → Frontend Push
 //==============================================================================
-
-/// Context for a deferred emit delivered via g_idle_add.
-/// Heap-allocated, self-freeing in the idle callback.
-const EmitContext = struct {
-    /// Allocator for self-cleanup
-    allocator: std.mem.Allocator,
-    /// Back-reference to the webview handle
-    handle: *main.GossamerHandle,
-    /// Null-terminated JS string to evaluate (owned)
-    js: [:0]u8,
-};
 
 /// Push an event from the backend to the frontend webview.
 ///
@@ -154,72 +398,7 @@ pub export fn gossamer_emit(
     event_name: [*:0]const u8,
     payload_json: [*:0]const u8,
 ) main.Result {
-    main.clearError();
-    const handle = main.ptrFromU64(handle_ptr) orelse {
-        main.setError("Null webview handle");
-        return .null_pointer;
-    };
-
-    if (!handle.initialized) {
-        main.setError("Webview not initialized");
-        return .@"error";
-    }
-
-    if (handle.closed) {
-        main.setError("Webview already closed");
-        return .already_consumed;
-    }
-
-    const allocator = std.heap.c_allocator;
-    const event_slice = std.mem.span(event_name);
-    const payload_slice = std.mem.span(payload_json);
-
-    // Escape event name for JS string embedding
-    const escaped_event = escapeForJSSingleQuote(allocator, event_slice) catch {
-        main.setError("Out of memory escaping event name");
-        return .out_of_memory;
-    };
-    defer allocator.free(escaped_event);
-
-    // Escape payload for JS string embedding
-    const escaped_payload = escapeForJSSingleQuote(allocator, payload_slice) catch {
-        main.setError("Out of memory escaping payload");
-        return .out_of_memory;
-    };
-    defer allocator.free(escaped_payload);
-
-    // Build JS: window.__gossamer_emit('event_name', JSON.parse('payload'))
-    // We parse the payload on the frontend so listeners get a real object.
-    const js = std.fmt.allocPrintSentinel(
-        allocator,
-        "if(window.__gossamer_emit){{window.__gossamer_emit('{s}',JSON.parse('{s}'))}}",
-        .{ escaped_event, escaped_payload },
-        0,
-    ) catch {
-        main.setError("Out of memory building emit JS");
-        return .out_of_memory;
-    };
-
-    // Allocate context for g_idle_add delivery on the GTK main thread.
-    // This ensures thread safety — the caller may be on any thread.
-    const ctx = allocator.create(EmitContext) catch {
-        allocator.free(js);
-        main.setError("Out of memory allocating emit context");
-        return .out_of_memory;
-    };
-
-    ctx.* = .{
-        .allocator = allocator,
-        .handle = handle,
-        .js = js,
-    };
-
-    // Schedule JS evaluation on the GTK main thread.
-    // g_idle_add is documented as thread-safe in GLib.
-    _ = c.g_idle_add(@ptrCast(&emitIdleCallback), @ptrCast(ctx));
-
-    main.clearError();
-    return .ok;
+    return backend.emit(handle_ptr, event_name, payload_json);
 }
 
 /// Push a named binary event from the backend to the frontend webview.
@@ -239,91 +418,7 @@ pub export fn gossamer_emit_binary(
     data: [*]const u8,
     data_len: u32,
 ) main.Result {
-    main.clearError();
-    const handle = main.ptrFromU64(handle_ptr) orelse {
-        main.setError("Null webview handle");
-        return .null_pointer;
-    };
-
-    if (!handle.initialized) {
-        main.setError("Webview not initialized");
-        return .@"error";
-    }
-
-    if (handle.closed) {
-        main.setError("Webview already closed");
-        return .already_consumed;
-    }
-
-    const allocator = std.heap.c_allocator;
-    const raw: []const u8 = data[0..data_len];
-    const event_slice = std.mem.span(event_name);
-
-    // Escape the event name (base64 chars are safe as-is; event name may not be).
-    const escaped_event = escapeForJSSingleQuote(allocator, event_slice) catch {
-        main.setError("Out of memory escaping event name");
-        return .out_of_memory;
-    };
-    defer allocator.free(escaped_event);
-
-    // Base64-encode the binary payload.
-    const b64_len = std.base64.standard.Encoder.calcSize(raw.len);
-    const b64_buf = allocator.alloc(u8, b64_len) catch {
-        main.setError("Out of memory encoding binary data");
-        return .out_of_memory;
-    };
-    defer allocator.free(b64_buf);
-    _ = std.base64.standard.Encoder.encode(b64_buf, raw);
-
-    // Build JS: if(window.__gossamer_emit_binary){window.__gossamer_emit_binary('event','B64')}
-    // Base64 alphabet (A-Z a-z 0-9 + / =) is JS-string-safe — no escaping needed.
-    const js = std.fmt.allocPrintSentinel(
-        allocator,
-        "if(window.__gossamer_emit_binary){{window.__gossamer_emit_binary('{s}','{s}')}}",
-        .{ escaped_event, b64_buf },
-        0,
-    ) catch {
-        main.setError("Out of memory building binary emit JS");
-        return .out_of_memory;
-    };
-
-    const ctx = allocator.create(EmitContext) catch {
-        allocator.free(js);
-        main.setError("Out of memory allocating binary emit context");
-        return .out_of_memory;
-    };
-
-    ctx.* = .{
-        .allocator = allocator,
-        .handle = handle,
-        .js = js,
-    };
-
-    _ = c.g_idle_add(@ptrCast(&emitIdleCallback), @ptrCast(ctx));
-
-    main.clearError();
-    return .ok;
-}
-
-/// GLib idle callback — runs on the GTK main thread.
-/// Evaluates the emit JS and frees the context.
-/// Returns G_SOURCE_REMOVE (0) for single invocation.
-fn emitIdleCallback(user_data: ?*anyopaque) callconv(.c) c_int {
-    const ctx: *EmitContext = @ptrCast(@alignCast(user_data orelse return 0));
-    const allocator = ctx.allocator;
-
-    // Evaluate the JS on the webview (now safe — we are on the GTK thread).
-    // Skip if the window has already been closed.
-    if (ctx.handle.initialized and !ctx.handle.closed) {
-        platform.eval(&ctx.handle.webview, ctx.js) catch {};
-    }
-
-    // Clean up
-    allocator.free(ctx.js);
-    allocator.destroy(ctx);
-
-    // G_SOURCE_REMOVE — do not call again
-    return 0;
+    return backend.emitBinary(handle_ptr, event_name, data, data_len);
 }
 
 //==============================================================================

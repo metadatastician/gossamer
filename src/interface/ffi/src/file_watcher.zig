@@ -26,10 +26,17 @@
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 const std = @import("std");
+const builtin = @import("builtin");
 
 /// GLib C bindings for g_idle_add — thread-safe GTK main loop scheduling.
 /// The CLI already links glib-2.0 (see build.zig), so these symbols resolve.
-const glib = @cImport({
+///
+/// Android reports `os.tag == .linux` but ships no GLib and has no GTK main
+/// loop, so the import is compiled to an empty namespace there and the reload
+/// dispatch below takes an Android-specific (no-op) path instead. Guarding the
+/// `@cImport` behind `abi != .android` is what keeps `glib.h` off the NDK
+/// include search — mirroring how main.zig routes the webview backend.
+const glib = if (builtin.abi == .android) struct {} else @cImport({
     @cInclude("glib.h");
 });
 
@@ -379,13 +386,25 @@ fn addTrackedFile(state: *WatcherState, path_hash: u64, mtime_ns: i128) void {
 
 /// Schedule a webview reload on the GTK main thread via g_idle_add.
 /// Allocates a small context on the heap that the idle callback frees.
+///
+/// On Android there is no GTK idle loop to marshal onto, and
+/// WebView.evaluateJavascript must run on the JVM UI thread rather than this
+/// polling thread, so hot-reload dispatch is a no-op there. The scanning
+/// machinery above still compiles and runs; it simply never fires a reload.
+/// (Hot reload is a desktop developer convenience; a JNI-side implementation
+/// can replace this branch later.)
 fn scheduleReload(handle: u64) void {
-    const ctx = std.heap.c_allocator.create(ReloadContext) catch return;
-    ctx.* = .{
-        .handle = handle,
-        .js = "location.reload(true)",
-    };
-    _ = glib.g_idle_add(@ptrCast(&reloadIdleCallback), @ptrCast(ctx));
+    if (builtin.abi == .android) {
+        // No-op on Android (see doc comment above). `handle` is intentionally
+        // unused here; Zig does not require unused parameters to be discarded.
+    } else {
+        const ctx = std.heap.c_allocator.create(ReloadContext) catch return;
+        ctx.* = .{
+            .handle = handle,
+            .js = "location.reload(true)",
+        };
+        _ = glib.g_idle_add(@ptrCast(&reloadIdleCallback), @ptrCast(ctx));
+    }
 }
 
 //==============================================================================
