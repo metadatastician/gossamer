@@ -4,15 +4,12 @@
 # estate action-pinning policy. Regenerate the pin only when the reusable
 # workflow is intentionally bumped.
 name: SPARK Theatre Gate
-
 on:
   pull_request:
   push:
     branches: [main, master]
-
 permissions:
   contents: read
-
 jobs:
   spark-theatre-gate:
     timeout-minutes: 10

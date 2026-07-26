@@ -7,7 +7,6 @@
 # Path-filtered and concurrency-guarded so it does not add load to the
 # estate CI pool on unrelated changes.
 name: ABI Typecheck Gate
-
 on:
   pull_request:
     branches: ['**']
@@ -33,14 +32,11 @@ on:
       - 'scripts/check-abi-ffi-cleave.sh'
       - 'scripts/gen-abi-foreign.sh'
       - '.github/workflows/abi-typecheck.yml'
-
 permissions:
   contents: read
-
 concurrency:
   group: abi-typecheck-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
   # Fast, toolchain-free structural gates. Run in seconds before the ~15-min
   # Idris2 build:
@@ -70,7 +66,6 @@ jobs:
 
       - name: Install Chez Scheme
         run: sudo apt-get update && sudo apt-get install -y chezscheme
-
       - name: Build & install Idris2 (pinned v0.8.0)
         run: |
           set -euo pipefail
