@@ -16,5 +16,6 @@ permissions:
 
 jobs:
   scan:
+    timeout-minutes: 10
     uses: hyperpolymath/standards/.github/workflows/hypatia-scan-reusable.yml@2ccc38eaaf8787034ed099e0b72c9ca8b85dc563
     secrets: inherit
