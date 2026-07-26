@@ -2,6 +2,8 @@
 # Cross-repo maintenance baseline (machine-readable canonical)
 
 [metadata]
+name = "Cross-Repo Maintenance Baseline"
+project = "gossamer"
 version = "1.1.0"
 last-updated = "2026-02-24"
 scope = "cross-repo"

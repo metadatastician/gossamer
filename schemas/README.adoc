@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: CC-BY-SA-4.0
 = Schemas
 CUE-language schema definitions used to validate and type-check gossamer's Nickel configurations.
 `config.cue` is the canonical CUE schema; it cross-validates with `configs/config.ncl` to ensure both schema languages agree on the configuration surface.

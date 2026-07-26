@@ -3,39 +3,58 @@
 //
 // Gossamer.ShellExec — Shell command execution guarded by capability tokens.
 //
-// All shell operations require a valid RESOURCE_SHELL capability token.
-// The token is borrowed (not consumed) by execute operations.
+// All operations require a valid RESOURCE_SHELL capability token, passed by
+// value as `I64` (its linear grant/revoke discipline lives in Capabilities.eph).
 //
-// This module is named ShellExec to avoid collision with Shell (webview lifecycle).
+// The spawned background child is a GENUINELY LINEAR resource, enforced by
+// `ephapax check` (default `--mode linear`):
+//   - `spawn`     mints a linear `Child` handle;
+//   - `spawnKill` CONSUMES the handle (terminates and reaps the child).
+//
+// Because `Child` is linear, spawning a background command and never killing
+// it is a compile-time type error — no orphaned child can leak. `execute` and
+// `openUrl` are one-shot and own no handle.
+//
+// Named ShellExec to avoid collision with Shell (webview lifecycle). The
+// earlier version passed the child as a plain `I64` and declared `: I32`
+// returns over `__ffi(...)` (typed `I64`), so it never type-checked.
 
-// Execute a shell command and return stdout as a string pointer.
-// Requires a valid shell capability token.
-// Returns 0 on error (check Shell.lastError for details).
-// FFI: gossamer_shell_execute(program, args_json, cap_token) -> result_json_ptr
-fn execute(program: String, argsJson: String, capToken: I64): I64 =
-  __ffi("gossamer_shell_execute", program, argsJson, capToken)
+module gossamer/core/shell_exec
 
-// Open a URL or file with the system's default handler.
-// Requires a valid shell capability token.
-// Uses xdg-open (Linux), open (macOS), or start (Windows).
-// FFI: gossamer_shell_open(url, cap_token) -> result
-fn openUrl(url: String, capToken: I64): I32 =
-  __ffi("gossamer_shell_open", url, capToken)
+// ── libgossamer C ABI (source of truth: src/interface/ffi/src/*.zig) ───────
+extern "gossamer" {
+  // Opaque, linear background-child handle.
+  type Child
 
-// Spawn a shell command in the background and return an opaque child
-// handle. The command runs via /bin/sh -c (POSIX) or cmd /c (Windows)
-// with stdin/stdout/stderr inherited from the caller. The handle is
-// only valid until passed to spawnKill; do not use it for anything else.
-// Requires a valid shell capability token.
-// Returns 0 on error (check Shell.lastError for details).
-// FFI: gossamer_shell_spawn(command, cap_token) -> opaque_handle
-fn spawn(command: String, capToken: I64): I64 =
-  __ffi("gossamer_shell_spawn", command, capToken)
+  // One-shot ops (no handle). execute returns a result-json string pointer.
+  fn gossamer_shell_execute(program: String, argsJson: String, capToken: I64): I64
+  fn gossamer_shell_open(url: String, capToken: I64): I32
 
-// Terminate a previously-spawned background child and wait for it to
-// exit. Idempotent on 0 (no-op). The handle is invalid after this call.
-// Requires a valid shell capability token.
-// Returns 0 (ok) or non-zero error code.
-// FFI: gossamer_shell_kill(opaque_handle, cap_token) -> result
-fn spawnKill(handle: I64, capToken: I64): I32 =
-  __ffi("gossamer_shell_kill", handle, capToken)
+  // gossamer_shell_spawn(command, cap_token) -> opaque_handle
+  fn gossamer_shell_spawn(command: String, capToken: I64): Child
+
+  // Consuming op — terminate and reap the child; returns a C result code.
+  fn gossamer_shell_kill(child: Child, capToken: I64): I32
+}
+
+// ── Idiomatic wrappers (public API) ────────────────────────────────────────
+
+// Execute a shell command and return stdout as a result-json pointer (0 = err).
+pub fn execute(program: String, argsJson: String, capToken: I64): I64 =
+  gossamer_shell_execute(program, argsJson, capToken)
+
+// Open a URL/file with the system default handler.
+pub fn openUrl(url: String, capToken: I64): I32 = gossamer_shell_open(url, capToken)
+
+// Spawn a background command. Returns a linear handle that MUST be killed.
+pub fn spawn(command: String, capToken: I64): Child = gossamer_shell_spawn(command, capToken)
+
+// Terminate a spawned child and wait for exit. CONSUMES the handle.
+pub fn spawnKill(child: Child, capToken: I64): I32 = gossamer_shell_kill(child, capToken)
+
+// ── Linearity witness ──────────────────────────────────────────────────────
+// Spawn a background child, then kill it (consume). Drop `spawnKill(...)` and
+// `ephapax check` rejects the file: the child cannot be orphaned.
+fn session(command: String, capToken: I64): I32 =
+  let! child = spawn(command, capToken)
+  spawnKill(child, capToken)

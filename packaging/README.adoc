@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: CC-BY-SA-4.0
 = Packaging
 Platform-specific packaging recipes for distributing gossamer to end users.
 Subdirectories cover `debian/` (APT), `flatpak/` (Flatpak/Flathub), `macos/` (notarised DMG), `rpm/` (RPM spec), and `windows/` (WiX installer).

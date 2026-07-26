@@ -3,46 +3,43 @@
 //
 // Gossamer.Platform — Runtime platform detection and query.
 //
-// Provides compile-time-evaluated, zero-cost platform introspection.
-// All values are string constants baked into the binary at compile time
-// via Zig's comptime evaluation — no runtime cost to query.
+// Zero-cost platform introspection: every value is a string constant baked
+// into the binary at compile time via Zig's comptime evaluation. No linear
+// resources — each query borrows nothing and owns nothing.
 //
-// Use these functions to adapt application behaviour based on the
-// host platform without preprocessor conditionals or build flags.
+// The earlier version declared `: I32` / `: String` returns over `__ffi(...)`,
+// which is typed `I64`, so it never type-checked. Declaring the real return
+// types on the `extern` block fixes that.
 //
 // Platform strings:  "linux", "macos", "windows", "freebsd", "openbsd",
 //                    "netbsd", "ios", "unknown"
 // Architecture:      "x86_64", "aarch64", "riscv64", "wasm32", "unknown"
 // Webview engine:    "webkitgtk", "wkwebview", "webview2", "none"
 
-// Get the platform identifier string.
-// Returns one of: "linux", "macos", "windows", "freebsd", "openbsd",
-// "netbsd", "ios", or "unknown".
-// FFI: gossamer_platform() -> string pointer
-fn platform(): String =
-  __ffi("gossamer_platform")
+module gossamer/core/platform
 
-// Get the CPU architecture string.
-// Returns one of: "x86_64", "aarch64", "riscv64", "wasm32", or "unknown".
-// FFI: gossamer_arch() -> string pointer
-fn arch(): String =
-  __ffi("gossamer_arch")
+// ── libgossamer C ABI (source of truth: src/interface/ffi/src/*.zig) ───────
+extern "gossamer" {
+  fn gossamer_platform(): String
+  fn gossamer_arch(): String
+  fn gossamer_webview_engine(): String
+  fn gossamer_is_desktop(): I32
+  fn gossamer_platform_json(): String
+}
 
-// Get the webview engine name for the current platform.
-// Returns one of: "webkitgtk", "wkwebview", "webview2", or "none".
-// FFI: gossamer_webview_engine() -> string pointer
-fn webviewEngine(): String =
-  __ffi("gossamer_webview_engine")
+// ── Idiomatic wrappers (public API) ────────────────────────────────────────
 
-// Check whether the current platform is a desktop platform.
-// Returns 1 for desktop (Linux, macOS, Windows, BSD), 0 for mobile/other.
-// FFI: gossamer_is_desktop() -> u8
-fn isDesktop(): I32 =
-  __ffi("gossamer_is_desktop")
+// Platform identifier: "linux", "macos", "windows", "freebsd", ..., "unknown".
+pub fn platform(): String = gossamer_platform()
 
-// Get all platform information as a JSON string.
-// Includes platform, architecture, webview engine, version, and desktop flag.
-// Useful for passing to the frontend JS in one call.
-// FFI: gossamer_platform_json() -> string pointer
-fn platformJson(): String =
-  __ffi("gossamer_platform_json")
+// CPU architecture: "x86_64", "aarch64", "riscv64", "wasm32", "unknown".
+pub fn arch(): String = gossamer_arch()
+
+// Webview engine: "webkitgtk", "wkwebview", "webview2", "none".
+pub fn webviewEngine(): String = gossamer_webview_engine()
+
+// 1 for desktop (Linux, macOS, Windows, BSD), 0 for mobile/other.
+pub fn isDesktop(): I32 = gossamer_is_desktop()
+
+// All platform info as a single JSON string (for the frontend).
+pub fn platformJson(): String = gossamer_platform_json()

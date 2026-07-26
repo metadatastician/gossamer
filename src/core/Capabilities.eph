@@ -3,66 +3,82 @@
 //
 // Gossamer.Capabilities — Linear capability tokens for permission enforcement.
 //
-// Capability tokens are LINEAR resources:
-// - grant returns a linear token (must be revoked)
-// - check borrows the token (returns it back)
-// - revoke CONSUMES the token
+// A capability token is a GENUINELY LINEAR resource, enforced by `ephapax
+// check` (default `--mode linear`):
+//   - `grant`  mints a linear `CapToken`;
+//   - `check` and `resourceKind` BORROW the token (`&CapToken`);
+//   - `revoke` CONSUMES the token — no further use is possible.
+//
+// Because `CapToken` is linear, granting a capability and never revoking it is
+// a compile-time type error, so a leaked (never-revoked) permission cannot
+// slip through. The C ABI token is an `i64`; consumer modules (Filesystem,
+// ShellExec, Conf) receive it by value as `I64` — this module owns the linear
+// grant/revoke discipline.
+//
+// The earlier version declared the RESOURCE_* set as top-level `let X: I32 = 0`
+// (not valid v2 syntax — top level is fn/type/data/extern) and declared
+// `: I32` / `: ()` returns over `__ffi(...)` (typed `I64`), so it never
+// type-checked. The RESOURCE_* constants are now nullary functions.
 
-// Resource kind constants matching Types.idr ResourceKind constructors.
-// Used as the resourceKind parameter to grant().
-let RESOURCE_FILESYSTEM: I32 = 0
-let RESOURCE_NETWORK: I32 = 1
-let RESOURCE_SHELL: I32 = 2
-let RESOURCE_CLIPBOARD: I32 = 3
-let RESOURCE_NOTIFICATION: I32 = 4
-let RESOURCE_TRAY: I32 = 5
-let RESOURCE_GROOVE: I32 = 6
+module gossamer/core/capabilities
 
-// Grant a capability token for the given resource kind.
-// Use the RESOURCE_* constants above for the kind parameter.
-// Returns a unique token (linear — must be revoked), or 0 on failure.
-// FFI: gossamer_cap_grant(resource_kind) -> token
-fn grant(resourceKind: I32): I64 =
-  __ffi("gossamer_cap_grant", resourceKind)
+// ── Resource-kind constants (matching Types.idr ResourceKind) ──────────────
+pub fn resourceFilesystem(): I32 = 0
+pub fn resourceNetwork(): I32 = 1
+pub fn resourceShell(): I32 = 2
+pub fn resourceClipboard(): I32 = 3
+pub fn resourceNotification(): I32 = 4
+pub fn resourceTray(): I32 = 5
+pub fn resourceGroove(): I32 = 6
 
-// Check a capability token before a gated operation. Borrows the token.
-// Returns 0 (ok) if the token is active and not revoked, 10 (denied) otherwise.
-// FFI: gossamer_cap_check(token) -> result (0=ok, 10=denied)
-fn check(token: I64): I32 =
-  __ffi("gossamer_cap_check", token)
+// ── libgossamer C ABI (source of truth: src/interface/ffi/src/*.zig) ───────
+extern "gossamer" {
+  // Opaque, linear capability token.
+  type CapToken
 
-// Query the resource kind associated with a capability token.
-// Returns the resource kind ordinal (0-5), or 0xFFFFFFFF if invalid.
-// FFI: gossamer_cap_resource_kind(token) -> resource_kind
-fn resourceKind(token: I64): I32 =
-  __ffi("gossamer_cap_resource_kind", token)
+  // gossamer_cap_grant(resource_kind) -> token
+  fn gossamer_cap_grant(resourceKind: I32): CapToken
 
-// Revoke a capability token. CONSUMES it — no further use possible.
-// The token is added to a revocation set; future check() calls will fail.
-// FFI: gossamer_cap_revoke(token) -> void
-fn revoke(token: I64): () =
-  __ffi("gossamer_cap_revoke", token)
+  // Borrow ops — inspect the token without retiring it.
+  fn gossamer_cap_check(token: &CapToken): I32
+  fn gossamer_cap_resource_kind(token: &CapToken): I32
 
-// Set the maximum number of active capability tokens.
-// Default is 256. Increase for multi-panel apps with per-panel sandboxes.
-// Maximum is 4096. Returns the actual limit after clamping.
-// FFI: gossamer_cap_set_max(max) -> actual_max
-fn setCapMax(max: I32): I32 =
-  __ffi("gossamer_cap_set_max", max)
+  // Consuming op — retire the token (adds it to the revocation set).
+  fn gossamer_cap_revoke(token: CapToken): Unit
 
-// Query the current maximum capability registry size.
-// FFI: gossamer_cap_get_max() -> max
-fn getCapMax(): I32 =
-  __ffi("gossamer_cap_get_max")
+  // Handle-free registry configuration.
+  fn gossamer_cap_set_max(max: I32): I32
+  fn gossamer_cap_get_max(): I32
+  fn gossamer_set_max_inflight(max: I32): I32
+  fn gossamer_get_max_inflight(): I32
+}
 
-// Set the maximum number of concurrent async IPC calls.
-// Default is 256. Increase for high-concurrency apps. Maximum is 16384.
-// Returns the actual limit after clamping.
-// FFI: gossamer_set_max_inflight(max) -> actual_max
-fn setMaxInflight(max: I32): I32 =
-  __ffi("gossamer_set_max_inflight", max)
+// ── Idiomatic wrappers (public API) ────────────────────────────────────────
 
-// Query the current maximum inflight async IPC limit.
-// FFI: gossamer_get_max_inflight() -> max
-fn getMaxInflight(): I32 =
-  __ffi("gossamer_get_max_inflight")
+// Grant a capability token for the given resource kind (use the resource*
+// helpers above). Returns a linear token that MUST be revoked.
+pub fn grant(resourceKind: I32): CapToken = gossamer_cap_grant(resourceKind)
+
+// Check a token before a gated operation. Borrows it. 0 = ok, 10 = denied.
+pub fn check(token: &CapToken): I32 = gossamer_cap_check(token)
+
+// Query the resource kind bound to a token. Borrows it.
+pub fn tokenResourceKind(token: &CapToken): I32 = gossamer_cap_resource_kind(token)
+
+// Revoke a token. CONSUMES it.
+pub fn revoke(token: CapToken): Unit = gossamer_cap_revoke(token)
+
+pub fn setCapMax(max: I32): I32 = gossamer_cap_set_max(max)
+pub fn getCapMax(): I32 = gossamer_cap_get_max()
+pub fn setMaxInflight(max: I32): I32 = gossamer_set_max_inflight(max)
+pub fn getMaxInflight(): I32 = gossamer_get_max_inflight()
+
+// ── Linearity witness ──────────────────────────────────────────────────────
+// Grant a token, check it (borrow), then revoke it (consume). Drop the
+// `revoke(tok)` and `ephapax check` rejects the file: a granted capability
+// cannot be silently retained.
+fn session(): I32 =
+  let! tok = grant(resourceFilesystem())
+  let r = check(&tok)
+  let _u = revoke(tok)
+  r

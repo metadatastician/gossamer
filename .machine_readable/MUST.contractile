@@ -71,7 +71,7 @@
     (must "WebKitGTK backend must remain the rendering engine")
 
     ; Platform support
-    (must "platform-specific code must live in src/platform/*.eph only")
+    (must "platform-specific code must live in the Zig FFI layer (src/interface/ffi/src/webview_*.zig) only")
     (must "libgossamer.so shared library interface must remain stable")
 
     ; Safety guarantees
