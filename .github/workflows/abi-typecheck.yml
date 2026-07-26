@@ -33,6 +33,7 @@ on:
       - 'scripts/gen-abi-foreign.sh'
       - '.github/workflows/abi-typecheck.yml'
 permissions:
+  actions: read
   contents: read
 concurrency:
   group: abi-typecheck-${{ github.ref }}
