@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+#
+# gossamer.launcher.a2ml — per-app launcher config for Gossamer.
+# Compliant with launcher-standard.a2ml v0.3.0
+#
+# Gossamer: A linearly-typed webview shell
+
+[project]
+name         = "gossamer"
+display      = "Gossamer"
+description  = "A linearly-typed webview shell"
+categories   = ["Development", "System", "Utility"]
+version      = "0.1.0"
+license      = "MPL-2.0"
+
+[repo]
+# NOTE: repo-dir is resolved at runtime from the launcher script location.
+# Do NOT hardcode absolute paths. Leave empty or use relative paths.
+path = ""
+
+[runtime]
+# Gossamer CLI is a process-based application
+kind = "process"
+# Build with: just build-launcher-release
+startup-command-search = [
+    "{repo-dir}/cli/launcher/gossamer-launcher",
+    "{repo-dir}/cli/launcher/gossamer",
+    "gossamer-launcher",
+]
+# Per launcher-standard.a2ml [runtime] section:
+# PID files MUST use XDG_RUNTIME_DIR or TMPDIR, NEVER /tmp directly
+# Log files MUST use XDG_STATE_HOME, NEVER /tmp directly
+pid-file = "${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/gossamer.pid"
+log-file = "${XDG_STATE_HOME:-$HOME/.local/state}/gossamer/gossamer.log"
+wait-for-url-timeout-seconds = 10
+
+[version-output]
+# Per launcher-standard.a2ml [version-output] section
+first-line-format = "gossamer {version} ({build-sha-short}) [{platform}]"
+example = "gossamer 0.1.0 (abc1234) [linux-x86_64]"
+exit-code = 0
+
+[icon]
+source = "{repo-dir}/brand/icon-256.png"
