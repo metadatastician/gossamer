@@ -35,8 +35,6 @@ jobs:
     permissions:
       contents: read
       actions: read
-  actions: read
-  security-events: write
       security-events: write
     strategy:
       fail-fast: false
