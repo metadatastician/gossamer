@@ -29,7 +29,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
       - name: Detect E2E relevance
         id: changes
         run: |
@@ -90,6 +91,12 @@ jobs:
       - name: Run E2E test suite (includes Xvfb display tests)
         if: steps.changes.outputs.run == 'true'
         run: bash tests/e2e.sh
+
+      - name: Run FFI/ABI integration tests (headless)
+        if: steps.changes.outputs.run == 'true'
+        working-directory: src/interface/ffi
+        run: zig build test-integration
+
       - name: Skip E2E for docs-only changes
         if: steps.changes.outputs.run != 'true'
         run: echo "Docs-only change set; skipping E2E."

@@ -1,5 +1,6 @@
-// SPDX-License-Identifier: MPL-2.0
-// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+
 = Gossamer — CRG Audit (2026-04-18)
 Jonathan D.A. Jewell
 2026-04-18
@@ -98,7 +99,7 @@ Publication requires B+. Long alpha is discipline, not shame.
 | `.machine_readable/`, root
 
 | Remote
-| `git@github.com:hyperpolymath/gossamer.git` (origin) + 4 mirrors
+| `git@github.com:metadatastician/gossamer.git` (origin) + 4 mirrors
 | `git remote -v`
 |===
 

@@ -15,11 +15,12 @@ jobs:
   build:
     name: Build Artifacts
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 60
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
       - name: Build
         run: |
           echo "Build your artifacts here"
@@ -29,22 +30,24 @@ jobs:
           #   zig build -Doptimize=ReleaseFast
           #   gleam build
           #   mix release
-        # TODO: Upload build artifacts if needed
-        # - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        #   with:
-        #     name: release-artifacts
-        #     path: target/release/
+
+      # TODO: Upload build artifacts if needed
+      # - uses: actions/upload-artifact (SHA-pinned when re-enabled)
+      #   with:
+      #     name: release-artifacts
+      #     path: target/release/
+
   changelog:
     name: Generate Changelog
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 60
     permissions:
       contents: read
     outputs:
       changelog: ${{ steps.cliff.outputs.content }}
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
       - name: Extract version from tag
@@ -69,7 +72,7 @@ jobs:
         run: |
           git cliff --output CHANGELOG.md
       - name: Upload updated CHANGELOG.md
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: changelog
           path: CHANGELOG.md
@@ -78,18 +81,19 @@ jobs:
     name: Create GitHub Release
     needs: [build, changelog]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 60
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
       # TODO: Download build artifacts if uploading to the release
-      # - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      # - uses: actions/download-artifact (SHA-pinned when re-enabled)
       #   with:
       #     name: release-artifacts
       #     path: artifacts/
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v2
         with:
           body: ${{ needs.changelog.outputs.changelog }}
           draft: false

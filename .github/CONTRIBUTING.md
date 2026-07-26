@@ -3,7 +3,7 @@ SPDX-License-Identifier: MPL-2.0
 Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 -->
 # Clone the repository
-git clone https://github.com/hyperpolymath/gossamer.git
+git clone https://github.com/metadatastician/gossamer.git
 cd gossamer
 
 # Using Nix (recommended for reproducibility)
@@ -95,10 +95,10 @@ Use the [feature request template](.github/ISSUE_TEMPLATE/feature_request.md) an
 
 Look for issues labelled:
 
-- [`good first issue`](https://github.com/hyperpolymath/gossamer/labels/good%20first%20issue) — Simple Perimeter 3 tasks
-- [`help wanted`](https://github.com/hyperpolymath/gossamer/labels/help%20wanted) — Community help needed
-- [`documentation`](https://github.com/hyperpolymath/gossamer/labels/documentation) — Docs improvements
-- [`perimeter-3`](https://github.com/hyperpolymath/gossamer/labels/perimeter-3) — Community sandbox scope
+- [`good first issue`](https://github.com/metadatastician/gossamer/labels/good%20first%20issue) — Simple Perimeter 3 tasks
+- [`help wanted`](https://github.com/metadatastician/gossamer/labels/help%20wanted) — Community help needed
+- [`documentation`](https://github.com/metadatastician/gossamer/labels/documentation) — Docs improvements
+- [`perimeter-3`](https://github.com/metadatastician/gossamer/labels/perimeter-3) — Community sandbox scope
 
 ---
 

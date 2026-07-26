@@ -25,6 +25,7 @@ module Gossamer.ABI.Foreign
 
 import Gossamer.ABI.Types
 import Gossamer.ABI.Layout
+import Gossamer.ABI.TransmuteStateMachine
 
 %default total
 
@@ -183,6 +184,53 @@ prim__resize : Bits64 -> Bits32 -> Bits32 -> PrimIO Bits32
 export
 resize : WebviewHandle -> (width : Bits32) -> (height : Bits32) -> IO Result
 resize h w ht = do n <- primIO (prim__resize (webviewPtr h) w ht); pure (resOf n)
+
+--------------------------------------------------------------------------------
+-- Transmute  (runtime rendering-mode switching)
+--------------------------------------------------------------------------------
+
+export
+%foreign "C:gossamer_transmute, libgossamer"
+prim__transmute : Bits64 -> Bits32 -> PrimIO Bits32
+
+export
+%foreign "C:gossamer_transmute_get, libgossamer"
+prim__transmuteGet : Bits64 -> PrimIO Bits32
+
+||| Switch the window's rendering mode. Main-thread-bound: every mode change
+||| evaluates JavaScript in the webview (same rationale as `create`).
+|||
+||| The runtime enforces the transition relation proved in
+||| Gossamer.ABI.TransmuteStateMachine: an illegal transition (e.g.
+||| panll_attach -> gui without releasing the panel slot) returns
+||| InvalidParam and leaves the stored mode untouched.
+export
+transmute : {auto prf : MainThreadProof}
+         -> WebviewHandle -> TransmuteMode -> IO Result
+transmute h m = do
+  n <- primIO (prim__transmute (webviewPtr h) (transmuteModeToInt m))
+  pure (resOf n)
+
+||| Statically-witnessed transmute for flows where the current mode is known
+||| at compile time: the erased `TransmuteTransition from to` auto-implicit
+||| makes an illegal request a COMPILE error rather than a runtime rejection.
+||| (The runtime still re-checks — the witness only rules out writing the
+||| illegal call in the first place.)
+export
+transmuteFrom : {auto prf : MainThreadProof}
+             -> WebviewHandle
+             -> (from, to : TransmuteMode)
+             -> {auto 0 legal : TransmuteTransition from to}
+             -> IO Result
+transmuteFrom h _ to = transmute h to
+
+||| Current transmute mode (Nothing on error / unregistered window — the C
+||| side returns -1, which decodes to Nothing via transmuteModeFromInt).
+export
+transmuteGet : WebviewHandle -> IO (Maybe TransmuteMode)
+transmuteGet h = do
+  n <- primIO (prim__transmuteGet (webviewPtr h))
+  pure (transmuteModeFromInt n)
 
 --------------------------------------------------------------------------------
 -- Channels

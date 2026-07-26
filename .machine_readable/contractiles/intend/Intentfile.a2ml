@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: MPL-2.0
+# Intentfile — North-star contract for Gossamer
+# Author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+#
+# Committed next-actions ([[intents]]) and horizon aspirations ([[wishes]]).
+# Non-gating — this is a progress report, not a hard gate.
+# Run with: contractile intend run
+
+@abstract:
+North-star progress tracker for Gossamer — a linearly-typed webview shell with
+provable resource safety. Tracks committed next-actions (Android CI pipeline,
+arXiv submission, IDApTIK migration) and horizon aspirations (WASM ABI, L4 dyadic
+mode integration, PanLL panel hosting).
+@end
+
+## Intents — Committed Next-Actions
+
+### arxiv-submission
+- description: Submit gossamer-arxiv-paper.tex to arXiv cs.PL / cs.SE via OU .ac.uk email
+- probe: test -f docs/whitepapers/gossamer-arxiv-paper.tex
+- status: in_progress
+- notes: "Zenodo draft 19535676 already published as preprint. Awaiting institutional endorsement path."
+- target_date: "2026-Q3"
+
+### android-ndk-ci
+- description: NDK CI runner to build libgossamer.so per ABI (arm64-v8a, armeabi-v7a, x86_64) + emulator smoke test
+- probe: "grep -q 'test-android' .github/workflows/ci.yml 2>/dev/null || false"
+- status: declared
+- notes: "Raised as issue after 2026-06-02 Android session. webview_android.zig + jni.zig landed; CI build not yet wired."
+- target_date: "2026-Q3"
+
+### android-apk-pipeline
+- description: APK/AAB assembly + signing pipeline (aapt2/d8/r8/apksigner, gradle-free)
+- probe: "test -f android/build.sh || test -f android/Justfile"
+- status: declared
+- notes: "Companion to NDK CI. Gradle-free constraint."
+- target_date: "2026-Q3"
+
+### ios-appstore-signing
+- description: App Store packaging, code signing, and notarisation for iOS
+- probe: "test -f packaging/ios/sign.sh || false"
+- status: declared
+- notes: "Required to publish to App Store. UIScreen.mainScreen.bounds fix already landed (2026-04-03)."
+- target_date: "2026-Q4"
+
+### idaptik-desktop-migration
+- description: Replace Tauri with Gossamer for IDApTIK desktop builds
+- probe: "false"
+- status: declared
+- notes: "Staging decision required. Gossamer is the designated Tauri replacement per reanchor 2026-06-03."
+
+## Wishes — Horizon Aspirations
+
+### ephapax-region-modelling
+- description: Model long-lived Android Service handles in Ephapax region calculus (cross-region Service→Widget refs)
+- horizon: near
+- why: "Service handles outlive Activity bounds; region calculus must account for cross-lifecycle refs."
+- status: declared
+
+### wasm-abi-target
+- description: Compile Gossamer ABI proofs against typed-wasm target (shared surface with AffineScript)
+- horizon: mid
+- why: "typed-wasm is the shared compile target; making ABI proofs target-agnostic opens Gossamer to WASM deployment."
+- status: declared
+
+### panll-panel-hosting
+- description: PanLL panels running inside Gossamer webviews (full dogfooding of the panel/shell relationship)
+- horizon: mid
+- why: "ECOSYSTEM.a2ml lists PanLL as dependent; the integration is the primary value proposition."
+- status: declared
+
+### crg-b-grade
+- description: Achieve CRG B (formal CI green on all toolchains, no failing gates)
+- horizon: near
+- why: "CRG C achieved 2026-04-25 (16 README.adoc files). B requires green CI + no outstanding governance flags."
+- status: in_progress
+
+### affinescript-frontend-binding
+- description: AffineScript frontend (@gossamer/api) used in a real shipped app (not just bindings/)
+- horizon: mid
+- why: "bindings/affinescript/ landed 2026-06-02 (PR #73/#74); first real consumer would prove the API."
+- status: declared

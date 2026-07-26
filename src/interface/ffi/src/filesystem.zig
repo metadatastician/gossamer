@@ -19,7 +19,7 @@ const main = @import("main.zig");
 /// Validates the capability token is active and of type FileSystem (kind=0).
 ///
 /// Returns null on error (check gossamer_last_error).
-export fn gossamer_fs_read_text(
+pub export fn gossamer_fs_read_text(
     path: [*:0]const u8,
     cap_token: u64,
 ) ?[*:0]u8 {
@@ -66,7 +66,7 @@ export fn gossamer_fs_read_text(
 /// Validates the capability token is active and of type FileSystem (kind=0).
 ///
 /// Returns Result (0=ok, 1=error, 10=capability_denied).
-export fn gossamer_fs_write_text(
+pub export fn gossamer_fs_write_text(
     path: [*:0]const u8,
     contents: [*:0]const u8,
     cap_token: u64,
@@ -104,7 +104,7 @@ export fn gossamer_fs_write_text(
 /// Validates the capability token is active and of type FileSystem (kind=0).
 ///
 /// Returns 1 (exists), 0 (does not exist), or 0xFFFFFFFF on error.
-export fn gossamer_fs_exists(
+pub export fn gossamer_fs_exists(
     path: [*:0]const u8,
     cap_token: u64,
 ) u32 {
@@ -128,7 +128,7 @@ export fn gossamer_fs_exists(
 /// Returns a null-terminated C string (caller frees), or null on error.
 ///
 /// Validates the capability token is active and of type FileSystem (kind=0).
-export fn gossamer_fs_list_dir(
+pub export fn gossamer_fs_list_dir(
     path: [*:0]const u8,
     cap_token: u64,
 ) ?[*:0]u8 {
@@ -180,7 +180,7 @@ export fn gossamer_fs_list_dir(
 /// Remove a file. Directories are not removed (use gossamer_fs_remove_dir).
 ///
 /// Validates the capability token is active and of type FileSystem (kind=0).
-export fn gossamer_fs_remove(
+pub export fn gossamer_fs_remove(
     path: [*:0]const u8,
     cap_token: u64,
 ) main.Result {
@@ -205,7 +205,7 @@ export fn gossamer_fs_remove(
 /// Succeeds when the directory already exists.
 ///
 /// Validates the capability token is active and of type FileSystem (kind=0).
-export fn gossamer_fs_mkdir_p(
+pub export fn gossamer_fs_mkdir_p(
     path: [*:0]const u8,
     cap_token: u64,
 ) main.Result {
@@ -242,7 +242,7 @@ export fn gossamer_fs_mkdir_p(
 /// gossamer_fs_mkdir_p first if needed.
 ///
 /// Validates the capability token is active and of type FileSystem (kind=0).
-export fn gossamer_fs_copy_file(
+pub export fn gossamer_fs_copy_file(
     src: [*:0]const u8,
     dst: [*:0]const u8,
     cap_token: u64,
