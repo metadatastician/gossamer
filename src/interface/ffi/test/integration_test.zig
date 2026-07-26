@@ -19,15 +19,25 @@ const std = @import("std");
 const testing = std.testing;
 
 // Primary module — all main.zig exports accessible via gossamer.*
-const gossamer = @import("../src/main.zig");
+// Imported as the named "gossamer" module (wired in build.zig): Zig 0.15
+// forbids a test/-rooted module from importing ../src/*.zig directly.
+const gossamer = @import("gossamer");
 const Result = gossamer.Result;
 
-// Sub-module imports — functions exported from these modules are reachable
-// through the shared library; for test builds we import directly.
-const csp_mod = @import("../src/csp.zig");
-const fs_mod = @import("../src/filesystem.zig");
-const ssg_mod = @import("../src/ssg.zig");
-const groove_mod = @import("../src/groove.zig");
+// Sub-modules reached through the gossamer module's re-exports (main.zig).
+const csp_mod = gossamer.csp;
+const fs_mod = gossamer.filesystem;
+const ssg_mod = gossamer.ssg;
+const groove_mod = gossamer.groove;
+
+// Test helper: a byte-zeroed GossamerHandle (invalid — null internal pointer).
+// Zig 0.15's std.mem.zeroes rejects the struct's non-nullable pointer field, so
+// we zero the raw bytes instead — same intent: a handle that must be rejected.
+fn zeroedHandle() gossamer.GossamerHandle {
+    var h: gossamer.GossamerHandle = undefined;
+    @memset(std.mem.asBytes(&h), 0);
+    return h;
+}
 
 //==============================================================================
 // Result Code Alignment Tests
@@ -48,10 +58,12 @@ test "result codes match Idris2 ABI (Types.idr resultToInt)" {
     try testing.expectEqual(@as(c_int, 10), @intFromEnum(Result.capability_denied));
 }
 
-test "result enum has exactly 11 variants" {
-    // Ensures no accidental additions/removals without updating Types.idr
+test "result enum has exactly 12 variants" {
+    // Ensures no accidental additions/removals without updating Types.idr.
+    // 12 variants (0..=11): ok..guard_locked — matches Types.idr resultToInt,
+    // verified with idris2 --typecheck of the ABI package.
     const fields = @typeInfo(Result).@"enum".fields;
-    try testing.expectEqual(@as(usize, 11), fields.len);
+    try testing.expectEqual(@as(usize, 12), fields.len);
 }
 
 //==============================================================================
@@ -179,7 +191,7 @@ test "cap_grant returns non-zero token for valid resource kinds" {
 
 test "cap_grant rejects invalid resource kind" {
     // Resource kinds > 5 are invalid (Types.idr has 6 constructors: 0-5)
-    const CAP_ERROR = @import("../src/main.zig").CAP_ERROR;
+    const CAP_ERROR = gossamer.CAP_ERROR;
     try testing.expectEqual(CAP_ERROR, gossamer.gossamer_cap_grant(6));
     try testing.expectEqual(CAP_ERROR, gossamer.gossamer_cap_grant(255));
 }
@@ -254,22 +266,24 @@ test "last_error contains meaningful message" {
 //==============================================================================
 
 test "tray_create returns 0 (not yet implemented)" {
-    const tray = gossamer.gossamer_tray_create("Test");
+    const tray = gossamer.tray.gossamer_tray_create("Test");
     try testing.expectEqual(@as(u64, 0), tray);
 }
 
-test "notify returns error (not yet implemented)" {
-    const result = gossamer.gossamer_notify("Title", "Body");
-    try testing.expectEqual(Result.@"error", result);
+test "notify returns error when no notification daemon is reachable" {
+    // gossamer_notify returns u32 (0 = ok, 1 = error). In a headless test
+    // environment (no notify-send / notification portal) it returns error.
+    const result = gossamer.tray.gossamer_notify("Title", "Body");
+    try testing.expectEqual(@as(u32, 1), result); // 1 = Result.@"error"
 }
 
 test "dialog_open returns 0 (not yet implemented)" {
-    const dialog = gossamer.gossamer_dialog_open("Open", "*");
+    const dialog = gossamer.dialog.gossamer_dialog_open("Open", "*");
     try testing.expectEqual(@as(u64, 0), dialog);
 }
 
 test "dialog_save returns 0 (not yet implemented)" {
-    const dialog = gossamer.gossamer_dialog_save("Save", "*");
+    const dialog = gossamer.dialog.gossamer_dialog_save("Save", "*");
     try testing.expectEqual(@as(u64, 0), dialog);
 }
 
@@ -278,18 +292,18 @@ test "dialog_save returns 0 (not yet implemented)" {
 //==============================================================================
 
 test "clipboard_write rejects null pointer" {
-    const result = gossamer.gossamer_clipboard_write(null);
+    const result = gossamer.clipboard.gossamer_clipboard_write(null);
     try testing.expectEqual(@as(c_int, @intFromEnum(Result.invalid_param)), result);
 }
 
 test "clipboard_read rejects null buffer" {
-    const result = gossamer.gossamer_clipboard_read(null, 256);
+    const result = gossamer.clipboard.gossamer_clipboard_read(null, 256);
     try testing.expectEqual(@as(c_int, -1), result);
 }
 
 test "clipboard_read rejects zero length" {
     var buf: [1]u8 = undefined;
-    const result = gossamer.gossamer_clipboard_read(&buf, 0);
+    const result = gossamer.clipboard.gossamer_clipboard_read(&buf, 0);
     try testing.expectEqual(@as(c_int, -1), result);
 }
 
@@ -298,7 +312,7 @@ test "clipboard_read with valid buffer and no display returns -1 or 0+" {
     // With a display, we get 0 (empty clipboard) or >0 (clipboard has text).
     // Either way it must not crash.
     var buf: [256]u8 = undefined;
-    const result = gossamer.gossamer_clipboard_read(&buf, buf.len);
+    const result = gossamer.clipboard.gossamer_clipboard_read(&buf, buf.len);
     try testing.expect(result >= -1);
 }
 
@@ -306,7 +320,7 @@ test "clipboard_write with valid text and no display returns error or ok" {
     // In headless CI, GTK init will fail so we get error.
     // With a display, we get ok.
     // Either way it must not crash.
-    const result = gossamer.gossamer_clipboard_write("gossamer clipboard test");
+    const result = gossamer.clipboard.gossamer_clipboard_write("gossamer clipboard test");
     try testing.expect(result == @intFromEnum(Result.ok) or result == @intFromEnum(Result.@"error"));
 }
 
@@ -349,7 +363,7 @@ test "guard_set invalid mode on fake handle returns invalid_param" {
     // touching platform state, so invalid_param is returned without a crash.
     // We pass a raw stack address; the handle check calls ptrFromU64 which only
     // verifies non-zero, so we must supply a real initialized struct.
-    var fake_handle = std.mem.zeroes(gossamer.GossamerHandle);
+    var fake_handle = zeroedHandle();
     fake_handle.initialized = true;
     fake_handle.closed = false;
     fake_handle.guard = .free;
@@ -386,7 +400,7 @@ test "registry_count returns a value in 0..64" {
 
 test "registry_count monotonicity: add increases count" {
     // Create a fake initialized handle to add to the registry
-    var fake_handle = std.mem.zeroes(gossamer.GossamerHandle);
+    var fake_handle = zeroedHandle();
     fake_handle.initialized = true;
     fake_handle.closed = false;
     fake_handle.allocator = std.heap.c_allocator;
@@ -585,7 +599,7 @@ test "transmute mode ordinals match ABI spec" {
 
 test "transmute with invalid mode on fake handle returns invalid_param" {
     // Supply a real initialized handle struct to trigger the mode validation path
-    var fake_handle = std.mem.zeroes(gossamer.GossamerHandle);
+    var fake_handle = zeroedHandle();
     fake_handle.initialized = true;
     fake_handle.closed = false;
     fake_handle.allocator = std.heap.c_allocator;
@@ -597,6 +611,187 @@ test "transmute with invalid mode on fake handle returns invalid_param" {
     try testing.expectEqual(Result.invalid_param, result);
 
     fake_handle.bindings.deinit();
+}
+
+// The transition relation is proved in
+// src/interface/abi/TransmuteStateMachine.idr (validSound/validComplete);
+// gossamer.validTransition mirrors validTransmute arm-for-arm. This matrix
+// is the THIRD, independent encoding of the same 36 pairs — if either mirror
+// drifts from the spec, this table catches it.
+test "transmute validTransition matrix matches the Idris relation" {
+    const M = gossamer.TransmuteMode;
+    const gui = M.gui;
+    const tui = M.tui;
+    const cli = M.cli;
+    const exp = M.terminal_export;
+    const att = M.panll_attach;
+    const det = M.panll_detach;
+
+    const Case = struct { from: M, to: M, legal: bool };
+    // All 36 ordered pairs, hand-enumerated from the proof module.
+    const matrix = [36]Case{
+        .{ .from = gui, .to = gui, .legal = true }, // SelfLoop gui
+        .{ .from = gui, .to = tui, .legal = true }, // GuiToTui
+        .{ .from = gui, .to = cli, .legal = true }, // GuiToCli
+        .{ .from = gui, .to = exp, .legal = true }, // GuiToExport
+        .{ .from = gui, .to = att, .legal = true }, // GuiToAttach
+        .{ .from = gui, .to = det, .legal = true }, // GuiToDetach
+        .{ .from = tui, .to = gui, .legal = true }, // TuiToGui
+        .{ .from = tui, .to = tui, .legal = true }, // SelfLoop tui
+        .{ .from = tui, .to = cli, .legal = false }, // noTuiToCli
+        .{ .from = tui, .to = exp, .legal = false },
+        .{ .from = tui, .to = att, .legal = false }, // noTuiToAttach
+        .{ .from = tui, .to = det, .legal = true }, // TuiToDetach
+        .{ .from = cli, .to = gui, .legal = true }, // CliToGui
+        .{ .from = cli, .to = tui, .legal = false }, // noCliToTui
+        .{ .from = cli, .to = cli, .legal = true }, // SelfLoop cli
+        .{ .from = cli, .to = exp, .legal = false },
+        .{ .from = cli, .to = att, .legal = false },
+        .{ .from = cli, .to = det, .legal = true }, // CliToDetach
+        .{ .from = exp, .to = gui, .legal = true }, // ExportToGui
+        .{ .from = exp, .to = tui, .legal = false },
+        .{ .from = exp, .to = cli, .legal = false },
+        .{ .from = exp, .to = exp, .legal = true }, // SelfLoop terminal_export
+        .{ .from = exp, .to = att, .legal = false },
+        .{ .from = exp, .to = det, .legal = true }, // ExportToDetach
+        .{ .from = att, .to = gui, .legal = false }, // noAttachToGui (bracket!)
+        .{ .from = att, .to = tui, .legal = false }, // noAttachToTui
+        .{ .from = att, .to = cli, .legal = false },
+        .{ .from = att, .to = exp, .legal = false },
+        .{ .from = att, .to = att, .legal = true }, // SelfLoop panll_attach
+        .{ .from = att, .to = det, .legal = true }, // AttachToDetach
+        .{ .from = det, .to = gui, .legal = true }, // DetachToGui
+        .{ .from = det, .to = tui, .legal = false },
+        .{ .from = det, .to = cli, .legal = false },
+        .{ .from = det, .to = exp, .legal = false },
+        .{ .from = det, .to = att, .legal = false }, // noDetachToAttach
+        .{ .from = det, .to = det, .legal = true }, // SelfLoop panll_detach
+    };
+
+    var legal_count: usize = 0;
+    for (matrix) |c| {
+        try testing.expectEqual(c.legal, gossamer.validTransition(c.from, c.to));
+        if (c.legal) legal_count += 1;
+    }
+    // 19 of 36 pairs are legal (proved: validSound/validComplete cover all).
+    try testing.expectEqual(@as(usize, 19), legal_count);
+}
+
+test "transmute self-loop is accepted and effect-free" {
+    var fake_handle = zeroedHandle();
+    fake_handle.initialized = true;
+    fake_handle.closed = false;
+    fake_handle.allocator = std.heap.c_allocator;
+    fake_handle.bindings = std.StringHashMap(gossamer.BindingEntry).init(std.heap.c_allocator);
+    defer fake_handle.bindings.deinit();
+    const hptr: u64 = @intFromPtr(&fake_handle);
+
+    const id = gossamer.gossamer_registry_add(hptr);
+    try testing.expect(id > 0);
+    defer gossamer.gossamer_registry_remove(hptr);
+
+    // Fresh registration starts in gui. Re-requesting gui is the SelfLoop:
+    // accepted, and returns BEFORE any JS/groove effect — this test passing
+    // headless (no display, fake webview) is itself the proof of that.
+    try testing.expectEqual(Result.ok, gossamer.gossamer_transmute(hptr, 0));
+    try testing.expectEqual(@as(c_int, 0), gossamer.gossamer_transmute_get(hptr));
+}
+
+test "transmute illegal transition returns invalid_param and preserves mode" {
+    var fake_handle = zeroedHandle();
+    fake_handle.initialized = true;
+    fake_handle.closed = false;
+    fake_handle.allocator = std.heap.c_allocator;
+    fake_handle.bindings = std.StringHashMap(gossamer.BindingEntry).init(std.heap.c_allocator);
+    defer fake_handle.bindings.deinit();
+    const hptr: u64 = @intFromPtr(&fake_handle);
+
+    const id = gossamer.gossamer_registry_add(hptr);
+    try testing.expect(id > 0);
+    defer gossamer.gossamer_registry_remove(hptr);
+
+    // Inject "currently in tui" (headless tests cannot run the tui JS).
+    const slot = gossamer.getTransmuteSlot(&fake_handle).?;
+    gossamer.transmute_modes[slot] = .tui;
+
+    // tui -> cli is illegal (noTuiToCli in the proof): rejected, mode kept.
+    try testing.expectEqual(Result.invalid_param, gossamer.gossamer_transmute(hptr, 2));
+    try testing.expectEqual(@as(c_int, 1), gossamer.gossamer_transmute_get(hptr));
+
+    // The rejection names the transition (surfaced to IPC clients).
+    const err = gossamer.gossamer_last_error() orelse return error.MissingError;
+    try testing.expect(std.mem.indexOf(u8, std.mem.span(err), "Illegal transmute transition") != null);
+    try testing.expect(std.mem.indexOf(u8, std.mem.span(err), "tui -> cli") != null);
+}
+
+test "transmute panll_attach without PanLL fails and does not record mode" {
+    var fake_handle = zeroedHandle();
+    fake_handle.initialized = true;
+    fake_handle.closed = false;
+    fake_handle.allocator = std.heap.c_allocator;
+    fake_handle.bindings = std.StringHashMap(gossamer.BindingEntry).init(std.heap.c_allocator);
+    defer fake_handle.bindings.deinit();
+    const hptr: u64 = @intFromPtr(&fake_handle);
+
+    const id = gossamer.gossamer_registry_add(hptr);
+    try testing.expect(id > 0);
+    defer gossamer.gossamer_registry_remove(hptr);
+
+    // gui -> panll_attach is LEGAL, but attach ACQUIRES an external panel
+    // slot: with no PanLL groove connected (headless — groove target 4 is
+    // not_found, send fails fast, no network), the call must fail and the
+    // stored mode must stay gui (B2: mode never desyncs from reality).
+    try testing.expectEqual(Result.@"error", gossamer.gossamer_transmute(hptr, 4));
+    try testing.expectEqual(@as(c_int, 0), gossamer.gossamer_transmute_get(hptr));
+}
+
+test "registry slot reuse resets transmute mode" {
+    var handle_a = zeroedHandle();
+    handle_a.initialized = true;
+    handle_a.closed = false;
+    handle_a.allocator = std.heap.c_allocator;
+    handle_a.bindings = std.StringHashMap(gossamer.BindingEntry).init(std.heap.c_allocator);
+    defer handle_a.bindings.deinit();
+    const aptr: u64 = @intFromPtr(&handle_a);
+
+    const id_a = gossamer.gossamer_registry_add(aptr);
+    try testing.expect(id_a > 0);
+
+    // Leave window A "in tui", then unregister it (B7: the slot must not
+    // carry the stale mode to its next occupant).
+    const slot_a = gossamer.getTransmuteSlot(&handle_a).?;
+    gossamer.transmute_modes[slot_a] = .tui;
+    gossamer.gossamer_registry_remove(aptr);
+
+    var handle_b = zeroedHandle();
+    handle_b.initialized = true;
+    handle_b.closed = false;
+    handle_b.allocator = std.heap.c_allocator;
+    handle_b.bindings = std.StringHashMap(gossamer.BindingEntry).init(std.heap.c_allocator);
+    defer handle_b.bindings.deinit();
+    const bptr: u64 = @intFromPtr(&handle_b);
+
+    const id_b = gossamer.gossamer_registry_add(bptr);
+    try testing.expect(id_b > 0);
+    defer gossamer.gossamer_registry_remove(bptr);
+
+    // B reuses A's slot (first-free scan) and must start pristine in gui.
+    try testing.expectEqual(slot_a, gossamer.getTransmuteSlot(&handle_b).?);
+    try testing.expectEqual(@as(c_int, 0), gossamer.gossamer_transmute_get(bptr));
+}
+
+test "transmute on open but unregistered handle returns error" {
+    var fake_handle = zeroedHandle();
+    fake_handle.initialized = true;
+    fake_handle.closed = false;
+    fake_handle.allocator = std.heap.c_allocator;
+    fake_handle.bindings = std.StringHashMap(gossamer.BindingEntry).init(std.heap.c_allocator);
+    defer fake_handle.bindings.deinit();
+    const hptr: u64 = @intFromPtr(&fake_handle);
+
+    // Never registered: legal-looking request still fails with a clear error.
+    try testing.expectEqual(Result.@"error", gossamer.gossamer_transmute(hptr, 5));
+    try testing.expectEqual(@as(c_int, -1), gossamer.gossamer_transmute_get(hptr));
 }
 
 //==============================================================================
@@ -623,7 +818,7 @@ test "activity level ordinals match ABI spec" {
 }
 
 test "activity_set with invalid level on fake handle returns invalid_param" {
-    var fake_handle = std.mem.zeroes(gossamer.GossamerHandle);
+    var fake_handle = zeroedHandle();
     fake_handle.initialized = true;
     fake_handle.closed = false;
     fake_handle.allocator = std.heap.c_allocator;
@@ -1508,7 +1703,7 @@ test "boundary: registry count never exceeds 64 after multiple add/remove cycles
     // Register and deregister multiple fake handles in a loop
     var handles: [8]gossamer.GossamerHandle = undefined;
     for (&handles) |*h| {
-        h.* = std.mem.zeroes(gossamer.GossamerHandle);
+        h.* = zeroedHandle();
         h.initialized = true;
         h.closed = false;
         h.allocator = std.heap.c_allocator;
@@ -1536,7 +1731,7 @@ test "boundary: registry count never exceeds 64 after multiple add/remove cycles
 // Plugin System Tests (plugin.zig)
 //==============================================================================
 
-const plugin_mod = @import("../src/plugin.zig");
+const plugin_mod = gossamer.plugin;
 
 test "plugin_load with null handle returns 0" {
     plugin_mod.resetForTesting();
@@ -1555,7 +1750,7 @@ test "plugin_load with nonexistent library path returns 0" {
     plugin_mod.resetForTesting();
 
     // Create a stack-allocated fake handle with initialized=true, closed=false
-    var fake_handle = std.mem.zeroes(gossamer.GossamerHandle);
+    var fake_handle = zeroedHandle();
     fake_handle.initialized = true;
     fake_handle.closed = false;
     fake_handle.allocator = std.heap.c_allocator;

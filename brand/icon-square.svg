@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Transparent background: mark only, for favicon / app icon / overlay -->
+
+  <!-- Native window frame: the OS webview the shell wraps -->
+  <rect x="128" y="148" width="256" height="232" rx="18" fill="none" stroke="#94a3b8" stroke-width="6" opacity="0.45"/>
+  <line x1="128" y1="188" x2="384" y2="188" stroke="#94a3b8" stroke-width="4" opacity="0.45"/>
+
+  <!-- Gossamer filament (let! — exactly once): one unbroken strand tracing three edges, exiting once -->
+  <path d="M 96,218 L 128,218 L 128,380 L 384,380 L 384,148 L 416,148"
+        fill="none" stroke="#cbd5e1" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"
+        filter="url(#glow)"/>
+  <circle cx="96" cy="218" r="11" fill="#cbd5e1" filter="url(#glow)"/>
+  <path d="M 416,148 l -20,-13 l 0,26 z" fill="#cbd5e1" filter="url(#glow)"/>
+  <circle cx="256" cy="380" r="6" fill="#cbd5e1" opacity="0.55"/>
+</svg>

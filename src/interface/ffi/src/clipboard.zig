@@ -130,7 +130,16 @@ const unsupported_clipboard = struct {
 };
 
 /// Compile-time platform dispatch for clipboard backend.
-const backend = switch (builtin.os.tag) {
+///
+/// Android reports `os.tag == .linux` (it runs a Linux kernel) but ships no
+/// GTK, so it is routed to the unsupported-platform stub BEFORE the os-tag
+/// switch — exactly as main.zig guards the webview backend with
+/// `abi == .android`. The comptime `if` means the `gtk_clipboard` struct (and
+/// its `@cImport("gtk/gtk.h")`) is never referenced, hence never analysed, on
+/// an Android target.
+const backend = if (builtin.abi == .android)
+    unsupported_clipboard
+else switch (builtin.os.tag) {
     .linux, .freebsd, .openbsd, .netbsd => gtk_clipboard,
     else => unsupported_clipboard,
 };
@@ -148,7 +157,7 @@ const backend = switch (builtin.os.tag) {
 /// Null-safety: returns -1 (invalid_param) if buf is null or buf_len is 0.
 ///
 /// Matches ABI: Gossamer.ABI.Types.ResourceKind.Clipboard (kind = 3)
-export fn gossamer_clipboard_read(buf: ?[*]u8, buf_len: usize) callconv(.c) c_int {
+pub export fn gossamer_clipboard_read(buf: ?[*]u8, buf_len: usize) callconv(.c) c_int {
     if (buf == null or buf_len == 0) {
         setError("Clipboard read: null buffer or zero length");
         return -1;
@@ -165,7 +174,7 @@ export fn gossamer_clipboard_read(buf: ?[*]u8, buf_len: usize) callconv(.c) c_in
 /// Null-safety: returns invalid_param if text is null.
 ///
 /// Matches ABI: Gossamer.ABI.Types.ResourceKind.Clipboard (kind = 3)
-export fn gossamer_clipboard_write(text: ?[*:0]const u8) callconv(.c) c_int {
+pub export fn gossamer_clipboard_write(text: ?[*:0]const u8) callconv(.c) c_int {
     if (text == null) {
         setError("Clipboard write: null text pointer");
         return @intFromEnum(Result.invalid_param);

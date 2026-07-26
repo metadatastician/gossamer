@@ -55,7 +55,7 @@ perfective = 10   # % for SPDX headers, doc updates, formatting, style
 # Customise this per project — the template default is generic.
 
 [methodology.unique-strength]
-description = "{{PROJECT_UNIQUE_STRENGTH}}"
+description = "Compiler-proven desktop resource safety: webview handles, IPC message shapes, and permissions are enforced by the Idris2 linear-type ABI and the Ephapax region calculus at compile time — leaked handles and permission bypasses are compile errors, not runtime incidents. No garbage collector; deterministic region-based cleanup."
 deepen-not-broaden = true
 
 # ============================================================================

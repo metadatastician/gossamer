@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+#
+# pre-push — local Dogfood Gate.
+#
+# Runs the SAME A2ML + K9 validators the CI Dogfood Gate runs, but here on
+# your machine before the push leaves, so format drift is caught in seconds
+# instead of surfacing as red CI minutes later. The vendored validators in
+# this directory are byte-identical to the pinned CI action scripts and are
+# refreshed by the estate `refresh-githooks` sweep.
+#
+# Enable once per clone:
+#     git config core.hooksPath .githooks
+#   (or run: .githooks/install.sh)
+#
+# Override for an emergency push:  git push --no-verify
+#
+# The hook is skipped gracefully if bash-only tooling is unavailable.
+
+set -euo pipefail
+
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+status=0
+
+run() {
+  local label="$1" script="$2"
+  if [ ! -f "$HOOK_DIR/$script" ]; then
+    echo "[pre-push] ($label) validator missing: $script — skipping" >&2
+    return 0
+  fi
+  echo "[pre-push] $label…"
+  if ! INPUT_PATH="$REPO_ROOT" INPUT_STRICT=false bash "$HOOK_DIR/$script"; then
+    status=1
+  fi
+}
+
+run "A2ML manifests" "validate-a2ml.sh"
+run "K9 contracts"    "validate-k9.sh"
+
+if [ "$status" -ne 0 ]; then
+  echo "" >&2
+  echo "[pre-push] BLOCKED: A2ML/K9 validation failed (see errors above)." >&2
+  echo "[pre-push] Fix the files, or override with:  git push --no-verify" >&2
+  exit 1
+fi
+
+echo "[pre-push] Dogfood Gate passed."
+exit 0

@@ -46,6 +46,12 @@ Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 - [ ] CI/CD automated test pipeline
 - [ ] Fuzz testing for IPC message parsing
 - [ ] Mobile platform tests (iOS/Android real devices)
+- [ ] Transmute DOM readback assertions: the display tests drive the real
+      transform/restore JS and assert on result codes + stored mode, but GTK's
+      `run_javascript` is fire-and-forget — there is no sync eval-readback in
+      the ABI to assert the post-transform DOM content itself. Needs an
+      emit/channel pump (subscribe to the `transmuted` JS event and read the
+      DOM state back over the IPC channel).
 
 ## Run Tests
 
