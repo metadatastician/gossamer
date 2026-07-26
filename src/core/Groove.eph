@@ -3,21 +3,24 @@
 //
 // Gossamer.Groove — Lightweight capability discovery for composable integration.
 //
-// A "groove" is a bidirectional capability interface between two systems.
-// Each system works standalone but enhances the other when co-present.
-// Grooves are panel-optional: they work headless, but CAN power PanLL panels.
+// A "groove" is a bidirectional capability interface between two systems. Each
+// works standalone but enhances the other when co-present. Grooves are
+// panel-optional: they work headless but CAN power PanLL panels.
 //
-// The Idris2 ABI (Groove.idr) provides formal proofs of:
-// - Safe connect:    IsSubset required offered => GrooveHandle
-// - Safe disconnect: linear GrooveHandle => must be consumed exactly once
-// - Safe compose:    GrooveCompat a b => GroovePair a b
+// LINEARITY NOTE: this .eph surface is REGISTRY-INDEXED — every operation
+// addresses a groove by its `targetId: I32` into a global connection table;
+// there is no per-connection handle to thread, so there is no linear resource
+// to enforce at this layer. The linear discipline for a groove *connection*
+// (connect yields a linear `GrooveHandle` that must be consumed exactly once
+// by disconnect) is proved in the Idris2 ABI layer — see
+// src/interface/abi/Groove.idr and GrooveLinearity.idr, machine-checked by
+// `idris2 --typecheck` (and the soft/hard-disconnect residue proofs in
+// GrooveResidue.idr). This module is the flat IPC command surface over that.
 //
-// Discovery flow:
-//   1. Gossamer probes well-known ports for groove manifests
-//   2. Services respond with JSON declaring offered/consumed capabilities
-//   3. Gossamer verifies compatibility via Idris2 subset proofs
-//   4. Matching grooves are activated and made available via IPC
-//   5. Frontend JS queries gossamer.groove_*() for active grooves
+// The earlier version declared the GROOVE_* set as top-level `let X: I32 = 0`
+// (not valid v2 syntax) and `: I32` / `: ()` returns over `__ffi(...)` (typed
+// `I64`), so it never type-checked. The constants are now nullary functions
+// and the real return types live on the `extern` block.
 //
 // Well-known groove targets (port → service → primary capability):
 //   6473 → Burble     → voice, text, presence, spatial-audio, TTS, STT
@@ -27,85 +30,62 @@
 //   7800 → rpa        → workflow
 //   8000 → PanLL      → panel-ui
 //   8080 → VeriSimDB  → octad-storage, drift-detection, temporal-versioning
-//   8080 → gitbot     → bot-orchestration (shares VeriSimDB port — TODO: assign unique)
 //   9000 → ECHIDNA    → theorem-proving
 //   9090 → Hypatia    → scanning, static-analysis
 
-// Groove status constants (matching Groove.idr GrooveProbeResult).
-let GROOVE_NOT_FOUND: I32 = 0
-let GROOVE_INCOMPATIBLE: I32 = 1
-let GROOVE_CONNECTED: I32 = 2
-let GROOVE_ACTIVE: I32 = 3
+module gossamer/core/groove
 
-// Well-known groove target IDs (matching Groove.idr and groove.zig).
-let GROOVE_BURBLE: I32 = 0
-let GROOVE_VEXT: I32 = 1
-let GROOVE_VERISIMDB: I32 = 2
-let GROOVE_HYPATIA: I32 = 3
-let GROOVE_PANLL: I32 = 4
-let GROOVE_ECHIDNA: I32 = 5
-let GROOVE_RPA: I32 = 6
-let GROOVE_CONFLOW: I32 = 7
-let GROOVE_PANIC: I32 = 8
-let GROOVE_GITBOT: I32 = 9
+// ── Status constants (matching Groove.idr GrooveProbeResult) ───────────────
+pub fn grooveNotFound(): I32 = 0
+pub fn grooveIncompatible(): I32 = 1
+pub fn grooveConnected(): I32 = 2
+pub fn grooveActive(): I32 = 3
 
-// Total number of well-known groove targets.
-let GROOVE_TARGET_COUNT: I32 = 10
+// ── Well-known groove target IDs (matching Groove.idr and groove.zig) ──────
+pub fn grooveBurble(): I32 = 0
+pub fn grooveVext(): I32 = 1
+pub fn grooveVerisimdb(): I32 = 2
+pub fn grooveHypatia(): I32 = 3
+pub fn groovePanll(): I32 = 4
+pub fn grooveEchidna(): I32 = 5
+pub fn grooveRpa(): I32 = 6
+pub fn grooveConflow(): I32 = 7
+pub fn groovePanic(): I32 = 8
+pub fn grooveGitbot(): I32 = 9
+pub fn grooveTargetCount(): I32 = 10
 
-// Probe all well-known groove targets.
-// Returns the number of grooves successfully connected.
-// FFI: gossamer_groove_discover() -> count
-fn discover(): I32 =
-  __ffi("gossamer_groove_discover")
+// ── libgossamer C ABI (source of truth: src/interface/ffi/src/*.zig) ───────
+extern "gossamer" {
+  // Probe all well-known targets → number connected.
+  fn gossamer_groove_discover(): I32
+  // Status of one target → 0 not_found / 1 incompatible / 2 connected / 3 active.
+  fn gossamer_groove_status(targetId: I32): I32
+  // Capability manifest JSON for a connected groove ("" if not connected).
+  fn gossamer_groove_manifest(targetId: I32): String
+  // Target id providing a named capability, or -1 if unavailable.
+  fn gossamer_groove_find_capability(capName: String): I32
+  // 1 if two targets can compose, else 0.
+  fn gossamer_groove_check_compat(targetA: I32, targetB: I32): I32
+  // Send a JSON message → 0 ok.
+  fn gossamer_groove_send(targetId: I32, message: String): I32
+  // Receive a pending JSON message ("" if none).
+  fn gossamer_groove_recv(targetId: I32): String
+  // Summary of all connections as JSON.
+  fn gossamer_groove_summary(): String
+  // Disconnect one target / all (shutdown).
+  fn gossamer_groove_disconnect(targetId: I32): Unit
+  fn gossamer_groove_disconnect_all(): Unit
+}
 
-// Get the status of a specific groove target.
-// Returns: 0=not_found, 1=incompatible, 2=connected, 3=active
-// FFI: gossamer_groove_status(target_id) -> status
-fn status(targetId: I32): I32 =
-  __ffi("gossamer_groove_status", targetId)
+// ── Idiomatic wrappers (public API) ────────────────────────────────────────
 
-// Get the capability manifest JSON for a connected groove.
-// Returns empty string if groove is not connected.
-// FFI: gossamer_groove_manifest(target_id) -> json_string
-fn manifest(targetId: I32): String =
-  __ffi("gossamer_groove_manifest", targetId)
-
-// Check if a specific capability is available from any connected groove.
-// Capability names match Groove.idr capabilityName (e.g. "voice", "integrity").
-// Returns the target ID that provides it, or -1 if unavailable.
-// FFI: gossamer_groove_find_capability(cap_name) -> target_id or -1
-fn findCapability(capName: String): I32 =
-  __ffi("gossamer_groove_find_capability", capName)
-
-// Check if two groove targets are compatible (can compose).
-// Returns 1 if compatible, 0 if not.
-// FFI: gossamer_groove_check_compat(target_a, target_b) -> bool
-fn checkCompat(targetA: I32, targetB: I32): I32 =
-  __ffi("gossamer_groove_check_compat", targetA, targetB)
-
-// Send a JSON message to a grooved service.
-// FFI: gossamer_groove_send(target_id, message) -> result (0=ok)
-fn send(targetId: I32, message: String): I32 =
-  __ffi("gossamer_groove_send", targetId, message)
-
-// Receive a pending JSON message from a grooved service.
-// Returns empty string if no messages waiting.
-// FFI: gossamer_groove_recv(target_id) -> json_string
-fn recv(targetId: I32): String =
-  __ffi("gossamer_groove_recv", targetId)
-
-// Get a summary of all groove connections as JSON.
-// Returns: [{"id":0,"service":"burble","status":2,"caps":["voice","text"]}, ...]
-// FFI: gossamer_groove_summary() -> json_string
-fn summary(): String =
-  __ffi("gossamer_groove_summary")
-
-// Disconnect a specific groove target.
-// FFI: gossamer_groove_disconnect(target_id) -> void
-fn disconnect(targetId: I32): () =
-  __ffi("gossamer_groove_disconnect", targetId)
-
-// Disconnect all grooves. Call during application shutdown.
-// FFI: gossamer_groove_disconnect_all() -> void
-fn disconnectAll(): () =
-  __ffi("gossamer_groove_disconnect_all")
+pub fn discover(): I32 = gossamer_groove_discover()
+pub fn status(targetId: I32): I32 = gossamer_groove_status(targetId)
+pub fn manifest(targetId: I32): String = gossamer_groove_manifest(targetId)
+pub fn findCapability(capName: String): I32 = gossamer_groove_find_capability(capName)
+pub fn checkCompat(targetA: I32, targetB: I32): I32 = gossamer_groove_check_compat(targetA, targetB)
+pub fn send(targetId: I32, message: String): I32 = gossamer_groove_send(targetId, message)
+pub fn recv(targetId: I32): String = gossamer_groove_recv(targetId)
+pub fn summary(): String = gossamer_groove_summary()
+pub fn disconnect(targetId: I32): Unit = gossamer_groove_disconnect(targetId)
+pub fn disconnectAll(): Unit = gossamer_groove_disconnect_all()

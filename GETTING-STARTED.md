@@ -27,7 +27,9 @@ just test-zig-bench
 
 ## Configuration Files
 
-- **gossamer-abi.ipkg / gossamer-abi-tests.ipkg** — Idris2 ABI package and its test runner
+- **gossamer-abi.ipkg** — Idris2 formal ABI for the webview shell (groove-agnostic)
+- **gossamer-groove.ipkg** — Idris2 proofs for the Groove protocol (depends on gossamer-abi)
+- **gossamer-abi-tests.ipkg** — the ABI test runner
 - **flake.nix** — Nix development environment (fallback to guix.scm)
 - **guix.scm** — Primary Guix package definition for reproducible dev env
 - **gossamer.conf.json** — Runtime config: window size, IPC protocol, CSP, capabilities, sandbox

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: CC-BY-SA-4.0
 // Copyright (c) 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 = Gossamer — Show Me The Receipts
 :toc:
@@ -71,10 +71,10 @@ There is no runtime dispatch overhead.
 === Honest caveat
 
 The linearity guarantee applies to code written in Ephapax. If a consumer
-calls the raw C FFI directly (from C, Rust, or ReScript), the Ephapax
+calls the raw C FFI directly (from C, Rust, or AffineScript), the Ephapax
 compiler cannot enforce linearity across that boundary. The Idris2 proofs
 cover the ABI contract, not arbitrary callers. The `bindings/` tree provides
-typed wrappers for Rust and ReScript that partially restore safety, but those
+typed wrappers for Rust and AffineScript that partially restore safety, but those
 wrappers are not machine-checked at the same level as the Ephapax layer.
 
 == Claim 2: "IPC messages can't mismatch — frontend and backend agree at compile time"
@@ -112,7 +112,7 @@ what capabilities they export, preventing IPC calls to absent services.
 The IPC type-safety holds between Ephapax-typed backend handlers and the
 capability registry. The frontend JavaScript payload is validated at the
 boundary but JavaScript itself is not statically typed by Gossamer — the
-ReScript or JS calling code carries its own type discipline. The comparison
+AffineScript or JS calling code carries its own type discipline. The comparison
 table in the README ("Yes (compile-time)") is accurate for the Ephapax
 backend but should be read as applying at the backend boundary, not across
 the entire frontend JS heap.
@@ -140,8 +140,8 @@ the entire frontend JS heap.
   `src/interface/ffi/src/groove.zig`
 | Every inter-service boundary in the account
 
-| *ReScript bindings*
-| `bindings/rescript/` — typed frontend IPC API
+| *AffineScript bindings*
+| `bindings/affinescript/` — typed frontend IPC API (`@gossamer/api`)
 | idaptik, panll, gossamer-powered SPAs
 
 | *Stapeln containers*
@@ -200,8 +200,8 @@ toolchain. `build.zig` produces a shared library.
 `simulations/`. This is where external auditors verify the claims.
 
 | `bindings/`
-| Language bindings for Rust and ReScript — typed wrappers around the C ABI.
-`bindings/rescript/` is the recommended frontend integration path.
+| Language bindings for Rust and AffineScript — typed wrappers around the C ABI.
+`bindings/affinescript/` is the recommended frontend integration path.
 
 | `tests/`
 | 173 integration tests (v0.3.1). CI executes against real WebKitGTK on

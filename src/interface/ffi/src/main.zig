@@ -17,6 +17,22 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+// Submodule re-exports — expose the FFI submodules so the integration test
+// suite (test/integration_test.zig) can reach their exported functions through
+// the `gossamer` module. Zig 0.15 forbids a test/-rooted module from importing
+// ../src/*.zig directly, so the tests import "gossamer" and read e.g.
+// `gossamer.groove`. These also force each submodule's `export fn`s into the
+// shared library (the sibling `comptime { _ = @import("…"); }` guards below are
+// now redundant but kept for locality).
+pub const ssg = @import("ssg.zig");
+pub const filesystem = @import("filesystem.zig");
+pub const groove = @import("groove.zig");
+pub const csp = @import("csp.zig");
+pub const plugin = @import("plugin.zig");
+pub const clipboard = @import("clipboard.zig");
+pub const dialog = @import("dialog.zig");
+pub const tray = @import("tray.zig");
+
 extern fn gossamer_tray_clear_window() void;
 
 // Static Site Generator FFI functions (gossamer_ssg_*).
@@ -94,18 +110,36 @@ comptime {
     _ = @import("conf.zig");
 }
 
+// Default IPC channel handlers (gossamer_channel_register_defaults). Holds the
+// 28 window/group/transmute/debug/groove/shell-exec handlers the CLI used to
+// bind by hand; libgossamer now registers them on demand so both the native
+// CLI and the future Ephapax-wasm CLI share one implementation. Without this
+// import the export is absent from libgossamer and the CLI fails to link.
+comptime {
+    _ = @import("ipc_handlers.zig");
+}
+
 // Version information — bump on each release
 const VERSION = "0.3.0";
 const BUILD_INFO = "Gossamer " ++ VERSION ++ " built with Zig " ++ @import("builtin").zig_version_string;
 
 /// Platform-specific webview implementation.
 /// Compile-time dispatch — no runtime overhead.
-const platform = switch (builtin.os.tag) {
+///
+/// Android is detected BEFORE the os-tag switch: an Android target reports
+/// `os.tag == .linux` (it is a Linux kernel), so dispatching on os.tag alone
+/// wrongly selects the GTK backend and links WebKitGTK into an .so that can
+/// never load on a phone. The `abi == .android` guard routes it to the JNI
+/// WebView backend instead. The comptime `if` means the android import is not
+/// evaluated on non-android targets, so the desktop paths are unchanged.
+const platform = if (builtin.abi == .android)
+    @import("webview_android.zig")
+else switch (builtin.os.tag) {
     .linux, .freebsd, .openbsd, .netbsd => @import("webview_gtk.zig"),
     .macos => @import("webview_cocoa.zig"),
     .windows => @import("webview_win32.zig"),
     .ios => @import("webview_ios.zig"),
-    else => @compileError("Gossamer: unsupported platform. Supported: linux, BSD, macOS, Windows, iOS. Android requires NDK target."),
+    else => @compileError("Gossamer: unsupported platform. Supported: Linux, BSD, macOS, Windows, iOS, Android (NDK)."),
 };
 
 //==============================================================================
@@ -448,7 +482,7 @@ fn createHandle(
 /// Must be called from the main/UI thread.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__create
-export fn gossamer_create(
+pub export fn gossamer_create(
     title: [*:0]const u8,
     width: u32,
     height: u32,
@@ -465,7 +499,7 @@ export fn gossamer_create(
 /// visible uses 0/1 to control whether the window starts hidden.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__createEx
-export fn gossamer_create_ex(
+pub export fn gossamer_create_ex(
     title: [*:0]const u8,
     width: u32,
     height: u32,
@@ -496,7 +530,7 @@ export fn gossamer_create_ex(
 /// Load HTML content into the webview.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__loadHTML
-export fn gossamer_load_html(handle_ptr: u64, html: [*:0]const u8) Result {
+pub export fn gossamer_load_html(handle_ptr: u64, html: [*:0]const u8) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
@@ -519,7 +553,7 @@ export fn gossamer_load_html(handle_ptr: u64, html: [*:0]const u8) Result {
 /// Navigate the webview to a URL.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__navigate
-export fn gossamer_navigate(handle_ptr: u64, url: [*:0]const u8) Result {
+pub export fn gossamer_navigate(handle_ptr: u64, url: [*:0]const u8) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
@@ -542,7 +576,7 @@ export fn gossamer_navigate(handle_ptr: u64, url: [*:0]const u8) Result {
 /// Evaluate JavaScript in the webview context.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__eval
-export fn gossamer_eval(handle_ptr: u64, js: [*:0]const u8) Result {
+pub export fn gossamer_eval(handle_ptr: u64, js: [*:0]const u8) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
@@ -565,7 +599,7 @@ export fn gossamer_eval(handle_ptr: u64, js: [*:0]const u8) Result {
 /// Set the window title.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__setTitle
-export fn gossamer_set_title(handle_ptr: u64, title: [*:0]const u8) Result {
+pub export fn gossamer_set_title(handle_ptr: u64, title: [*:0]const u8) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
@@ -589,7 +623,7 @@ export fn gossamer_set_title(handle_ptr: u64, title: [*:0]const u8) Result {
 /// Rejected when guard mode is locked or read_only.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__resize
-export fn gossamer_resize(handle_ptr: u64, width: u32, height: u32) Result {
+pub export fn gossamer_resize(handle_ptr: u64, width: u32, height: u32) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
@@ -616,7 +650,7 @@ export fn gossamer_resize(handle_ptr: u64, width: u32, height: u32) Result {
 /// After this returns, the handle is CONSUMED — the webview is destroyed.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__run
-export fn gossamer_run(handle_ptr: u64) void {
+pub export fn gossamer_run(handle_ptr: u64) void {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse return;
 
@@ -685,7 +719,7 @@ pub export fn gossamer_hide(handle_ptr: u64) Result {
 /// Rejected when guard mode is locked or read_only.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__minimize
-export fn gossamer_minimize(handle_ptr: u64) Result {
+pub export fn gossamer_minimize(handle_ptr: u64) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
@@ -713,7 +747,7 @@ export fn gossamer_minimize(handle_ptr: u64) Result {
 /// Rejected when guard mode is locked or read_only.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__maximize
-export fn gossamer_maximize(handle_ptr: u64) Result {
+pub export fn gossamer_maximize(handle_ptr: u64) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
@@ -774,7 +808,7 @@ pub export fn gossamer_restore(handle_ptr: u64) Result {
 /// owner calls destroy().
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__requestClose
-export fn gossamer_request_close(handle_ptr: u64) Result {
+pub export fn gossamer_request_close(handle_ptr: u64) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
@@ -805,7 +839,7 @@ export fn gossamer_request_close(handle_ptr: u64) Result {
 /// Alternative to gossamer_run for cases where you need teardown only.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__destroy
-export fn gossamer_destroy(handle_ptr: u64) void {
+pub export fn gossamer_destroy(handle_ptr: u64) void {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse return;
     cleanup(handle);
@@ -859,7 +893,7 @@ const READONLY_OVERLAY_REMOVE =
 ///   any → same:       no-op (returns ok)
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__guardSet
-export fn gossamer_guard_set(handle_ptr: u64, mode: c_int) Result {
+pub export fn gossamer_guard_set(handle_ptr: u64, mode: c_int) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
@@ -909,7 +943,7 @@ export fn gossamer_guard_set(handle_ptr: u64, mode: c_int) Result {
 /// Returns: 0=free, 1=locked, 2=read_only, or -1 on error.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__guardGet
-export fn gossamer_guard_get(handle_ptr: u64) c_int {
+pub export fn gossamer_guard_get(handle_ptr: u64) c_int {
     const handle = ptrFromU64(handle_ptr) orelse return -1;
     return @intFromEnum(handle.guard);
 }
@@ -930,7 +964,7 @@ var next_window_id: u32 = 1;
 
 /// Register a handle in the global window registry.
 /// Returns the assigned window ID (>0), or 0 on failure.
-export fn gossamer_registry_add(handle_ptr: u64) u32 {
+pub export fn gossamer_registry_add(handle_ptr: u64) u32 {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null handle");
@@ -940,13 +974,17 @@ export fn gossamer_registry_add(handle_ptr: u64) u32 {
     registry_mutex.lock();
     defer registry_mutex.unlock();
 
-    for (&window_registry) |*slot| {
+    for (&window_registry, 0..) |*slot, i| {
         if (slot.* == null) {
             const id = next_window_id;
             next_window_id +%= 1;
             if (next_window_id == 0) next_window_id = 1;
             handle.window_id = id;
             slot.* = handle;
+            // A reused slot must not leak the previous occupant's per-slot
+            // state onto the new window (stale transmute mode / throttle).
+            transmute_modes[i] = .gui;
+            activity_levels[i] = .realtime;
             return id;
         }
     }
@@ -956,23 +994,27 @@ export fn gossamer_registry_add(handle_ptr: u64) u32 {
 }
 
 /// Remove a handle from the registry.
-export fn gossamer_registry_remove(handle_ptr: u64) void {
+pub export fn gossamer_registry_remove(handle_ptr: u64) void {
     const handle = ptrFromU64(handle_ptr) orelse return;
 
     registry_mutex.lock();
     defer registry_mutex.unlock();
 
-    for (&window_registry) |*slot| {
+    for (&window_registry, 0..) |*slot, i| {
         if (slot.* == handle) {
             slot.* = null;
             handle.window_id = 0;
+            // Slot hygiene: clear per-slot state on removal too, so a
+            // vacated slot never carries a stale mode/throttle forward.
+            transmute_modes[i] = .gui;
+            activity_levels[i] = .realtime;
             return;
         }
     }
 }
 
 /// Count of live registered windows.
-export fn gossamer_registry_count() u32 {
+pub export fn gossamer_registry_count() u32 {
     registry_mutex.lock();
     defer registry_mutex.unlock();
 
@@ -1022,7 +1064,7 @@ var next_group_id: u32 = 1;
 
 /// Create a new window group with an optional label.
 /// Returns group ID (>0), or 0 on failure.
-export fn gossamer_group_create(label: ?[*:0]const u8) u32 {
+pub export fn gossamer_group_create(label: ?[*:0]const u8) u32 {
     clearError();
     groups_mutex.lock();
     defer groups_mutex.unlock();
@@ -1050,7 +1092,7 @@ export fn gossamer_group_create(label: ?[*:0]const u8) u32 {
 }
 
 /// Add a window (by ID) to a group.
-export fn gossamer_group_add(group_id: u32, window_id: u32) Result {
+pub export fn gossamer_group_add(group_id: u32, window_id: u32) Result {
     clearError();
     groups_mutex.lock();
     defer groups_mutex.unlock();
@@ -1082,7 +1124,7 @@ export fn gossamer_group_add(group_id: u32, window_id: u32) Result {
 }
 
 /// Remove a window from a group.
-export fn gossamer_group_remove(group_id: u32, window_id: u32) Result {
+pub export fn gossamer_group_remove(group_id: u32, window_id: u32) Result {
     clearError();
     groups_mutex.lock();
     defer groups_mutex.unlock();
@@ -1112,7 +1154,7 @@ export fn gossamer_group_remove(group_id: u32, window_id: u32) Result {
 }
 
 /// Destroy a group (does not destroy the windows, just the grouping).
-export fn gossamer_group_destroy(group_id: u32) void {
+pub export fn gossamer_group_destroy(group_id: u32) void {
     groups_mutex.lock();
     defer groups_mutex.unlock();
 
@@ -1129,7 +1171,7 @@ export fn gossamer_group_destroy(group_id: u32) void {
 
 /// Apply an operation to all windows in a group.
 /// op: 0=minimize, 1=maximize, 2=restore, 3=show, 4=hide, 5=close
-export fn gossamer_group_apply(group_id: u32, op: u32) Result {
+pub export fn gossamer_group_apply(group_id: u32, op: u32) Result {
     clearError();
     groups_mutex.lock();
     const g = findGroup(group_id) orelse {
@@ -1174,7 +1216,7 @@ fn findGroup(group_id: u32) ?*WindowGroup {
 //==============================================================================
 
 /// Raise the window to the front of the z-order (pull to front).
-export fn gossamer_raise(handle_ptr: u64) Result {
+pub export fn gossamer_raise(handle_ptr: u64) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
@@ -1195,7 +1237,7 @@ export fn gossamer_raise(handle_ptr: u64) Result {
 }
 
 /// Lower the window to the bottom of the z-order (push to back).
-export fn gossamer_lower(handle_ptr: u64) Result {
+pub export fn gossamer_lower(handle_ptr: u64) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
@@ -1238,7 +1280,7 @@ export fn gossamer_lower(handle_ptr: u64) Result {
 // Delivered via __gossamer_emit() in each target webview's JS context.
 
 /// Broadcast an event to all registered windows.
-export fn gossamer_broadcast(event_name: [*:0]const u8, payload_json: [*:0]const u8) u32 {
+pub export fn gossamer_broadcast(event_name: [*:0]const u8, payload_json: [*:0]const u8) u32 {
     registry_mutex.lock();
     defer registry_mutex.unlock();
 
@@ -1259,7 +1301,7 @@ export fn gossamer_broadcast(event_name: [*:0]const u8, payload_json: [*:0]const
 }
 
 /// Send an event to a specific window by its registry ID.
-export fn gossamer_send_to(target_id: u32, event_name: [*:0]const u8, payload_json: [*:0]const u8) Result {
+pub export fn gossamer_send_to(target_id: u32, event_name: [*:0]const u8, payload_json: [*:0]const u8) Result {
     clearError();
     registry_mutex.lock();
     const handle = registryLookup(target_id);
@@ -1301,7 +1343,7 @@ fn emitToHandle(handle: *GossamerHandle, event: []const u8, payload: []const u8)
 
 /// Auto-arrange all registered windows using the given strategy.
 /// strategy: 0=tile_h, 1=tile_v, 2=cascade, 3=grid
-export fn gossamer_arrange(strategy: u32) Result {
+pub export fn gossamer_arrange(strategy: u32) Result {
     clearError();
     registry_mutex.lock();
 
@@ -1400,28 +1442,83 @@ pub const TransmuteMode = enum(c_int) {
 /// Current transmute mode per handle.
 /// Stored separately from GossamerHandle to avoid changing the core struct
 /// layout for features that most handles won't use.
-var transmute_modes: [MAX_WINDOWS]TransmuteMode = [_]TransmuteMode{.gui} ** MAX_WINDOWS;
+/// `pub` (not `export`) for state injection in integration_test.zig — only
+/// `export` symbols are part of the C ABI.
+pub var transmute_modes: [MAX_WINDOWS]TransmuteMode = [_]TransmuteMode{.gui} ** MAX_WINDOWS;
 
 /// Get the transmute mode for a window by registry index.
-fn getTransmuteSlot(handle: *GossamerHandle) ?usize {
+/// Caller must hold registry_mutex (the scan races registry add/remove).
+/// `pub` for state injection in integration_test.zig (single-threaded there,
+/// so the lock requirement is vacuous); not part of the C ABI.
+pub fn getTransmuteSlot(handle: *GossamerHandle) ?usize {
     for (window_registry, 0..) |slot, i| {
         if (slot == handle) return i;
     }
     return null;
 }
 
+/// The legal transmute transition relation. This is the runtime MIRROR of
+/// `Gossamer.ABI.TransmuteStateMachine.validTransmute` (the machine-checked
+/// spec) — keep the two arm-for-arm identical; each arm names its Idris
+/// constructor(s). `validSound`/`validComplete` prove the Idris side IS the
+/// transition relation; the 36-pair matrix in integration_test.zig pins this
+/// mirror to it.
+/// `pub` (not `export`): visible to tests, not part of the C ABI.
+pub fn validTransition(old: TransmuteMode, new: TransmuteMode) bool {
+    // Idris: SelfLoop m — accepted, effect-free (early return before effects)
+    if (old == new) return true;
+    return switch (old) {
+        // Idris: GuiToTui / GuiToCli / GuiToExport / GuiToAttach / GuiToDetach
+        .gui => true,
+        // Idris: {Tui,Cli,Export}ToGui / {Tui,Cli,Export}ToDetach
+        .tui, .cli, .terminal_export => new == .gui or new == .panll_detach,
+        // Idris: AttachToDetach — attach holds an external PanLL panel slot;
+        // its only exit is to release it (acquire/release bracket)
+        .panll_attach => new == .panll_detach,
+        // Idris: DetachToGui — detach is transient; normalize through gui
+        // (which runs the DOM restore) before any new transform
+        .panll_detach => new == .gui,
+    };
+}
+
+/// Buffer for the formatted illegal-transition message (setError stores the
+/// slice, so it must outlive the call; threadlocal like last_error itself).
+threadlocal var transmute_err_buf: [96]u8 = undefined;
+
+/// PanLL's well-known groove target (groove.zig targets[4]: "panll", port 8000).
+const PANLL_TARGET: u32 = 4;
+
 /// Set the transmute mode for a window.
 ///
-/// Mode transitions:
-///   gui → tui:          Extract webview text, inject ANSI-formatted content
-///   gui → cli:          Extract text, emit to stdout
-///   gui → terminal_export: Serialize current DOM state to a pty
-///   gui → panll_attach: Send groove message to PanLL on port 8000
-///   any → panll_detach: Disconnect from PanLL, restore standalone mode
-///   tui/cli → gui:      Restore webview, reload last HTML
+/// Enforced transition relation — proved in
+/// src/interface/abi/TransmuteStateMachine.idr; `validTransition` above
+/// mirrors `validTransmute` constructor-for-constructor:
+///
+///   gui → {tui, cli, terminal_export, panll_attach, panll_detach}
+///   tui/cli/terminal_export → {gui, panll_detach}
+///   panll_attach → panll_detach     (release the PanLL slot first)
+///   panll_detach → gui              (normalize through gui: restore runs)
+///   m → m                           (accepted, effect-free no-op)
+///
+/// Anything else returns .invalid_param with an "Illegal transmute
+/// transition" message and leaves the stored mode untouched. Effects that
+/// fail (JS injection, PanLL attach send) also leave the mode untouched and
+/// return an error — the stored mode never desyncs from reality. Exception,
+/// by design: the detach *notify* is best-effort (a dead PanLL must not trap
+/// windows in panll_attach — see everyModeHasExit in the proof).
+///
+/// Known limitation (B5): the gui backup lives in the webview JS global
+/// `window.__gossamer_gui_backup`, so page navigation while in tui/cli
+/// discards it; a later gui entry then just shows the navigated page. A real
+/// fix needs Zig-side DOM snapshot storage (deferred).
+///
+/// Threading: registry lookups and the mode write hold registry_mutex; the
+/// mutex is NEVER held across platform.eval/groove_send. Two concurrent
+/// transmutes of one window are excluded by the main-thread discipline
+/// (MainThreadProof on the Idris wrapper), not by this lock.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__transmute
-export fn gossamer_transmute(handle_ptr: u64, mode: c_int) Result {
+pub export fn gossamer_transmute(handle_ptr: u64, mode: c_int) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null handle");
@@ -1437,29 +1534,52 @@ export fn gossamer_transmute(handle_ptr: u64, mode: c_int) Result {
         return .invalid_param;
     };
 
-    const slot = getTransmuteSlot(handle) orelse {
-        setError("Window not registered — call gossamer_registry_add first");
-        return .@"error";
+    const old_mode = blk: {
+        registry_mutex.lock();
+        defer registry_mutex.unlock();
+        const slot = getTransmuteSlot(handle) orelse {
+            setError("Window not registered — call gossamer_registry_add first");
+            return .@"error";
+        };
+        break :blk transmute_modes[slot];
     };
 
-    const old_mode = transmute_modes[slot];
+    // SelfLoop: re-requesting the current mode is a legal, effect-free no-op
+    // (re-running a transform JS would double-render).
+    if (old_mode == new_mode) {
+        return .ok;
+    }
+
+    if (!validTransition(old_mode, new_mode)) {
+        const msg = std.fmt.bufPrint(&transmute_err_buf,
+            "Illegal transmute transition: {s} -> {s}",
+            .{ @tagName(old_mode), @tagName(new_mode) },
+        ) catch "Illegal transmute transition";
+        setError(msg);
+        return .invalid_param;
+    }
 
     switch (new_mode) {
         .gui => {
-            // Restore webview from terminal modes using the backed-up HTML
-            if (old_mode == .tui or old_mode == .cli or old_mode == .terminal_export) {
-                const restore_js =
-                    \\(function(){
-                    \\  if(window.__gossamer_gui_backup){
-                    \\    document.body.innerHTML=window.__gossamer_gui_backup;
-                    \\    document.body.style.margin='';
-                    \\    delete window.__gossamer_gui_backup;
-                    \\  }
-                    \\  window.__gossamer_emit&&window.__gossamer_emit('transmuted',{mode:'gui'});
-                    \\})();
-                ;
-                platform.eval(&handle.webview, restore_js) catch {};
-            }
+            // Restore the webview from the backed-up HTML. Runs on EVERY gui
+            // entry (the JS is a no-op without a backup): panll_detach can
+            // inherit a live backup (e.g. tui → panll_detach → gui), so
+            // restoring only from the terminal modes provably leaks it — see
+            // guiHasNoBackup / b1BugWitness in TransmuteStateMachine.idr.
+            const restore_js =
+                \\(function(){
+                \\  if(window.__gossamer_gui_backup){
+                \\    document.body.innerHTML=window.__gossamer_gui_backup;
+                \\    document.body.style.margin='';
+                \\    delete window.__gossamer_gui_backup;
+                \\  }
+                \\  window.__gossamer_emit&&window.__gossamer_emit('transmuted',{mode:'gui'});
+                \\})();
+            ;
+            platform.eval(&handle.webview, restore_js) catch {
+                setError("Transmute: gui restore JavaScript failed");
+                return .@"error";
+            };
         },
         .tui => {
             // TUI mode: walk the DOM, extract structured text, render with
@@ -1513,7 +1633,10 @@ export fn gossamer_transmute(handle_ptr: u64, mode: c_int) Result {
                 \\  window.__gossamer_emit&&window.__gossamer_emit('transmuted',{mode:'tui'});
                 \\})();
             ;
-            platform.eval(&handle.webview, tui_js) catch {};
+            platform.eval(&handle.webview, tui_js) catch {
+                setError("Transmute: tui transform JavaScript failed");
+                return .@"error";
+            };
         },
         .cli => {
             // CLI mode: strip all markup, plain text only.
@@ -1527,7 +1650,10 @@ export fn gossamer_transmute(handle_ptr: u64, mode: c_int) Result {
                 \\  window.__gossamer_emit&&window.__gossamer_emit('transmuted',{mode:'cli'});
                 \\})();
             ;
-            platform.eval(&handle.webview, cli_js) catch {};
+            platform.eval(&handle.webview, cli_js) catch {
+                setError("Transmute: cli transform JavaScript failed");
+                return .@"error";
+            };
         },
         .terminal_export => {
             // Extract text content and log to stdout
@@ -1538,24 +1664,34 @@ export fn gossamer_transmute(handle_ptr: u64, mode: c_int) Result {
                 \\  window.__gossamer_emit&&window.__gossamer_emit('transmuted',{mode:'terminal_export'});
                 \\})();
             ;
-            platform.eval(&handle.webview, export_js) catch {};
+            platform.eval(&handle.webview, export_js) catch {
+                setError("Transmute: terminal_export JavaScript failed");
+                return .@"error";
+            };
         },
         .panll_attach => {
-            // Send a groove registration to PanLL (target 4, port 4040).
-            // Message: {"action":"attach","window_id":N,"title":"..."}
-            // PanLL responds with a panel slot assignment.
-            const PANLL_TARGET: u32 = 4;
+            // Send a groove registration to PanLL (target 4 = "panll",
+            // well-known port 8000 — groove.zig targets[4]; 4040 is
+            // gossamer's OWN devUrl port and was previously misnamed here).
+            // Message: {"action":"attach","window_id":N,"source":"gossamer"}
+            // Attach ACQUIRES an external panel slot, so the send must
+            // succeed — otherwise the stored mode would claim an attachment
+            // that never happened (B2).
             var msg_buf: [256]u8 = undefined;
             const wid = handle.window_id;
             const msg = std.fmt.bufPrint(&msg_buf,
                 "{{\"action\":\"attach\",\"window_id\":{d},\"source\":\"gossamer\"}}", .{wid},
-            ) catch "";
-            if (msg.len > 0) {
-                msg_buf[msg.len] = 0;
-                const msg_z: [*:0]const u8 = msg_buf[0..msg.len :0];
-                _ = @import("groove.zig").gossamer_groove_send(PANLL_TARGET, msg_z);
+            ) catch {
+                setError("Transmute: PanLL attach message formatting failed");
+                return .@"error";
+            };
+            msg_buf[msg.len] = 0;
+            const msg_z: [*:0]const u8 = msg_buf[0..msg.len :0];
+            if (@import("groove.zig").gossamer_groove_send(PANLL_TARGET, msg_z) != 0) {
+                setError("Transmute: PanLL attach failed — groove send to target 4 (panll, port 8000) rejected");
+                return .@"error";
             }
-            // Also notify the local JS
+            // Local JS notify is best-effort: the attach itself succeeded.
             const attach_js =
                 \\(function(){
                 \\  window.__gossamer_emit&&window.__gossamer_emit('transmuted',{mode:'panll_attach'});
@@ -1564,8 +1700,11 @@ export fn gossamer_transmute(handle_ptr: u64, mode: c_int) Result {
             platform.eval(&handle.webview, attach_js) catch {};
         },
         .panll_detach => {
-            // Tell PanLL to release this window's panel slot.
-            const PANLL_TARGET: u32 = 4;
+            // Tell PanLL to release this window's panel slot. Detach is the
+            // RELEASE half of the bracket and is deliberately best-effort:
+            // if PanLL is dead, failing here would trap the window in
+            // panll_attach forever (violating everyModeHasExit in the
+            // proof). The mode is recorded regardless.
             var msg_buf: [256]u8 = undefined;
             const wid = handle.window_id;
             const msg = std.fmt.bufPrint(&msg_buf,
@@ -1585,14 +1724,24 @@ export fn gossamer_transmute(handle_ptr: u64, mode: c_int) Result {
         },
     }
 
+    // Record the new mode. Re-resolve the slot under the lock: the window
+    // may have been unregistered while the (lock-free) effects ran.
+    registry_mutex.lock();
+    defer registry_mutex.unlock();
+    const slot = getTransmuteSlot(handle) orelse {
+        setError("Window unregistered during transmute");
+        return .@"error";
+    };
     transmute_modes[slot] = new_mode;
     clearError();
     return .ok;
 }
 
-/// Get the current transmute mode for a window.
-export fn gossamer_transmute_get(handle_ptr: u64) c_int {
+/// Get the current transmute mode for a window (-1 if null/unregistered).
+pub export fn gossamer_transmute_get(handle_ptr: u64) c_int {
     const handle = ptrFromU64(handle_ptr) orelse return -1;
+    registry_mutex.lock();
+    defer registry_mutex.unlock();
     const slot = getTransmuteSlot(handle) orelse return -1;
     return @intFromEnum(transmute_modes[slot]);
 }
@@ -1623,7 +1772,7 @@ var activity_levels: [MAX_WINDOWS]ActivityLevel = [_]ActivityLevel{.realtime} **
 /// Set the activity level for a window.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__activitySet
-export fn gossamer_activity_set(handle_ptr: u64, level: c_int) Result {
+pub export fn gossamer_activity_set(handle_ptr: u64, level: c_int) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null handle");
@@ -1702,7 +1851,7 @@ export fn gossamer_activity_set(handle_ptr: u64, level: c_int) Result {
 }
 
 /// Get the current activity level for a window.
-export fn gossamer_activity_get(handle_ptr: u64) c_int {
+pub export fn gossamer_activity_get(handle_ptr: u64) c_int {
     const handle = ptrFromU64(handle_ptr) orelse return -1;
     const slot = getTransmuteSlot(handle) orelse return -1;
     return @intFromEnum(activity_levels[slot]);
@@ -1721,7 +1870,7 @@ export fn gossamer_activity_get(handle_ptr: u64) c_int {
 // Toggle via gossamer_debug_toggle() or Ctrl+Shift+D from JS.
 
 /// Inject the debug drawer into the webview.
-export fn gossamer_debug_open(handle_ptr: u64) Result {
+pub export fn gossamer_debug_open(handle_ptr: u64) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null handle");
@@ -1776,7 +1925,7 @@ export fn gossamer_debug_open(handle_ptr: u64) Result {
 }
 
 /// Close the debug drawer.
-export fn gossamer_debug_close(handle_ptr: u64) Result {
+pub export fn gossamer_debug_close(handle_ptr: u64) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null handle");
@@ -1797,7 +1946,7 @@ export fn gossamer_debug_close(handle_ptr: u64) Result {
 }
 
 /// Toggle the debug drawer.
-export fn gossamer_debug_toggle(handle_ptr: u64) Result {
+pub export fn gossamer_debug_toggle(handle_ptr: u64) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null handle");
@@ -1839,63 +1988,412 @@ pub const GrooveType = enum(c_int) {
     soft = 1,
 };
 
+/// Linear-ish groove session handle (G-3).
+///
+/// A distinct 64-bit newtype so a groove lease can never be confused with a
+/// window handle or capability token at the FFI boundary. Encoding: bits
+/// 0..7 hold slot+1, bits 8..63 hold the slot generation at connect time.
+///
+/// TRUE exactly-once linearity is enforced at the Idris2/Ephapax layer
+/// (GrooveLinearity.idr / Groove.eph); this Zig layer provides type
+/// distinctness plus a runtime once-guard: consuming a handle bumps the
+/// slot's generation, so a second disconnect with the same handle returns
+/// .already_consumed instead of silently double-freeing a reused slot.
+pub const GrooveHandle = enum(u64) {
+    invalid = 0,
+    _,
+};
+
 const GrooveConnection = struct {
     target_id: u32,
     groove_type: GrooveType,
     active: bool = false,
-    /// For soft grooves: auto-disconnect after this many seconds (0 = manual only)
+    /// Lease TTL in seconds (soft: auto-disconnect window; hard: heartbeat
+    /// window). 0 = manual only.
     ttl_seconds: u32 = 0,
+    /// Ownership: slot index of the owning connection, or null for a root.
+    /// Disconnecting a connection tears down its owned subtree
+    /// children-first — see disconnectDescent (G-2).
+    parent_slot: ?u8 = null,
+    /// Slot generation for the once-guard: bumped on every release so a
+    /// stale GrooveHandle can never address a reused slot.
+    generation: u32 = 1,
+    /// Wire lease handle returned by POST /.well-known/groove/connect.
+    /// Empty (len 0) when the connection was registered locally via the
+    /// deprecated typed API and holds no remote lease.
+    wire_handle: [groove.MAX_WIRE_HANDLE]u8 = [_]u8{0} ** groove.MAX_WIRE_HANDLE,
+    wire_handle_len: usize = 0,
 };
 
 const MAX_GROOVE_CONNECTIONS: usize = 32;
 var groove_connections: [MAX_GROOVE_CONNECTIONS]GrooveConnection = [_]GrooveConnection{.{ .target_id = 0, .groove_type = .hard }} ** MAX_GROOVE_CONNECTIONS;
 
+fn encodeGrooveHandle(slot: usize, generation: u32) GrooveHandle {
+    return @enumFromInt((@as(u64, generation) << 8) | (@as(u64, @intCast(slot)) + 1));
+}
+
+/// Decode and validate a session handle against the connection table.
+/// Returns the slot index, or null when the handle is out of range,
+/// inactive, or stale (generation mismatch — the once-guard).
+fn decodeGrooveHandle(h: GrooveHandle) ?usize {
+    const raw = @intFromEnum(h);
+    if (raw == 0) return null;
+    const slot_plus_one = raw & 0xff;
+    if (slot_plus_one == 0 or slot_plus_one > MAX_GROOVE_CONNECTIONS) return null;
+    const slot: usize = @intCast(slot_plus_one - 1);
+    const gc = &groove_connections[slot];
+    if (!gc.active) return null;
+    if ((raw >> 8) != gc.generation) return null;
+    return slot;
+}
+
+/// Find a free connection slot, or null when the table is full.
+fn allocGrooveSlot() ?usize {
+    for (&groove_connections, 0..) |*gc, i| {
+        if (!gc.active) return i;
+    }
+    return null;
+}
+
+//==============================================================================
+// Groove Teardown Audit Ring (G-2)
+//==============================================================================
+//
+// Every slot release performed by the ordered descent is recorded here, so a
+// caller (or the Idris2 proof harness) can audit that teardown really ran
+// children-first. Fixed-size ring: the oldest entries are overwritten.
+
+const AUDIT_RING_SIZE: usize = 64;
+
+const AuditEntry = struct {
+    slot: u8,
+    parent_slot: ?u8,
+    /// Monotonic release counter at the time of this release (global order).
+    order_index: u32,
+};
+
+var audit_ring: [AUDIT_RING_SIZE]AuditEntry = [_]AuditEntry{.{ .slot = 0, .parent_slot = null, .order_index = 0 }} ** AUDIT_RING_SIZE;
+
+/// Total releases ever recorded (monotonic; also the next order_index).
+var audit_total: u32 = 0;
+
+fn auditRecord(slot: usize, parent_slot: ?u8) void {
+    audit_ring[audit_total % AUDIT_RING_SIZE] = .{
+        .slot = @intCast(slot),
+        .parent_slot = parent_slot,
+        .order_index = audit_total,
+    };
+    audit_total +%= 1;
+}
+
+/// Write a human-readable summary of the teardown audit ring into buf.
+/// Lists the retained releases oldest-first. Returns the number of bytes
+/// written (0 when buf cannot hold even the header line).
+pub export fn gossamer_groove_audit_summary(buf: [*]u8, len: usize) callconv(.c) usize {
+    const cap: u32 = @intCast(AUDIT_RING_SIZE);
+    const out = buf[0..len];
+    var pos: usize = 0;
+
+    const shown: u32 = if (audit_total < cap) audit_total else cap;
+    const header = std.fmt.bufPrint(out[pos..],
+        "groove teardown audit: {d} release(s) total, showing last {d} (ring capacity {d})\n",
+        .{ audit_total, shown, cap }) catch return 0;
+    pos += header.len;
+
+    var i: u32 = audit_total - shown;
+    while (i < audit_total) : (i += 1) {
+        const e = audit_ring[i % cap];
+        const line = if (e.parent_slot) |p|
+            std.fmt.bufPrint(out[pos..], "  #{d} released slot {d} (parent slot {d})\n", .{ e.order_index, e.slot, p }) catch break
+        else
+            std.fmt.bufPrint(out[pos..], "  #{d} released slot {d} (root)\n", .{ e.order_index, e.slot }) catch break;
+        pos += line.len;
+    }
+    return pos;
+}
+
+//==============================================================================
+// Ordered Teardown Descent (G-2)
+//==============================================================================
+
+/// True when any live connection in the marked subtree lists `slot` as its
+/// parent.
+fn hasLiveChildIn(in_subtree: *const [MAX_GROOVE_CONNECTIONS]bool, slot: usize) bool {
+    for (&groove_connections, 0..) |*gc, i| {
+        if (!gc.active or !in_subtree[i]) continue;
+        if (gc.parent_slot) |p| {
+            if (p == slot) return true;
+        }
+    }
+    return false;
+}
+
+/// Release one connection slot: issue the per-node remote disconnect for its
+/// wire lease (best-effort — a lapsed lease, TLS refusal, or unreachable
+/// target must not block local cleanup), record the release in the audit
+/// ring, then clear the slot. A soft groove gets the full privacy wipe (peer
+/// identity erased); a hard groove is deactivated but keeps target_id for
+/// auto-reconnect — exactly the per-slot semantics proven in
+/// GrooveResidue.idr. Either way the generation is bumped so any outstanding
+/// GrooveHandle to this slot is dead (once-guard).
+fn releaseGrooveSlot(slot: usize) void {
+    const gc = &groove_connections[slot];
+    if (gc.wire_handle_len > 0) {
+        groove.wireDisconnect(gc.target_id, gc.wire_handle[0..gc.wire_handle_len]) catch {};
+    }
+    auditRecord(slot, gc.parent_slot);
+
+    const next_gen = gc.generation +% 1;
+    if (gc.groove_type == .soft) {
+        // Privacy wipe (GrooveResidue.idr softWipeFullyCleared).
+        gc.* = .{ .target_id = 0, .groove_type = .hard, .generation = next_gen };
+    } else {
+        // Hard groove: deactivate but retain the peer identity for
+        // auto-reconnect (GrooveResidue.idr hardDisconnectRetainsPeer).
+        gc.active = false;
+        gc.parent_slot = null;
+        gc.wire_handle_len = 0;
+        gc.generation = next_gen;
+    }
+}
+
+/// Ordered teardown descent (G-2 fix — replaces the old one-shot wipe).
+///
+/// Releases the connection in `root_slot` together with every connection it
+/// transitively OWNS (slots whose parent chain reaches root_slot),
+/// children-first (postorder): a slot is released only after its own subtree
+/// is empty. Each release issues the per-node remote disconnect and lands in
+/// the audit ring. The old path wiped a single slot in place, leaving owned
+/// children orphaned with no remote release and no audit trail.
+fn disconnectDescent(root_slot: usize) void {
+    // Mark the owned subtree: the root plus every live slot whose parent
+    // chain reaches it. Fixpoint iteration over a 32-slot table.
+    var in_subtree = [_]bool{false} ** MAX_GROOVE_CONNECTIONS;
+    in_subtree[root_slot] = true;
+    var changed = true;
+    while (changed) {
+        changed = false;
+        for (&groove_connections, 0..) |*gc, i| {
+            if (!gc.active or in_subtree[i]) continue;
+            if (gc.parent_slot) |p| {
+                if (in_subtree[p]) {
+                    in_subtree[i] = true;
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    // Postorder release: repeatedly release marked slots that have no live
+    // marked children. gossamer_groove_session_adopt rejects ownership
+    // cycles, so every pass releases at least one slot; the pass bound is
+    // defensive.
+    var passes: usize = 0;
+    while (passes < MAX_GROOVE_CONNECTIONS) : (passes += 1) {
+        var released_any = false;
+        for (&groove_connections, 0..) |*gc, i| {
+            if (!in_subtree[i] or !gc.active) continue;
+            if (hasLiveChildIn(&in_subtree, i)) continue;
+            releaseGrooveSlot(i);
+            released_any = true;
+        }
+        if (!released_any) break;
+    }
+
+    // Residue 0: after a subtree teardown no live member of the subtree may
+    // remain. (GrooveResidue.idr proves the per-slot wipe semantics; this
+    // asserts the descent covered the whole subtree.)
+    for (&groove_connections, 0..) |*gc, i| {
+        if (in_subtree[i]) std.debug.assert(!gc.active);
+    }
+}
+
+//==============================================================================
+// Typed Groove API (deprecated wrappers) + Session Lease API (G-3)
+//==============================================================================
+
 /// Establish a typed groove connection.
 /// type_: 0=hard, 1=soft
 /// ttl: for soft grooves, auto-disconnect after N seconds (0=manual)
-export fn gossamer_groove_connect_typed(target_id: u32, groove_type: c_int, ttl: u32) Result {
+///
+/// DEPRECATED: see the session API (gossamer_groove_connect_session), which
+/// acquires a real wire lease and returns a linear-ish GrooveHandle. This
+/// wrapper keeps the historical local-registration semantics — it books a
+/// connection slot WITHOUT issuing POST /connect (target_id is not checked
+/// against the target table), because existing ABI consumers
+/// (ForeignGen.idr) register grooves for targets that are not
+/// network-reachable at registration time.
+pub export fn gossamer_groove_connect_typed(target_id: u32, groove_type: c_int, ttl: u32) Result {
     clearError();
     const gt = std.meta.intToEnum(GrooveType, groove_type) catch {
         setError("Invalid groove type (0=hard, 1=soft)");
         return .invalid_param;
     };
 
-    for (&groove_connections) |*gc| {
-        if (!gc.active) {
-            gc.* = .{
-                .target_id = target_id,
-                .groove_type = gt,
-                .active = true,
-                .ttl_seconds = if (gt == .soft) ttl else 0,
-            };
-            return .ok;
-        }
-    }
-
-    setError("Groove connection limit reached (max 32)");
-    return .@"error";
+    const slot = allocGrooveSlot() orelse {
+        setError("Groove connection limit reached (max 32)");
+        return .@"error";
+    };
+    const gen = groove_connections[slot].generation;
+    groove_connections[slot] = .{
+        .target_id = target_id,
+        .groove_type = gt,
+        .active = true,
+        .ttl_seconds = if (gt == .soft) ttl else 0,
+        .generation = gen,
+    };
+    return .ok;
 }
 
-/// Disconnect a typed groove. For soft grooves, this wipes all shared state.
-export fn gossamer_groove_disconnect_typed(target_id: u32) Result {
+/// Disconnect a typed groove and its owned subtree via the ordered descent.
+/// For soft grooves the slot wipe is the privacy guarantee (GrooveResidue.idr).
+///
+/// DEPRECATED: see the session API (gossamer_groove_disconnect_session),
+/// which adds the once-guard on a per-lease handle. This wrapper keeps the
+/// target_id-addressed semantics for existing ABI consumers (ForeignGen.idr)
+/// and routes through the same descent.
+pub export fn gossamer_groove_disconnect_typed(target_id: u32) Result {
     clearError();
-    for (&groove_connections) |*gc| {
+    for (&groove_connections, 0..) |*gc, i| {
         if (gc.active and gc.target_id == target_id) {
-            // Soft groove disconnect: privacy guarantee — zero out state
-            if (gc.groove_type == .soft) {
-                gc.* = .{ .target_id = 0, .groove_type = .hard };
-            } else {
-                gc.active = false;
-            }
+            disconnectDescent(i);
+            clearError();
             return .ok;
         }
     }
     return .ok; // Idempotent
 }
 
+/// Establish a session groove lease (G-3).
+///
+/// Performs a REAL wire connect — POST /.well-known/groove/connect with a
+/// lease derived from groove_type (0=hard, 1=soft) and ttl_seconds — then
+/// books a connection slot and returns its GrooveHandle.
+///
+/// Returns GrooveHandle.invalid on failure; check gossamer_last_error().
+pub export fn gossamer_groove_connect_session(target_index: u32, groove_type: c_int, ttl_seconds: u32) callconv(.c) GrooveHandle {
+    clearError();
+    const gt = std.meta.intToEnum(GrooveType, groove_type) catch {
+        setError("Invalid groove type (0=hard, 1=soft)");
+        return .invalid;
+    };
+    if (target_index >= groove.TARGET_COUNT) {
+        setError("Invalid groove target index");
+        return .invalid;
+    }
+    const slot = allocGrooveSlot() orelse {
+        setError("Groove connection limit reached (max 32)");
+        return .invalid;
+    };
+
+    const mode: []const u8 = if (gt == .soft) "soft" else "hard";
+    var handle_buf: [groove.MAX_WIRE_HANDLE]u8 = undefined;
+    const hlen = groove.wireConnect(target_index, mode, @as(u64, ttl_seconds) * 1000, &handle_buf) catch {
+        // wireConnect already set the thread-local error (TLS refusal,
+        // unreachable target, or protocol failure).
+        return .invalid;
+    };
+
+    const gen = groove_connections[slot].generation;
+    groove_connections[slot] = .{
+        .target_id = target_index,
+        .groove_type = gt,
+        .active = true,
+        .ttl_seconds = ttl_seconds,
+        .generation = gen,
+    };
+    @memcpy(groove_connections[slot].wire_handle[0..hlen], handle_buf[0..hlen]);
+    groove_connections[slot].wire_handle_len = hlen;
+    return encodeGrooveHandle(slot, gen);
+}
+
+/// Disconnect a session groove lease and its owned subtree (consuming).
+///
+/// After a successful disconnect the slot generation changes, so a second
+/// call with the same handle returns .already_consumed (once-guard).
+pub export fn gossamer_groove_disconnect_session(h: GrooveHandle) callconv(.c) Result {
+    clearError();
+    if (h == .invalid) {
+        setError("Invalid groove handle");
+        return .invalid_param;
+    }
+    const slot = decodeGrooveHandle(h) orelse {
+        setError("Groove handle already consumed or stale");
+        return .already_consumed;
+    };
+    disconnectDescent(slot);
+    clearError();
+    return .ok;
+}
+
+/// Refresh a session lease: GET /.well-known/groove/heartbeat?handle=H.
+/// A 2xx (SPEC: 204) refreshes a hard lease's window. A soft lease MUST be
+/// allowed to expire (SPEC §4.6): providers refuse its refresh (409), so
+/// expect an error result for soft sessions.
+pub export fn gossamer_groove_heartbeat(h: GrooveHandle) callconv(.c) Result {
+    clearError();
+    if (h == .invalid) {
+        setError("Invalid groove handle");
+        return .invalid_param;
+    }
+    const slot = decodeGrooveHandle(h) orelse {
+        setError("Groove handle already consumed or stale");
+        return .already_consumed;
+    };
+    const gc = &groove_connections[slot];
+    if (gc.wire_handle_len == 0) {
+        setError("Groove connection holds no wire lease (registered via deprecated typed API)");
+        return .@"error";
+    }
+    groove.wireHeartbeat(gc.target_id, gc.wire_handle[0..gc.wire_handle_len]) catch {
+        // wireHeartbeat already set the thread-local error.
+        return .@"error";
+    };
+    clearError();
+    return .ok;
+}
+
+/// Declare ownership: `child`'s slot becomes owned by `parent`'s slot, so
+/// disconnecting the parent tears the child down first (ordered descent).
+/// Rejects self-adoption and ownership cycles, which would starve the
+/// postorder walk.
+pub export fn gossamer_groove_session_adopt(parent: GrooveHandle, child: GrooveHandle) callconv(.c) Result {
+    clearError();
+    const parent_slot = decodeGrooveHandle(parent) orelse {
+        setError("Groove parent handle invalid, consumed, or stale");
+        return .already_consumed;
+    };
+    const child_slot = decodeGrooveHandle(child) orelse {
+        setError("Groove child handle invalid, consumed, or stale");
+        return .already_consumed;
+    };
+    if (parent_slot == child_slot) {
+        setError("Groove connection cannot own itself");
+        return .invalid_param;
+    }
+
+    // Reject cycles: walk up from the proposed parent; if the chain reaches
+    // the child, adopting would create a loop.
+    var cursor: ?u8 = @as(u8, @intCast(parent_slot));
+    var hops: usize = 0;
+    while (cursor) |c| {
+        if (c == child_slot) {
+            setError("Groove adoption would create an ownership cycle");
+            return .invalid_param;
+        }
+        hops += 1;
+        if (hops > MAX_GROOVE_CONNECTIONS) break; // defensive — cycles are rejected here
+        cursor = groove_connections[c].parent_slot;
+    }
+
+    groove_connections[child_slot].parent_slot = @as(u8, @intCast(parent_slot));
+    clearError();
+    return .ok;
+}
+
 /// Query groove type for a connected target.
 /// Returns: 0=hard, 1=soft, -1=not connected
-export fn gossamer_groove_query_type(target_id: u32) c_int {
+pub export fn gossamer_groove_query_type(target_id: u32) c_int {
     for (groove_connections) |gc| {
         if (gc.active and gc.target_id == target_id) {
             return @intFromEnum(gc.groove_type);
@@ -1918,7 +2416,7 @@ export fn gossamer_groove_query_type(target_id: u32) c_int {
 /// Dock a groove service into the window frame.
 /// url: the HTTP endpoint to load in the dock panel (e.g. "http://localhost:6473/.well-known/groove")
 /// width: width of the dock panel in pixels (0 = default 300)
-export fn gossamer_groove_dock(handle_ptr: u64, url: [*:0]const u8, width: u32) Result {
+pub export fn gossamer_groove_dock(handle_ptr: u64, url: [*:0]const u8, width: u32) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null handle");
@@ -1942,7 +2440,7 @@ export fn gossamer_groove_dock(handle_ptr: u64, url: [*:0]const u8, width: u32) 
 }
 
 /// Remove the docked groove panel.
-export fn gossamer_groove_undock(handle_ptr: u64) Result {
+pub export fn gossamer_groove_undock(handle_ptr: u64) Result {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null handle");
@@ -1968,7 +2466,7 @@ export fn gossamer_groove_undock(handle_ptr: u64) Result {
 /// Returns a pointer to ChannelHandle, or 0 on failure.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__channelOpen
-export fn gossamer_channel_open(handle_ptr: u64) u64 {
+pub export fn gossamer_channel_open(handle_ptr: u64) u64 {
     clearError();
     const handle = ptrFromU64(handle_ptr) orelse {
         setError("Null webview handle");
@@ -2116,7 +2614,7 @@ export fn gossamer_channel_open(handle_ptr: u64) u64 {
 /// the JSON-encoded payload and its return value is sent back to JS.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__channelBind
-export fn gossamer_channel_bind(
+pub export fn gossamer_channel_bind(
     channel_ptr: u64,
     name: [*:0]const u8,
     callback: ?*const fn ([*:0]const u8, ?*anyopaque) callconv(.c) [*:0]const u8,
@@ -2181,7 +2679,7 @@ export fn gossamer_channel_bind(
 /// Maximum inflight async calls: 256 (MAX_INFLIGHT_ASYNC).
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__channelBindAsync
-export fn gossamer_channel_bind_async(
+pub export fn gossamer_channel_bind_async(
     channel_ptr: u64,
     name: [*:0]const u8,
     callback: ?*const fn ([*:0]const u8, ?*anyopaque) callconv(.c) [*:0]const u8,
@@ -2239,7 +2737,7 @@ export fn gossamer_channel_bind_async(
 /// Close the IPC channel. Consumes the channel handle.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__channelClose
-export fn gossamer_channel_close(channel_ptr: u64) void {
+pub export fn gossamer_channel_close(channel_ptr: u64) void {
     clearError();
     const raw_ptr = @as(?*ChannelHandle, @ptrFromInt(@as(usize, @intCast(channel_ptr)))) orelse return;
     raw_ptr.open = false;
@@ -2248,7 +2746,7 @@ export fn gossamer_channel_close(channel_ptr: u64) void {
 
 /// Query the number of currently inflight async IPC calls.
 /// Returns 0..256. Useful for diagnostics and back-pressure monitoring.
-export fn gossamer_async_inflight_count() u32 {
+pub export fn gossamer_async_inflight_count() u32 {
     return async_ipc.inflightCount();
 }
 
@@ -2427,7 +2925,7 @@ pub export fn gossamer_cap_resource_kind(token: u64) u32 {
 /// Revoke a capability token. Consumes it — future checks will fail.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__capRevoke
-export fn gossamer_cap_revoke(token: u64) void {
+pub export fn gossamer_cap_revoke(token: u64) void {
     clearError();
     if (token == 0) return;
 
@@ -2508,7 +3006,7 @@ threadlocal var error_buf: [ERROR_BUF_SIZE]u8 = undefined;
 /// function on this thread. Callers must copy if they need to keep it.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__lastError
-export fn gossamer_last_error() ?[*:0]const u8 {
+pub export fn gossamer_last_error() ?[*:0]const u8 {
     const err = last_error orelse return null;
     // Clear immediately — consume-on-read prevents stale errors
     last_error = null;
@@ -2525,12 +3023,12 @@ export fn gossamer_last_error() ?[*:0]const u8 {
 //==============================================================================
 
 /// Get the library version string.
-export fn gossamer_version() [*:0]const u8 {
+pub export fn gossamer_version() [*:0]const u8 {
     return VERSION;
 }
 
 /// Get build information string.
-export fn gossamer_build_info() [*:0]const u8 {
+pub export fn gossamer_build_info() [*:0]const u8 {
     return BUILD_INFO;
 }
 
@@ -2544,7 +3042,7 @@ export fn gossamer_build_info() [*:0]const u8 {
 /// Platform identifier string.
 /// Returns one of: "linux", "macos", "windows", "freebsd", "openbsd",
 /// "netbsd", "ios", or "unknown".
-export fn gossamer_platform() [*:0]const u8 {
+pub export fn gossamer_platform() [*:0]const u8 {
     return switch (builtin.os.tag) {
         .linux => "linux",
         .macos => "macos",
@@ -2559,7 +3057,7 @@ export fn gossamer_platform() [*:0]const u8 {
 
 /// CPU architecture string.
 /// Returns one of: "x86_64", "aarch64", "riscv64", "wasm32", or "unknown".
-export fn gossamer_arch() [*:0]const u8 {
+pub export fn gossamer_arch() [*:0]const u8 {
     return switch (builtin.cpu.arch) {
         .x86_64 => "x86_64",
         .aarch64 => "aarch64",
@@ -2571,7 +3069,7 @@ export fn gossamer_arch() [*:0]const u8 {
 
 /// Webview engine name for the current platform.
 /// Returns one of: "webkitgtk", "wkwebview", "webview2", or "none".
-export fn gossamer_webview_engine() [*:0]const u8 {
+pub export fn gossamer_webview_engine() [*:0]const u8 {
     return switch (builtin.os.tag) {
         .linux, .freebsd, .openbsd, .netbsd => "webkitgtk",
         .macos, .ios => "wkwebview",
@@ -2582,7 +3080,7 @@ export fn gossamer_webview_engine() [*:0]const u8 {
 
 /// Whether the current platform is a desktop platform (not mobile/embedded).
 /// Returns 1 for desktop, 0 for mobile/other.
-export fn gossamer_is_desktop() u8 {
+pub export fn gossamer_is_desktop() u8 {
     return switch (builtin.os.tag) {
         .linux, .macos, .windows, .freebsd, .openbsd, .netbsd => 1,
         else => 0,
@@ -2625,7 +3123,7 @@ const PLATFORM_JSON = blk: {
         "\",\"desktop\":" ++ desktop ++ "}";
 };
 
-export fn gossamer_platform_json() [*:0]const u8 {
+pub export fn gossamer_platform_json() [*:0]const u8 {
     return PLATFORM_JSON;
 }
 
@@ -3023,4 +3521,110 @@ test "Result enum has at least 10 variants and they are contiguous" {
     try std.testing.expectEqual(@as(c_int, 0), ok);
     try std.testing.expectEqual(@as(c_int, 1), err);
     try std.testing.expect(guard >= 10); // At least 11 variants (0..10)
+}
+
+test "groove session handle is consumed exactly once (slot reuse guard)" {
+    // The wire connect needs a live service; the once-guard is purely local,
+    // so this test books the slot by hand (as the session connect would).
+    const slot = allocGrooveSlot().?;
+    const gen = groove_connections[slot].generation;
+    groove_connections[slot] = .{
+        .target_id = 4,
+        .groove_type = .soft,
+        .active = true,
+        .ttl_seconds = 5,
+        .generation = gen,
+    };
+    const h = encodeGrooveHandle(slot, gen);
+
+    try std.testing.expectEqual(Result.ok, gossamer_groove_disconnect_session(h));
+    // Second consume: the generation changed, so the handle is dead.
+    try std.testing.expectEqual(Result.already_consumed, gossamer_groove_disconnect_session(h));
+
+    // Slot reuse: a fresh booking in the same slot must not resurrect h.
+    const gen2 = groove_connections[slot].generation;
+    try std.testing.expect(gen2 != gen);
+    groove_connections[slot] = .{
+        .target_id = 7,
+        .groove_type = .hard,
+        .active = true,
+        .generation = gen2,
+    };
+    try std.testing.expectEqual(Result.already_consumed, gossamer_groove_disconnect_session(h));
+
+    // The live handle for the reused slot still works.
+    const h2 = encodeGrooveHandle(slot, gen2);
+    try std.testing.expectEqual(Result.ok, gossamer_groove_disconnect_session(h2));
+}
+
+test "groove session heartbeat and disconnect reject the invalid handle" {
+    try std.testing.expectEqual(Result.invalid_param, gossamer_groove_heartbeat(.invalid));
+    try std.testing.expectEqual(Result.invalid_param, gossamer_groove_disconnect_session(.invalid));
+}
+
+test "groove disconnect descent releases children before parents (residue 0)" {
+    // Build root → child → grandchild by hand and tear down the root.
+    const root = allocGrooveSlot().?;
+    const g_root = groove_connections[root].generation;
+    groove_connections[root] = .{ .target_id = 100, .groove_type = .soft, .active = true, .generation = g_root };
+
+    const child = allocGrooveSlot().?;
+    const g_child = groove_connections[child].generation;
+    groove_connections[child] = .{ .target_id = 101, .groove_type = .soft, .active = true, .generation = g_child, .parent_slot = @as(u8, @intCast(root)) };
+
+    const grand = allocGrooveSlot().?;
+    const g_grand = groove_connections[grand].generation;
+    groove_connections[grand] = .{ .target_id = 102, .groove_type = .hard, .active = true, .generation = g_grand, .parent_slot = @as(u8, @intCast(child)) };
+
+    const before = audit_total;
+    try std.testing.expectEqual(Result.ok, gossamer_groove_disconnect_session(encodeGrooveHandle(root, g_root)));
+
+    // Three releases, children-first: grandchild, child, then the root.
+    const cap: u32 = @intCast(AUDIT_RING_SIZE);
+    try std.testing.expectEqual(before + 3, audit_total);
+    try std.testing.expectEqual(@as(u8, @intCast(grand)), audit_ring[(before + 0) % cap].slot);
+    try std.testing.expectEqual(@as(u8, @intCast(child)), audit_ring[(before + 1) % cap].slot);
+    try std.testing.expectEqual(@as(u8, @intCast(root)), audit_ring[(before + 2) % cap].slot);
+
+    // Residue 0: nothing in the subtree stays live.
+    try std.testing.expect(!groove_connections[root].active);
+    try std.testing.expect(!groove_connections[child].active);
+    try std.testing.expect(!groove_connections[grand].active);
+    // Soft slots got the privacy wipe; the hard grandchild keeps its peer id
+    // for auto-reconnect (GrooveResidue.idr).
+    try std.testing.expectEqual(@as(u32, 0), groove_connections[root].target_id);
+    try std.testing.expectEqual(@as(u32, 0), groove_connections[child].target_id);
+    try std.testing.expectEqual(@as(u32, 102), groove_connections[grand].target_id);
+}
+
+test "groove session adopt rejects self-adoption and ownership cycles" {
+    const a = allocGrooveSlot().?;
+    const gen_a = groove_connections[a].generation;
+    groove_connections[a] = .{ .target_id = 1, .groove_type = .soft, .active = true, .generation = gen_a };
+    const ha = encodeGrooveHandle(a, gen_a);
+
+    const b = allocGrooveSlot().?;
+    const gen_b = groove_connections[b].generation;
+    groove_connections[b] = .{ .target_id = 2, .groove_type = .soft, .active = true, .generation = gen_b };
+    const hb = encodeGrooveHandle(b, gen_b);
+
+    try std.testing.expectEqual(Result.invalid_param, gossamer_groove_session_adopt(ha, ha));
+    try std.testing.expectEqual(Result.ok, gossamer_groove_session_adopt(ha, hb)); // a owns b
+    try std.testing.expectEqual(Result.invalid_param, gossamer_groove_session_adopt(hb, ha)); // would cycle
+
+    // Tearing down a releases b first (owned subtree member), consuming hb.
+    try std.testing.expectEqual(Result.ok, gossamer_groove_disconnect_session(ha));
+    try std.testing.expect(!groove_connections[b].active);
+    try std.testing.expectEqual(Result.already_consumed, gossamer_groove_disconnect_session(hb));
+}
+
+test "gossamer_groove_audit_summary writes a readable summary" {
+    var buf: [4096]u8 = undefined;
+    const n = gossamer_groove_audit_summary(&buf, buf.len);
+    try std.testing.expect(n > 0);
+    try std.testing.expect(std.mem.startsWith(u8, buf[0..n], "groove teardown audit:"));
+
+    // A too-small buffer reports 0 rather than truncating mid-header.
+    var tiny: [8]u8 = undefined;
+    try std.testing.expectEqual(@as(usize, 0), gossamer_groove_audit_summary(&tiny, tiny.len));
 }

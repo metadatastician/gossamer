@@ -45,7 +45,7 @@
     "src/interface/abi/*.idr — Idris2 formal proofs; changes require re-verification"
     "src/interface/ffi/src/*.zig — C ABI boundary; changes affect all consumers"
     "src/interface/generated/*.h — auto-generated only; do not edit manually"
-    "src/platform/*.eph — platform-specific code; test on all targets"
+    "src/interface/ffi/src/webview_*.zig — platform-specific webview backends; test on all targets"
     ".machine_readable/ — checkpoint files, format is specified"
   )
 

@@ -3,61 +3,44 @@
 //
 // Gossamer.Filesystem — File I/O operations guarded by capability tokens.
 //
-// All filesystem operations require a valid RESOURCE_FILESYSTEM capability
-// token (from Capabilities.grant). The token is borrowed (not consumed) by
-// read/write operations.
+// Every operation requires a valid RESOURCE_FILESYSTEM capability token,
+// passed by value as `I64` and BORROWED (never consumed) by the call — its
+// linear grant/revoke discipline lives in Capabilities.eph. No handle is
+// created here, so these functions own no linear resource of their own.
 //
-// These are IPC commands dispatched through the Gossamer bridge, not direct
-// file I/O from the webview. The Zig FFI backend performs the actual I/O
-// after validating the capability token.
+// These are IPC commands dispatched through the Gossamer bridge; the Zig FFI
+// backend performs the actual I/O after validating the token.
+//
+// The earlier version declared `: I32` returns over `__ffi(...)`, which is
+// typed `I64`, so it never type-checked. The `extern` block carries the real
+// return types (I64 string pointers, I32 result codes).
 
-// Read a text file and return its contents as a string pointer.
-// Requires a valid filesystem capability token.
-// Returns 0 on error (check Shell.lastError for details).
-// FFI: gossamer_fs_read_text(path, cap_token) -> string_ptr
-fn readText(path: String, capToken: I64): I64 =
-  __ffi("gossamer_fs_read_text", path, capToken)
+module gossamer/core/filesystem
 
-// Write text to a file. Creates the file if it doesn't exist.
-// Requires a valid filesystem capability token with write scope.
-// Returns 0 (ok) or non-zero error code.
-// FFI: gossamer_fs_write_text(path, contents, cap_token) -> result
-fn writeText(path: String, contents: String, capToken: I64): I32 =
-  __ffi("gossamer_fs_write_text", path, contents, capToken)
+// ── libgossamer C ABI (source of truth: src/interface/ffi/src/*.zig) ───────
+extern "gossamer" {
+  // Read a text file → string pointer (0 = error).
+  fn gossamer_fs_read_text(path: String, capToken: I64): I64
+  // Write text (creates the file) → 0 ok / non-zero error.
+  fn gossamer_fs_write_text(path: String, contents: String, capToken: I64): I32
+  // Existence check → 1 / 0.
+  fn gossamer_fs_exists(path: String, capToken: I64): I32
+  // List a directory → JSON-array string pointer (0 = error).
+  fn gossamer_fs_list_dir(path: String, capToken: I64): I64
+  // Delete a file → 0 ok / non-zero error.
+  fn gossamer_fs_remove(path: String, capToken: I64): I32
+  // mkdir -p (idempotent) → 0 ok / non-zero error.
+  fn gossamer_fs_mkdir_p(path: String, capToken: I64): I32
+  // Copy src → dst (dst parent must exist) → 0 ok / non-zero error.
+  fn gossamer_fs_copy_file(src: String, dst: String, capToken: I64): I32
+}
 
-// Check if a file or directory exists.
-// Requires a valid filesystem capability token.
-// Returns 1 (true) or 0 (false).
-// FFI: gossamer_fs_exists(path, cap_token) -> bool
-fn exists(path: String, capToken: I64): I32 =
-  __ffi("gossamer_fs_exists", path, capToken)
+// ── Idiomatic wrappers (public API) ────────────────────────────────────────
 
-// List directory contents. Returns a JSON array of filenames as a
-// string pointer, or 0 on error.
-// Requires a valid filesystem capability token.
-// FFI: gossamer_fs_list_dir(path, cap_token) -> json_ptr
-fn listDir(path: String, capToken: I64): I64 =
-  __ffi("gossamer_fs_list_dir", path, capToken)
-
-// Delete a file. Requires a valid filesystem capability token with
-// write scope.
-// Returns 0 (ok) or non-zero error code.
-// FFI: gossamer_fs_remove(path, cap_token) -> result
-fn remove(path: String, capToken: I64): I32 =
-  __ffi("gossamer_fs_remove", path, capToken)
-
-// Create a directory and any missing parent directories (mkdir -p).
-// Idempotent — returns 0 when the directory already exists.
-// Requires a valid filesystem capability token with write scope.
-// Returns 0 (ok) or non-zero error code.
-// FFI: gossamer_fs_mkdir_p(path, cap_token) -> result
-fn mkdirP(path: String, capToken: I64): I32 =
-  __ffi("gossamer_fs_mkdir_p", path, capToken)
-
-// Copy a file from src to dst, overwriting dst if it exists. The parent
-// directory of dst must already exist — call mkdirP first if needed.
-// Requires a valid filesystem capability token with write scope.
-// Returns 0 (ok) or non-zero error code.
-// FFI: gossamer_fs_copy_file(src, dst, cap_token) -> result
-fn copyFile(src: String, dst: String, capToken: I64): I32 =
-  __ffi("gossamer_fs_copy_file", src, dst, capToken)
+pub fn readText(path: String, capToken: I64): I64 = gossamer_fs_read_text(path, capToken)
+pub fn writeText(path: String, contents: String, capToken: I64): I32 = gossamer_fs_write_text(path, contents, capToken)
+pub fn exists(path: String, capToken: I64): I32 = gossamer_fs_exists(path, capToken)
+pub fn listDir(path: String, capToken: I64): I64 = gossamer_fs_list_dir(path, capToken)
+pub fn remove(path: String, capToken: I64): I32 = gossamer_fs_remove(path, capToken)
+pub fn mkdirP(path: String, capToken: I64): I32 = gossamer_fs_mkdir_p(path, capToken)
+pub fn copyFile(src: String, dst: String, capToken: I64): I32 = gossamer_fs_copy_file(src, dst, capToken)

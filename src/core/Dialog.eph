@@ -3,103 +3,93 @@
 //
 // Gossamer.Dialog — Native file dialog wrappers for Ephapax.
 //
-// Provides safe, typed access to GTK file chooser dialogs via the Zig FFI.
-// Each function returns a nullable result (0 = cancelled / error).
+// A dialog result path is a GENUINELY LINEAR resource, enforced by `ephapax
+// check` (default `--mode linear`):
+//   - the raw* openers mint a linear `DialogPath` (a heap C buffer; the null
+//     sentinel on cancel/error is carried as the same handle);
+//   - `readPath` BORROWS the handle (`&DialogPath`) to read the string;
+//   - `freePath` CONSUMES the handle (gossamer_dialog_free_path is a
+//     documented no-op on the null sentinel, so always-free is safe).
 //
-// The path pointer returned by the FFI is a LINEAR resource:
-// - It MUST be freed exactly once via gossamer_dialog_free_path.
-// - The safe wrappers below handle this automatically, converting the
-//   raw pointer to an Ephapax String and freeing the C buffer.
+// Because `DialogPath` is linear, opening a dialog and never freeing the
+// returned buffer is a compile-time type error — no path buffer can leak. The
+// high-level open/save/openDirectory/openMultiple wrappers each perform the
+// open→read→free lifecycle in one linear-safe call and return the path string
+// ("" = cancelled/error; openMultiple returns a newline-separated list).
+//
+// This drops the earlier `Option<String>` / `List<String>` return sugar: those
+// generic types are not expressible in the current Ephapax v2 grammar, and the
+// earlier file (which used them, plus `: I32` returns over `__ffi(...)` typed
+// `I64`, plus an undefined `split`) never type-checked. Every symbol declared
+// below is real — the gossamer_dialog_* C ABI plus the Idris2 RTS string
+// reader idris2_getString the original relied on — so there is no phantom FFI.
 //
 // Filter format: "Name|ext1;ext2|Name2|ext3;ext4"
 //   Example: "JSON files|*.json;*.yaml|All files|*"
 
-// ---------------------------------------------------------------------------
-// Raw FFI bindings (internal — use the safe wrappers below)
-// ---------------------------------------------------------------------------
+module gossamer/core/dialog
 
-// Show a file open dialog (single file).
-// FFI: gossamer_dialog_open(title, filters) -> path_ptr
-fn rawOpen(title: String, filters: String): I64 =
-  __ffi("gossamer_dialog_open", title, filters)
+// ── libgossamer C ABI (source of truth: src/interface/ffi/src/*.zig) ───────
+extern "gossamer" {
+  // Opaque, linear dialog-result path buffer.
+  type DialogPath
 
-// Show a file save dialog.
-// FFI: gossamer_dialog_save(title, filters) -> path_ptr
-fn rawSave(title: String, filters: String): I64 =
-  __ffi("gossamer_dialog_save", title, filters)
+  // Openers → a path buffer (null sentinel on cancel/error).
+  fn gossamer_dialog_open(title: String, filters: String): DialogPath
+  fn gossamer_dialog_save(title: String, filters: String): DialogPath
+  fn gossamer_dialog_open_directory(title: String): DialogPath
+  fn gossamer_dialog_open_multiple(title: String, filters: String): DialogPath
 
-// Show a directory picker dialog.
-// FFI: gossamer_dialog_open_directory(title) -> path_ptr
-fn rawOpenDirectory(title: String): I64 =
-  __ffi("gossamer_dialog_open_directory", title)
+  // Consuming op — free the buffer (no-op on the null sentinel).
+  fn gossamer_dialog_free_path(p: DialogPath): Unit
+}
 
-// Show a multi-file open dialog.
-// FFI: gossamer_dialog_open_multiple(title, filters) -> path_ptr
-fn rawOpenMultiple(title: String, filters: String): I64 =
-  __ffi("gossamer_dialog_open_multiple", title, filters)
+// Idris2 RTS string reader — borrows the buffer, returns an Ephapax String
+// ("" for the null sentinel).
+extern "idris2" {
+  fn idris2_getString(p: &DialogPath): String
+}
 
-// Free a path string returned by a dialog function.
-// FFI: gossamer_dialog_free_path(path_ptr) -> void
-fn rawFreePath(pathPtr: I64): () =
-  __ffi("gossamer_dialog_free_path", pathPtr)
+// ── Raw layer (manual open → read → free control) ──────────────────────────
 
-// Convert a C string pointer to an Ephapax String.
-// FFI: idris2_getString(ptr) -> String
-fn ptrToString(ptr: I64): String =
-  __ffi("idris2_getString", ptr)
+pub fn rawOpen(title: String, filters: String): DialogPath = gossamer_dialog_open(title, filters)
+pub fn rawSave(title: String, filters: String): DialogPath = gossamer_dialog_save(title, filters)
+pub fn rawOpenDirectory(title: String): DialogPath = gossamer_dialog_open_directory(title)
+pub fn rawOpenMultiple(title: String, filters: String): DialogPath = gossamer_dialog_open_multiple(title, filters)
 
-// ---------------------------------------------------------------------------
-// Safe wrappers — return Option<String>, auto-free the C buffer
-// ---------------------------------------------------------------------------
+// Read the path string from a buffer. Borrows the handle.
+pub fn readPath(p: &DialogPath): String = idris2_getString(p)
 
-// Show a file open dialog.
-// Returns None if the user cancelled or an error occurred.
+// Free a dialog path buffer. CONSUMES the handle.
+pub fn freePath(p: DialogPath): Unit = gossamer_dialog_free_path(p)
+
+// ── Safe wrappers — open → read → free in one linear-safe call ─────────────
 //
-// Example:
-//   match open("Open File", "JSON|*.json|All|*") {
-//     Some(path) => loadFile(path),
-//     None       => log("User cancelled"),
-//   }
-fn open(title: String, filters: String): Option<String> =
-  let ptr = rawOpen(title, filters) in
-  if ptr == 0 then None
-  else
-    let path = ptrToString(ptr) in
-    let _ = rawFreePath(ptr) in
-    Some(path)
+// Each returns the selected path as a String ("" = cancelled/error). Because
+// the buffer is consumed by freePath on every path, none can leak.
 
-// Show a file save dialog.
-// Returns None if the user cancelled or an error occurred.
-fn save(title: String, filters: String): Option<String> =
-  let ptr = rawSave(title, filters) in
-  if ptr == 0 then None
-  else
-    let path = ptrToString(ptr) in
-    let _ = rawFreePath(ptr) in
-    Some(path)
+pub fn open(title: String, filters: String): String =
+  let! p = rawOpen(title, filters)
+  let s = readPath(&p)
+  let _u = freePath(p)
+  s
 
-// Show a directory picker dialog.
-// Returns None if the user cancelled or an error occurred.
-fn openDirectory(title: String): Option<String> =
-  let ptr = rawOpenDirectory(title) in
-  if ptr == 0 then None
-  else
-    let path = ptrToString(ptr) in
-    let _ = rawFreePath(ptr) in
-    Some(path)
+pub fn save(title: String, filters: String): String =
+  let! p = rawSave(title, filters)
+  let s = readPath(&p)
+  let _u = freePath(p)
+  s
 
-// Show a multi-file open dialog.
-// Returns a list of selected file paths (empty if cancelled).
-// The paths are newline-separated in the raw FFI result.
-fn openMultiple(title: String, filters: String): List<String> =
-  let ptr = rawOpenMultiple(title, filters) in
-  if ptr == 0 then []
-  else
-    let combined = ptrToString(ptr) in
-    let _ = rawFreePath(ptr) in
-    splitLines(combined)
+pub fn openDirectory(title: String): String =
+  let! p = rawOpenDirectory(title)
+  let s = readPath(&p)
+  let _u = freePath(p)
+  s
 
-// Split a string on newline characters into a list.
-fn splitLines(s: String): List<String> =
-  if s == "" then []
-  else split(s, '\n')
+// Newline-separated list of selected paths ("" if cancelled). Callers split
+// on '\n'.
+pub fn openMultiple(title: String, filters: String): String =
+  let! p = rawOpenMultiple(title, filters)
+  let s = readPath(&p)
+  let _u = freePath(p)
+  s

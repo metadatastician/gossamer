@@ -11,7 +11,7 @@ Release:        1%{?dist}
 Summary:        Linearly-typed webview shell framework with provable resource safety
 
 License:        MPL-2.0
-URL:            https://github.com/hyperpolymath/gossamer
+URL:            https://github.com/metadatastician/gossamer
 
 # The source tree is the repository itself; rpmbuild is expected to be run
 # from a checkout rather than a tarball-based workflow.

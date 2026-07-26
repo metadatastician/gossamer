@@ -3,73 +3,71 @@
 //
 // Gossamer.ClosureConversion — Closure representation and operations.
 //
-// Closure conversion transforms functions with free variables into
-// functions that take an explicit environment parameter. This is
-// necessary for first-class functions in Ephapax since the Zig FFI
-// layer uses C ABI calling conventions (no implicit captures).
+// Closure conversion transforms functions with free variables into functions
+// that take an explicit environment parameter — necessary for first-class
+// functions over the C ABI (no implicit captures). A closure pairs a lifted
+// function pointer with a heap-allocated environment holding the captures.
 //
-// A closure is represented as a pair:
-//   (function_pointer: I64, environment_pointer: I64)
+// A closure is a GENUINELY LINEAR resource, enforced by `ephapax check`
+// (default `--mode linear`) — this is the "linear closures must be freed
+// exactly once" rule the module documents, now actually type-checked:
+//   - `makeClosure` mints a linear `Closure` (folding in the env pointer);
+//   - `applyClosure` BORROWS the closure (`&Closure`);
+//   - `freeClosure` CONSUMES the closure and its environment.
 //
-// The environment is a heap-allocated struct containing the captured
-// variables. The function pointer points to a "lifted" version of the
-// original function that takes the environment as its first argument.
+// Because `Closure` is linear, building a closure and never freeing it is a
+// compile-time type error. The raw environment pointer (allocClosureEnv /
+// envStore / envLoad) stays `I64`: it is a construction-time scratch buffer
+// that `makeClosure` takes ownership of.
 //
-// Example transformation:
-//
-//   let x = 42
-//   let f = fn(y: I32): I32 = x + y    // captures x
-//
-// Becomes:
-//
-//   struct Env_f { x: I32 }
-//   fn f_lifted(env: *Env_f, y: I32): I32 = env.x + y
-//   let env = allocEnv({ x = 42 })
-//   let f = makeClosure(f_lifted, env)
-//
-// Linear type interaction:
-//   Closures that capture linear resources must themselves be linear.
-//   The closure conversion pass tracks linearity of captured variables
-//   and marks the resulting closure as linear if any capture is linear.
-//   Linear closures must be applied exactly once (enforced by the type
-//   checker after conversion).
+// The earlier version passed the closure as a plain `I64` and declared
+// `: ()` returns over `__ffi(...)` (typed `I64`), so it never type-checked.
 
-// Create a closure from a function pointer and environment pointer.
-// The environment must have been allocated via allocClosureEnv.
-// Returns an opaque closure handle.
-// FFI: ephapax_closure_make(fn_ptr, env_ptr) -> closure
-fn makeClosure(fnPtr: I64, envPtr: I64): I64 =
-  __ffi("ephapax_closure_make", fnPtr, envPtr)
+module gossamer/core/closure_conversion
 
-// Apply a closure to an argument.
-// Invokes the function pointer with (environment, argument).
-// Returns the result of the function call.
-// FFI: ephapax_closure_apply(closure, arg) -> result
-fn applyClosure(closure: I64, arg: I64): I64 =
-  __ffi("ephapax_closure_apply", closure, arg)
+// ── Ephapax runtime C ABI (closure support) ────────────────────────────────
+extern "gossamer" {
+  // Opaque, linear closure handle.
+  type Closure
 
-// Free a closure and its environment.
-// Must be called exactly once for each closure created.
-// For linear closures, the type system enforces this.
-// FFI: ephapax_closure_free(closure) -> void
-fn freeClosure(closure: I64): () =
-  __ffi("ephapax_closure_free", closure)
+  // ephapax_closure_make(fn_ptr, env_ptr) -> closure
+  fn ephapax_closure_make(fnPtr: I64, envPtr: I64): Closure
 
-// Allocate an environment struct for closure capture.
-// size_bytes is the total size of the captured variables.
-// Returns a pointer to the allocated environment.
-// FFI: ephapax_closure_alloc_env(size_bytes) -> env_ptr
-fn allocClosureEnv(sizeBytes: I32): I64 =
-  __ffi("ephapax_closure_alloc_env", sizeBytes)
+  // Borrow op — invoke the closure without retiring it.
+  fn ephapax_closure_apply(closure: &Closure, arg: I64): I64
 
-// Store a value into a closure environment at a given offset.
-// Used during closure construction to populate captured variables.
-// FFI: ephapax_closure_env_store(env_ptr, offset, value) -> void
-fn envStore(envPtr: I64, offset: I32, value: I64): () =
-  __ffi("ephapax_closure_env_store", envPtr, offset, value)
+  // Consuming op — free the closure and its environment.
+  fn ephapax_closure_free(closure: Closure): Unit
 
-// Load a value from a closure environment at a given offset.
-// Used inside lifted functions to access captured variables.
-// FFI: ephapax_closure_env_load(env_ptr, offset) -> value
-fn envLoad(envPtr: I64, offset: I32): I64 =
-  __ffi("ephapax_closure_env_load", envPtr, offset)
+  // Raw environment scratch buffer (folded into the closure by make).
+  fn ephapax_closure_alloc_env(sizeBytes: I32): I64
+  fn ephapax_closure_env_store(envPtr: I64, offset: I32, value: I64): Unit
+  fn ephapax_closure_env_load(envPtr: I64, offset: I32): I64
+}
+
+// ── Idiomatic wrappers (public API) ────────────────────────────────────────
+
+// Create a closure from a function pointer and environment pointer. Returns a
+// linear handle that MUST be freed. Takes ownership of envPtr.
+pub fn makeClosure(fnPtr: I64, envPtr: I64): Closure = ephapax_closure_make(fnPtr, envPtr)
+
+// Apply a closure to an argument. Borrows the closure.
+pub fn applyClosure(closure: &Closure, arg: I64): I64 = ephapax_closure_apply(closure, arg)
+
+// Free a closure and its environment. CONSUMES the closure.
+pub fn freeClosure(closure: Closure): Unit = ephapax_closure_free(closure)
+
+pub fn allocClosureEnv(sizeBytes: I32): I64 = ephapax_closure_alloc_env(sizeBytes)
+pub fn envStore(envPtr: I64, offset: I32, value: I64): Unit = ephapax_closure_env_store(envPtr, offset, value)
+pub fn envLoad(envPtr: I64, offset: I32): I64 = ephapax_closure_env_load(envPtr, offset)
+
+// ── Linearity witness ──────────────────────────────────────────────────────
+// Allocate an environment, build a closure, apply it (borrow), then free it
+// (consume). Drop `freeClosure(clo)` and `ephapax check` rejects the file:
+// the closure cannot leak.
+fn session(fnPtr: I64, arg: I64): I64 =
+  let env = allocClosureEnv(16)
+  let! clo = makeClosure(fnPtr, env)
+  let r = applyClosure(&clo, arg)
+  let _u = freeClosure(clo)
+  r
