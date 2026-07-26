@@ -13,13 +13,25 @@ on:
     branches: ['**']
     paths:
       - 'src/interface/**'
+      - 'tests/idris2/**'
       - 'gossamer-abi.ipkg'
+      - 'gossamer-groove.ipkg'
+      - 'gossamer-abi-tests.ipkg'
+      - 'scripts/check-abi-decoupling.sh'
+      - 'scripts/check-abi-ffi-cleave.sh'
+      - 'scripts/gen-abi-foreign.sh'
       - '.github/workflows/abi-typecheck.yml'
   push:
     branches: [main, master]
     paths:
       - 'src/interface/**'
+      - 'tests/idris2/**'
       - 'gossamer-abi.ipkg'
+      - 'gossamer-groove.ipkg'
+      - 'gossamer-abi-tests.ipkg'
+      - 'scripts/check-abi-decoupling.sh'
+      - 'scripts/check-abi-ffi-cleave.sh'
+      - 'scripts/gen-abi-foreign.sh'
       - '.github/workflows/abi-typecheck.yml'
 
 permissions:
@@ -30,12 +42,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  abi-typecheck:
-    name: idris2 --typecheck gossamer-abi.ipkg
+  # Fast, toolchain-free structural gates. Run in seconds before the ~15-min
+  # Idris2 build:
+  #   * decoupling guard (gossamer#95) — symlinks intact, no shell->groove import
+  #   * cleave gate     (gossamer#82) — every ABI %foreign resolves to a real
+  #                       Zig export (typecheck can't see %foreign linkage)
+  abi-structure:
+    name: ABI structure gates (decoupling + cleave)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Check ABI decoupling (symlinks + groove split)
+        run: ./scripts/check-abi-decoupling.sh
+      - name: Check ABI/FFI cleave (no phantom %foreign)
+        run: ./scripts/check-abi-ffi-cleave.sh
+
+  abi-typecheck:
+    name: idris2 typecheck + test (shell + groove)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: abi-structure
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Install Chez Scheme
         run: sudo apt-get update && sudo apt-get install -y chezscheme
@@ -49,5 +80,16 @@ jobs:
           make install
           echo "$HOME/.idris2/bin" >> "$GITHUB_PATH"
 
-      - name: Typecheck the formal ABI package
+      - name: Typecheck the shell ABI package (groove-agnostic)
         run: idris2 --typecheck gossamer-abi.ipkg
+
+      - name: Install the shell ABI package (dependency of groove)
+        run: idris2 --install gossamer-abi.ipkg
+
+      - name: Typecheck the groove protocol package (depends on the shell)
+        run: idris2 --typecheck gossamer-groove.ipkg
+
+      - name: Build & run the ABI runtime test suite
+        run: |
+          idris2 --build gossamer-abi-tests.ipkg
+          ./build/exec/gossamer-abi-tests

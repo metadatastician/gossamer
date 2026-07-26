@@ -3,13 +3,17 @@
 --
 ||| Handle Linearity Proofs for Gossamer
 |||
-||| Proves that connection handles (webview, channel, groove, capability)
+||| Proves that connection handles (webview, channel, capability)
 ||| cannot be duplicated, must be consumed exactly once, and follow a
 ||| valid state machine lifecycle.
 |||
-||| Builds on the linear resource types in Types.idr and Groove.idr.
-||| The existing WebviewHandle, Channel, GrooveHandle, and Cap types are
-||| already parameterised with non-null proofs. This module adds:
+||| Builds on the linear resource types in Types.idr. The existing
+||| WebviewHandle, Channel, and Cap types are already parameterised with
+||| non-null proofs. This module adds:
+|||
+||| The groove-handle specialisation (`LinearGroove`, `allocateGroove`,
+||| `consumeForDisconnect`, `grooveValid`) lives in the groove layer
+||| (`Gossamer.ABI.GrooveLinearity`) so the shell ABI stays groove-agnostic.
 |||
 ||| 1. Uniqueness: a handle token cannot produce two live handles.
 ||| 2. Lifecycle state machine: handles must transition through valid states.
@@ -21,7 +25,6 @@
 module Gossamer.ABI.HandleLinearity
 
 import Gossamer.ABI.Types
-import Gossamer.ABI.Groove
 import Data.So
 import Data.Bits
 
@@ -54,17 +57,15 @@ checkValid token =
 
 ||| Recover the (erased) non-null witness carried by each handle's
 ||| constructor as a `ValidToken` for its raw token. The witness already
-||| exists inside the handle — `MkWebview`/`MkGroove`/`MkChannel`/`MkCap`
+||| exists inside the handle — `MkWebview`/`MkChannel`/`MkCap`
 ||| each require `So (ptr /= 0)` at construction — but the `*Ptr`/`capToken`
 ||| projections discard it. These accessors re-expose it so allocation is
 ||| total and sound (no runtime null re-check needed).
+||| (`grooveValid` is the analogous accessor for `GrooveHandle`; it lives in
+||| `Gossamer.ABI.GrooveLinearity` in the groove layer.)
 public export
 webviewValid : (wv : WebviewHandle) -> ValidToken (webviewPtr wv)
 webviewValid (MkWebview ptr {nonNull}) = MkValid {nonNull}
-
-public export
-grooveValid : (gh : GrooveHandle offers consumes) -> ValidToken (groovePtr gh)
-grooveValid (MkGroove ptr {nonNull}) = MkValid {nonNull}
 
 public export
 channelValid : (ch : Channel req resp) -> ValidToken (channelPtr ch)
@@ -224,28 +225,6 @@ consumeForRun = consume
 public export
 consumeForDestroy : LinearWebview Active -> (WebviewHandle, LinearWebview Consumed)
 consumeForDestroy = consume
-
---------------------------------------------------------------------------------
--- Groove Handle Linearity
---------------------------------------------------------------------------------
-
-||| A linearly-tracked groove handle.
-||| Specialisation of LinearHandle for GrooveHandle.
-public export
-LinearGroove : (offers : CapSet) -> (consumes : CapSet) -> HandleState -> Type
-LinearGroove offers consumes = LinearHandle (GrooveHandle offers consumes)
-
-||| Allocate a linear groove handle.
-public export
-allocateGroove : GrooveHandle offers consumes
-              -> LinearGroove offers consumes Allocated
-allocateGroove gh = MkLinear gh (groovePtr gh) {valid = grooveValid gh}
-
-||| Disconnect a groove (consuming it).
-public export
-consumeForDisconnect : LinearGroove offers consumes Active
-                    -> (GrooveHandle offers consumes, LinearGroove offers consumes Consumed)
-consumeForDisconnect = consume
 
 --------------------------------------------------------------------------------
 -- Channel Handle Linearity

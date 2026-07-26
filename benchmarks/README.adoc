@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: CC-BY-SA-4.0
 = Benchmarks
 Top-level benchmark entry-point scripts for gossamer.
 The `startup-bench.sh` script here drives high-level timing measurements; per-category benchmarks live under `tests/bench/`.

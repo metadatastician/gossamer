@@ -236,7 +236,7 @@ public export
 verisimdbManifest : GrooveManifest
   [OctadStorage, DriftDetection, TemporalVer]
   [Scanning]
-verisimdbManifest = MkManifest "verisimdb" "0.1.0" 8080 "/health"
+verisimdbManifest = MkManifest "verisimdb" "0.1.0" 6475 "/health"
 
 ||| Hypatia: neurosymbolic CI/CD intelligence.
 public export
@@ -285,7 +285,7 @@ public export
 gitbotManifest : GrooveManifest
   [BotOrch]
   [Scanning, Workflow, OctadStorage]
-gitbotManifest = MkManifest "gitbot-fleet" "0.1.0" 8080 "/health"
+gitbotManifest = MkManifest "gitbot-fleet" "0.1.0" 9100 "/health"
 
 --------------------------------------------------------------------------------
 -- Groove Handle (Linear Resource)

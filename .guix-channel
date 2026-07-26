@@ -7,14 +7,14 @@
 ;;
 ;;   (channel
 ;;     (name 'gossamer)
-;;     (url "https://github.com/hyperpolymath/gossamer")
+;;     (url "https://github.com/metadatastician/gossamer")
 ;;     (branch "main"))
 ;;
 ;; Then: guix pull
 
 (channel
   (version 0)
-  (url "https://github.com/hyperpolymath/gossamer")
+  (url "https://github.com/metadatastician/gossamer")
   (dependencies
    (channel
      (name 'guix)

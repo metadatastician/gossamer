@@ -29,9 +29,17 @@ build-ffi:
 build-ffi-release:
     cd src/interface/ffi && zig build -Doptimize=ReleaseSafe
 
-# Type-check all Gossamer core modules
+# Type-check all Gossamer core modules (linear mode)
 check:
-    {{ephapax}} check src/core/Shell.eph src/core/Bridge.eph src/core/Capabilities.eph src/core/SSG.eph src/core/Platform.eph --mode linear -v
+    {{ephapax}} check src/core/*.eph --mode linear -v
+
+# Ephapax linearity gate (gossamer#82): type-check every src/core/*.eph AND
+# prove that leaking a linear resource handle is a compile error (drops each
+# module's consume and asserts rejection). REQUIRED gate, not optional — the
+# .eph bindings silently de-linearise otherwise (they were once __ffi
+# passthroughs over raw I64 handles that never even compiled).
+eph-check:
+    EPHAPAX="{{ephapax}}" ./scripts/check-eph-linearity.sh
 
 # Type-check in affine mode (more permissive)
 check-affine:
@@ -41,10 +49,23 @@ check-affine:
 check-example name:
     {{ephapax}} check examples/{{name}}/main.eph --mode linear -v
 
-# Type-check the formal ABI proof package (idris2 0.8.0). This is a
+# Type-check the formal ABI proof packages (idris2 0.8.0). This is a
 # REQUIRED gate, not optional: the ABI modules silently bit-rot otherwise.
+# Guards the shell/groove decoupling (gossamer#95), then type-checks the
+# groove-agnostic shell package and the groove package that depends on it.
 abi-check:
+    ./scripts/check-abi-decoupling.sh
+    ./scripts/check-abi-ffi-cleave.sh
     idris2 --typecheck gossamer-abi.ipkg
+    idris2 --install   gossamer-abi.ipkg
+    idris2 --typecheck gossamer-groove.ipkg
+
+# Regenerate the raw %foreign ABI mirror (Gossamer.ABI.ForeignGen) from the Zig
+# `export fn gossamer_*` surface. The Zig FFI is the single source of truth for
+# the ABI (gossamer#82); run this after adding/changing an FFI export, then
+# commit — CI (`check-abi-ffi-cleave.sh`) fails if the mirror is stale.
+abi-gen:
+    ./scripts/gen-abi-foreign.sh
 
 # Build the Gossamer CLI (links libgossamer)
 build-cli: build-ffi
@@ -67,6 +88,48 @@ build-launcher-release: build-ffi-release
 
 # Build everything (FFI + CLI + check)
 build: build-ffi build-cli check
+
+# ═══════════════════════════════════════════════════════════════
+# Documentation / Wiki
+# ═══════════════════════════════════════════════════════════════
+
+# Sync docs/wikis/*.md → the forge-hosted wiki (GitHub Wiki). docs/wikis/ is the
+# SOURCE OF TRUTH; never edit pages in the wiki UI. Override the target with the
+# GOSSAMER_WIKI_REMOTE env var. Usage:
+#   just wiki-sync        # commit + push the wiki pages
+#   just wiki-sync dry    # show what would change, push nothing
+wiki-sync mode="push":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ROOT="$(pwd)"
+    SRC="${ROOT}/docs/wikis"
+    REMOTE="${GOSSAMER_WIKI_REMOTE:-git@github.com:metadatastician/gossamer.wiki.git}"
+    MODE="{{mode}}"
+    WORK="$(mktemp -d)"
+    trap 'rm -rf "${WORK}"' EXIT
+    echo "=== gossamer wiki-sync (${MODE}) → ${REMOTE} ==="
+    if ! git clone --quiet --depth 1 "${REMOTE}" "${WORK}"; then
+        echo "!! wiki remote not initialised yet." >&2
+        echo "   Visit the repo Wiki tab, save any page once to create it, then re-run." >&2
+        exit 1
+    fi
+    # Publish every Markdown page (the .a2ml manifest stays in-repo only).
+    cp "${SRC}"/*.md "${WORK}/"
+    cd "${WORK}"
+    git add -A
+    if git diff --cached --quiet; then
+        echo "wiki already up to date."
+        exit 0
+    fi
+    echo "--- pending wiki changes ---"
+    git status --short
+    if [ "${MODE}" = "dry" ]; then
+        echo "(dry run — nothing pushed)"
+        exit 0
+    fi
+    git commit --quiet -m "docs(wiki): sync from docs/wikis/ @ $(git -C "${ROOT}" rev-parse --short HEAD)"
+    git push --quiet origin HEAD
+    echo "✔ wiki synced."
 
 # ═══════════════════════════════════════════════════════════════
 # Static Site Generator
@@ -159,6 +222,26 @@ build-freebsd:
 build-all-platforms: build-ffi build-macos-x64 build-macos-arm build-windows build-linux-arm build-linux-riscv
     @echo "Built for: linux-x64, macos-x64, macos-arm64, windows-x64, linux-arm64, linux-riscv64"
 
+# ─── Android (gossamer-android-services companion, issue #71) ───
+# Run the host-runnable Android native logic tests (jni.zig + services_android.zig;
+# no NDK needed). The on-device JNI paths are validated on an emulator (issue #67).
+android-test:
+    cd src/interface/ffi && zig build test-android
+
+# Cross-compile libgossamer.so for every Android ABI (requires ANDROID_NDK_HOME).
+# Produces a jniLibs tree the consuming app bundles. The JNI WebView backend and
+# the service/receiver/widget native host are selected automatically for
+# *-android targets.
+android-build:
+    bash scripts/android-build.sh
+
+# Assemble a signed debug "smoke" APK, gradle-free (issue #68): javac (android.jar +
+# androidx.annotation) -> d8 -> aapt2 link -> zipalign -> apksigner. Bundles jniLibs
+# from `just android-build` when present. Requires ANDROID_HOME with
+# build-tools;34.0.0 + platforms;android-34.
+android-apk:
+    bash scripts/android-apk.sh
+
 # Show supported platform targets
 platforms:
     @echo "=== Gossamer Supported Platforms ==="
@@ -174,9 +257,14 @@ platforms:
     @echo "  openbsd-x64    WebKitGTK         zig build -Dtarget=x86_64-openbsd"
     @echo "  netbsd-x64     WebKitGTK         zig build -Dtarget=x86_64-netbsd"
     @echo ""
-    @echo "Mobile (Phase 3 — v0.4.0+):"
-    @echo "  ios-arm64      WKWebView/UIKit   planned"
-    @echo "  android-arm64  Android WebView   planned"
+    @echo "Mobile (Phase 5):"
+    @echo "  ios-arm64        WKWebView/UIKit    zig build -Dtarget=aarch64-ios"
+    @echo "  android-arm64    Android WebView    zig build -Dtarget=aarch64-linux-android  (just android-build)"
+    @echo "  android-x86_64   Android WebView    zig build -Dtarget=x86_64-linux-android   (emulator)"
+    @echo "  android-armv7    Android WebView    zig build -Dtarget=arm-linux-androideabi"
+    @echo ""
+    @echo "  Android also hosts native Service / BroadcastReceiver / AppWidgetProvider"
+    @echo "  components — see docs/architecture/android-components.adoc."
 
 # ═══════════════════════════════════════════════════════════════
 # Run
@@ -189,6 +277,13 @@ run-example name:
 # Run the hello example
 hello: build-ffi
     {{ephapax}} run examples/hello/main.eph
+
+# Run the groove session-lease demo against a LIVE groove service: connects
+# soft (short TTL) and lets it lapse, connects hard, heartbeats 3 windows,
+# disconnects (handle once-guard), prints the teardown audit summary.
+# target = index into the groove target table (src/interface/ffi/src/groove.zig).
+groove-demo target="0":
+    cd src/interface/ffi && zig build groove-demo -- {{target}}
 
 # ═══════════════════════════════════════════════════════════════
 # Test

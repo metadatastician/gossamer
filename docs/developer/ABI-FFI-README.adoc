@@ -1,5 +1,5 @@
 = Gossamer ABI/FFI Documentation
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: CC-BY-SA-4.0
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 == Overview
@@ -389,4 +389,4 @@ MPL-2.0
 - https://idris2.readthedocs.io[Idris2 Documentation]
 - https://ziglang.org/documentation/master/[Zig Documentation]
 - https://github.com/hyperpolymath/rhodium-standard-repositories[Rhodium Standard Repositories]
-- https://github.com/hyperpolymath/gossamer[Gossamer Repository]
+- https://github.com/metadatastician/gossamer[Gossamer Repository]

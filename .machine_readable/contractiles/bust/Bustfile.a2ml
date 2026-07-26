@@ -1,28 +1,67 @@
-// Bustfile.a2ml — meta-repo bust contractile (breakage / rollback)
-// SPDX-License-Identifier: MPL-2.0
+# SPDX-License-Identifier: MPL-2.0
+# Bustfile — Failure mode and recovery contract for Gossamer
+# Author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 
-Bust {
-    name: "gossamer"
-    version: "1.0.0"
-    description: "Rollback procedures when something breaks in the meta-repo"
+@abstract:
+What failure modes MUST have recovery paths in Gossamer.
+Hard gate — CI fails if any declared failure mode lacks a working recovery path.
+Specialises in: deprecated-path reintroduction, ABI regression, build-system drift.
+@end
 
-    scenarios: {
-        "bad-pointer-bump": "git revert <bump-commit> in meta-repo; child repo itself untouched"
-        "submodule-pointer-points-at-missing-sha": "git submodule update --init --checkout <path> resets child to parent-recorded SHA; OR revert the stale bump commit"
-        "submodule-orphan-after-local-only-commit": "roll back locally with git reset to before the stranded commit; fix remote situation before re-attempting"
-        "accidental-private-repo-content-leaked-to-public-submodule": "hard-rotate the leaked secret immediately; git-filter-repo or BFG on the submodule's own history; public re-publication only after rotation complete"
-    }
+## Build Failures
 
-    escalation-ladder: [
-        "1. revert the meta-repo commit (reversible, low blast radius)",
-        "2. reset the local submodule clone (affects only local workspace)",
-        "3. force-push to main — PROHIBITED without explicit user confirmation (violates branch protection)",
-        "4. registry-level (delete/archive the GitHub repo) — human-only action, never by AI"
-    ]
+### zig-ffi-build-recovery
+- description: libgossamer.so build failure must be recoverable (zig clean + rebuild)
+- run: "test -f src/interface/ffi/build.zig"
+- severity: critical
 
-    backup-points: [
-        "GitHub serves as the durable backup for every submodule's own history",
-        "Meta-repo history on origin/main is the durable backup for pointer state",
-        "Local backup tags (backup/pre-<operation>-<date>) retained on risky rewrites"
-    ]
-}
+### idris2-abi-typecheck-recovery
+- description: Idris2 ABI typecheck failure must be diagnosable (gossamer-abi.ipkg present)
+- run: "test -f gossamer-abi.ipkg"
+- severity: critical
+
+### cli-link-failure-recovery
+- description: CLI link failure must be recoverable (ipc_handlers.zig wired into main.zig)
+- run: "grep -q 'ipc_handlers' src/interface/ffi/src/main.zig 2>/dev/null"
+- severity: critical
+
+## Deprecated Path Reintroduction
+
+### no-rescript-bindings-reintroduced
+- description: bindings/rescript/ must not be reintroduced (retired PR #74; cutover to bindings/affinescript/)
+- run: "test ! -d bindings/rescript"
+- severity: critical
+
+### no-v-lang-shim-reintroduced
+- description: V-lang API shim must not be reintroduced (deleted PR #63)
+- run: "! find . -name '*.v' -not -path '*/.git/*' 2>/dev/null | grep -q ."
+- severity: warning
+
+### no-agpl-in-license
+- description: LICENSE must not revert to AGPL (was fixed AGPL→MPL-2.0 in PR #74 close-out)
+- run: "! grep -q 'GNU AFFERO\|AGPL' LICENSE 2>/dev/null"
+- severity: critical
+
+## ABI Regression
+
+### abi-module-not-reduced
+- description: ABI module count in gossamer-abi.ipkg must not fall below 14
+- run: "test $(grep -c 'Gossamer.ABI.' gossamer-abi.ipkg 2>/dev/null || echo 0) -ge 14"
+- severity: critical
+
+### believe-me-not-multiplied
+- description: believe_me count must not exceed 1 (1 sanctioned class-J axiom in PanelIsolation.idr)
+- run: "test $(grep -r 'believe_me' --include='*.idr' . 2>/dev/null | wc -l) -le 1"
+- severity: critical
+
+## Android JNI Correctness
+
+### jni-zig-model-present
+- description: jni.zig (real JNINativeInterface vtable model) must be present and not reverted
+- run: "test -f src/interface/ffi/src/jni.zig"
+- severity: critical
+
+### android-platform-dispatch-correct
+- description: Android platform dispatch must route via abi==.android, not os.tag==.linux
+- run: "grep -q 'abi == .android\|target.result.abi == .android' src/interface/ffi/build.zig 2>/dev/null"
+- severity: warning

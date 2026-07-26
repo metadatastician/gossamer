@@ -1,53 +1,63 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 //
-// Gossamer.Conf — Read gossamer.conf.json via libgossamer's real JSON
-// loader. Replaces the hand-rolled string-scan parser previously used
-// by the native Zig CLI.
+// Gossamer.Conf — Read gossamer.conf.json via libgossamer's real JSON loader.
 //
-// All operations require a valid FileSystem capability token (kind=0)
-// since loading the config reads from disk. Field lookups are dotted
-// paths into the parsed tree:
+// The parsed-config handle is a GENUINELY LINEAR resource, enforced by
+// `ephapax check` (default `--mode linear`):
+//   - `load`  mints a linear `Conf` handle (reading requires a FileSystem
+//     capability token, passed by value as `I64` — see Capabilities.eph);
+//   - the lookup ops (getString, getInt, getBool, has) BORROW the handle
+//     (`&Conf`);
+//   - `close` CONSUMES the handle, freeing the tree and every string that
+//     getString handed out (do not free those individually).
 //
-//   "productName"            top-level string
-//   "build.devUrl"           nested string
-//   "app.windows.0.width"    nested int inside the first array element
+// Because `Conf` is linear, loading a config and never closing it is a
+// compile-time type error. Field lookups are dotted paths into the parsed
+// tree ("productName", "build.devUrl", "app.windows.0.width").
 //
-// Strings returned by getString are owned by the Conf handle and freed
-// by close — do not free them individually.
+// The earlier version passed the handle as a plain `I64` and declared
+// `: I32` returns over `__ffi(...)` (typed `I64`), so it never type-checked.
 
-// Load a JSON config file and return an opaque conf handle, or 0 on
-// error (check Shell.lastError for details). Caller must pass the
-// handle to close when done.
-// FFI: gossamer_conf_load(path, cap_token) -> opaque_handle
-fn load(path: String, capToken: I64): I64 =
-  __ffi("gossamer_conf_load", path, capToken)
+module gossamer/core/conf
 
-// Resolve a dotted path. Returns a null-terminated string pointer
-// owned by the conf, or 0 if the path is missing or holds a non-string.
-// FFI: gossamer_conf_get_string(conf, path) -> string_ptr
-fn getString(conf: I64, path: String): I64 =
-  __ffi("gossamer_conf_get_string", conf, path)
+// ── libgossamer C ABI (source of truth: src/interface/ffi/src/*.zig) ───────
+extern "gossamer" {
+  // Opaque, linear parsed-config handle.
+  type Conf
 
-// Resolve a dotted path. Returns the integer value, or defaultValue if
-// the path is missing or holds a non-numeric value.
-// FFI: gossamer_conf_get_int(conf, path, default) -> i64
-fn getInt(conf: I64, path: String, defaultValue: I64): I64 =
-  __ffi("gossamer_conf_get_int", conf, path, defaultValue)
+  // gossamer_conf_load(path, cap_token) -> opaque_handle
+  fn gossamer_conf_load(path: String, capToken: I64): Conf
 
-// Resolve a dotted path. Returns 0 or 1, or defaultValue if the path
-// is missing or holds a non-boolean value.
-// FFI: gossamer_conf_get_bool(conf, path, default) -> i32
-fn getBool(conf: I64, path: String, defaultValue: I32): I32 =
-  __ffi("gossamer_conf_get_bool", conf, path, defaultValue)
+  // Borrow ops — resolve dotted paths without retiring the handle.
+  // getString returns a string pointer owned by the Conf (0 = missing).
+  fn gossamer_conf_get_string(conf: &Conf, path: String): I64
+  fn gossamer_conf_get_int(conf: &Conf, path: String, defaultValue: I64): I64
+  fn gossamer_conf_get_bool(conf: &Conf, path: String, defaultValue: I32): I32
+  fn gossamer_conf_has(conf: &Conf, path: String): I32
 
-// Returns 1 if the path resolves to any value, 0 if missing.
-// FFI: gossamer_conf_has(conf, path) -> i32
-fn has(conf: I64, path: String): I32 =
-  __ffi("gossamer_conf_has", conf, path)
+  // Consuming op — free the handle and every string it returned.
+  fn gossamer_conf_free(conf: Conf): Unit
+}
 
-// Free a conf handle and all strings previously returned by getString.
-// Safe to call with 0 (no-op).
-// FFI: gossamer_conf_free(conf) -> void
-fn close(conf: I64): I32 =
-  __ffi("gossamer_conf_free", conf)
+// ── Idiomatic wrappers (public API) ────────────────────────────────────────
+
+// Load a JSON config file. Returns a linear handle that MUST be closed.
+pub fn load(path: String, capToken: I64): Conf = gossamer_conf_load(path, capToken)
+
+pub fn getString(conf: &Conf, path: String): I64 = gossamer_conf_get_string(conf, path)
+pub fn getInt(conf: &Conf, path: String, defaultValue: I64): I64 = gossamer_conf_get_int(conf, path, defaultValue)
+pub fn getBool(conf: &Conf, path: String, defaultValue: I32): I32 = gossamer_conf_get_bool(conf, path, defaultValue)
+pub fn has(conf: &Conf, path: String): I32 = gossamer_conf_has(conf, path)
+
+// Free the conf handle and all strings it returned. CONSUMES the handle.
+pub fn close(conf: Conf): Unit = gossamer_conf_free(conf)
+
+// ── Linearity witness ──────────────────────────────────────────────────────
+// Load a config, read a field (borrow), then close it (consume). Drop the
+// `close(c)` and `ephapax check` rejects the file: the handle cannot leak.
+fn session(path: String, capToken: I64): I64 =
+  let! c = load(path, capToken)
+  let v = getString(&c, "productName")
+  let _u = close(c)
+  v
