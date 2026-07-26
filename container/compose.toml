@@ -24,7 +24,7 @@ version = "1.0"
 
 # Primary application service
 [services.gossamer]
-image = "ghcr.io/hyperpolymath/gossamer:latest.ctp"
+image = "ghcr.io/metadatastician/gossamer:latest.ctp"
 ports = ["0:0"]
 environment = {
   APP_HOST = "[::]",

@@ -174,5 +174,13 @@
     "type": "SD022",
     "file": "NEXT-STEPS.md",
     "note": "Reference is to site/src/content/, which exists; SD022's root-src-relative check cannot see it."
+  },
+  {
+    "severity": "medium",
+    "severity_override": "advisory",
+    "rule_module": "git_state",
+    "type": "GS007",
+    "file": ".",
+    "note": "GS007 delete_remote_branches flags accumulated stale remote branches (merged feature/fix branches awaiting cleanup). This is ambient repository hygiene, not a defect in any given change, and its finding count fluctuates per-PR as branches come and go — so it must never hard-block an unrelated PR. Kept advisory (visible, non-blocking); estate policy demotes the whole git_state rule_module to advisory-by-default in the standards governance stack."
   }
 ]

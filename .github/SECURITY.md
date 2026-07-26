@@ -40,7 +40,7 @@ We take security seriously. We appreciate your efforts to responsibly disclose v
 
 The preferred method for reporting security vulnerabilities is through GitHub's Security Advisory feature:
 
-1. Navigate to [Report a Vulnerability](https://github.com/hyperpolymath/gossamer/security/advisories/new)
+1. Navigate to [Report a Vulnerability](https://github.com/metadatastician/gossamer/security/advisories/new)
 2. Click **"Report a vulnerability"**
 3. Complete the form with as much detail as possible
 4. Submit — we'll receive a private notification
@@ -203,7 +203,7 @@ If we cannot reach agreement on disclosure timing, we default to 90 days from yo
 
 The following are within scope for security research:
 
-- This repository (`hyperpolymath/gossamer`) and all its code
+- This repository (`metadatastician/gossamer`) and all its code
 - Official releases and packages published from this repository
 - Documentation that could lead to security issues
 - Build and deployment configurations in this repository
@@ -322,7 +322,7 @@ Recognition includes:
 To stay informed about security updates:
 
 - **Watch this repository**: Click "Watch" → "Custom" → Select "Security alerts"
-- **GitHub Security Advisories**: Published at [Security Advisories](https://github.com/hyperpolymath/gossamer/security/advisories)
+- **GitHub Security Advisories**: Published at [Security Advisories](https://github.com/metadatastician/gossamer/security/advisories)
 - **Release notes**: Security fixes noted in [CHANGELOG](CHANGELOG.md)
 
 ### Update Policy
@@ -371,7 +371,7 @@ When using gossamer, we recommend:
 ## Additional Resources
 
 - [Our PGP Public Key]()
-- [Security Advisories](https://github.com/hyperpolymath/gossamer/security/advisories)
+- [Security Advisories](https://github.com/metadatastician/gossamer/security/advisories)
 - [Changelog](CHANGELOG.md)
 - [Contributing Guidelines](CONTRIBUTING.md)
 - [CVE Database](https://cve.mitre.org/)
@@ -383,8 +383,8 @@ When using gossamer, we recommend:
 
 | Purpose | Contact |
 |---------|---------|
-| **Security issues** | [Report via GitHub](https://github.com/hyperpolymath/gossamer/security/advisories/new) or j.d.a.jewell@open.ac.uk |
-| **General questions** | [GitHub Discussions](https://github.com/hyperpolymath/gossamer/discussions) |
+| **Security issues** | [Report via GitHub](https://github.com/metadatastician/gossamer/security/advisories/new) or j.d.a.jewell@open.ac.uk |
+| **General questions** | [GitHub Discussions](https://github.com/metadatastician/gossamer/discussions) |
 | **Other enquiries** | See [README](README.md) for contact information |
 
 ---

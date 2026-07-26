@@ -17,7 +17,7 @@ date: 2026-03-29
 ## Build
 
 ```bash
-git clone https://github.com/hyperpolymath/gossamer
+git clone https://github.com/metadatastician/gossamer
 cd gossamer
 just build-ffi     # Build libgossamer.so (Zig FFI)
 just hello         # Run the hello world example
