@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
 name: CodeQL Security Analysis
-
 on:
   push:
     branches: [main, master]
@@ -42,7 +41,6 @@ jobs:
         include:
           - language: actions
             build-mode: none
-
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -52,7 +50,6 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
-
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@7188fc363630916deb702c7fdcf4e481b751f97a # v3
         with:

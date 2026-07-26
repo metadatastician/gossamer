@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
-// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //
 // Gossamer Plugin System — Dynamic Loading via dlopen/dlsym/dlclose
 //
@@ -23,8 +23,6 @@
 // an untrusted extension sandbox. Subprocess/socket isolation (Phase 6b)
 // can wrap the same vtable API later without changing plugin code.
 //
-// SPDX-License-Identifier: MPL-2.0
-// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 const std = @import("std");
 const builtin = @import("builtin");

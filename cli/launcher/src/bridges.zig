@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 // Gossamer launcher — libgossamer bridge layer
 //
 // Trampolines guest wasm calls into native libgossamer C ABI. Each
@@ -24,8 +26,6 @@
 // cli/src/main.zig into libgossamer's channel_open path so the native
 // CLI can deprecate cleanly.
 //
-// SPDX-License-Identifier: MPL-2.0
-// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 const std = @import("std");
 const launcher = @import("main.zig");

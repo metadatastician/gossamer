@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
-// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //
 // Gossamer — Default IPC channel handlers (libgossamer)
 //
@@ -19,8 +19,6 @@
 // Each handler is the C-ABI shape libgossamer's channel system expects:
 //   fn (payload: [*:0]const u8, user_data: ?*anyopaque) callconv(.c) [*:0]const u8
 //
-// SPDX-License-Identifier: MPL-2.0
-// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 const std = @import("std");
 
