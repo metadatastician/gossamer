@@ -18,8 +18,10 @@ on:
   pull_request:
     branches: [main, master]
   workflow_dispatch:
+# read-all already includes actions: read (the scalar form grants every read
+# scope); the sweep that appended an indented `actions: read` here made the
+# file invalid YAML, so this workflow never parsed and never ran.
 permissions: read-all
-  actions: read
 concurrency:
   group: e2e-${{ github.ref }}
   cancel-in-progress: true
