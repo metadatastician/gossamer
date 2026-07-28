@@ -141,8 +141,8 @@ Do **not** move the following out of root if you want default tool behavior:
 
 Use the helper script first, then use the checklist for deeper/manual follow-up.
 
-Script locations:
-- `/var/mnt/eclipse/repos/run-maintenance.sh`
+Script locations (repo-relative; `repo:path` = that repo's checkout root):
+- `run-maintenance.sh` at the estate repo root
 - `~/Desktop/run-maintenance.sh`
 
 ```bash
@@ -261,7 +261,8 @@ find . -type f \( -name '*.idr' -o -name '*.idris2' -o -name '*.zig' \)
 - [ ] Re-run until acceptable.
 
 ```bash
-PANIC_BIN="/var/mnt/eclipse/repos/games-ecosystem/panic-attacker/target/release/panic-attack"
+# PANIC_ATTACKER = your panic-attacker checkout (repo:path → panic-attacker:target/release/panic-attack)
+PANIC_BIN="$PANIC_ATTACKER/target/release/panic-attack"
 "$PANIC_BIN" assail "$REPO" --output /tmp/assail.json --output-format json --quiet
 jq -r '.weak_points | length' /tmp/assail.json
 jq -r '.weak_points[] | "\(.severity)|\(.location)|\(.description)"' /tmp/assail.json
@@ -552,20 +553,20 @@ Fail closed: if evidence is missing for any checklist item, treat that item as N
 For centralized coverage across existing and new repos:
 
 ```bash
-cd /var/mnt/eclipse/repos/gitbot-fleet
+cd "$GITBOT_FLEET"   # your gitbot-fleet checkout
 just enroll-repos
 ```
 
 Optional directive write-back to repos that already have `.machine_readable/`:
 
 ```bash
-cd /var/mnt/eclipse/repos/gitbot-fleet
-just enroll-repos /var/mnt/eclipse/repos true
+cd "$GITBOT_FLEET"   # your gitbot-fleet checkout
+just enroll-repos "$ESTATE_ROOT" true
 ```
 
 Release hard gate from fleet:
 
 ```bash
-cd /var/mnt/eclipse/repos/gitbot-fleet
+cd "$GITBOT_FLEET"   # your gitbot-fleet checkout
 just maintenance-hard-pass /absolute/path/to/repo
 ```
