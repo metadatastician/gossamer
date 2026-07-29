@@ -303,6 +303,109 @@ GossamerResult gossamer_debug_close(GossamerHandle handle);
 GossamerResult gossamer_debug_toggle(GossamerHandle handle);
 
 // ===========================================================================
+// Clipboard
+// ===========================================================================
+
+/// Read text from the system clipboard into the caller-provided buffer.
+/// Writes a null-terminated UTF-8 string into `buf` (up to `buf_len - 1` bytes
+/// plus terminator). Returns the number of bytes written (excluding the null
+/// terminator), or -1 on error. Returns 0 if the clipboard is empty.
+///
+/// Null-safety: returns -1 (invalid_param) if buf is null or buf_len is 0.
+int32_t gossamer_clipboard_read(char* buf, uint32_t buf_len);
+
+/// Write a null-terminated UTF-8 string to the system clipboard.
+/// Returns GOSSAMER_OK on success, or an error code on failure.
+///
+/// Null-safety: returns GOSSAMER_INVALID_PARAM if text is null.
+GossamerResult gossamer_clipboard_write(const char* text);
+
+/// Read text from the system clipboard into a newly-allocated buffer.
+/// The caller must free the returned pointer with gossamer_free().
+///
+/// Validates the capability token is active and of type Clipboard (kind=3).
+///
+/// Returns NULL on error (check gossamer_last_error).
+const char* gossamer_clipboard_read_text(uint64_t cap_token);
+
+/// Write text to the system clipboard.
+///
+/// Validates the capability token is active and of type Clipboard (kind=3).
+///
+/// Returns GOSSAMER_OK on success, or an error code on failure.
+GossamerResult gossamer_clipboard_write_text(const char* text, uint64_t cap_token);
+
+// ===========================================================================
+// Theme System
+// ===========================================================================
+
+/// Theme kinds for predefined themes.
+typedef enum {
+    GOSSAMER_THEME_LIGHT = 0,
+    GOSSAMER_THEME_DARK = 1,
+    GOSSAMER_THEME_HIGH_CONTRAST = 2,
+    GOSSAMER_THEME_CUSTOM = 3
+} GossamerThemeKind;
+
+/// Apply a theme to a webview by injecting CSS.
+/// Uses JavaScript to create a style element and append it to the document head.
+///
+/// Parameters:
+///   handle - The GossamerHandle
+///   kind - The theme kind (GOSSAMER_THEME_*)
+///   custom_css - Custom CSS string (used when kind == GOSSAMER_THEME_CUSTOM, else NULL)
+///
+/// Returns GOSSAMER_OK on success, or an error code on failure.
+GossamerResult gossamer_theme_apply(GossamerHandle handle, GossamerThemeKind kind, const char* custom_css);
+
+/// Set the theme to light mode.
+GossamerResult gossamer_theme_light(GossamerHandle handle);
+
+/// Set the theme to dark mode.
+GossamerResult gossamer_theme_dark(GossamerHandle handle);
+
+/// Set the theme to high contrast mode.
+GossamerResult gossamer_theme_high_contrast(GossamerHandle handle);
+
+/// Set a custom theme via raw CSS string.
+GossamerResult gossamer_theme_custom(GossamerHandle handle, const char* css);
+
+/// Detect the system's preferred color scheme.
+/// Returns 1 for dark mode, 0 for light mode, -1 on error/unavailable.
+int32_t gossamer_theme_system_detect(void);
+
+// ===========================================================================
+// Accessibility
+// ===========================================================================
+
+/// Announce a message to screen readers via ARIA live region.
+/// Creates or updates a live region element and sets its text content.
+///
+/// Parameters:
+///   handle - The GossamerHandle
+///   message - The message to announce (UTF-8 null-terminated)
+///   politeness - "polite" or "assertive" (controls interruption behavior)
+///
+/// Returns GOSSAMER_OK on success, or an error code on failure.
+GossamerResult gossamer_a11y_announce(GossamerHandle handle, const char* message, const char* politeness);
+
+/// Set the ARIA live region politeness mode.
+/// Politeness can be "polite" (waits for user idle) or "assertive" (interrupts immediately).
+GossamerResult gossamer_a11y_set_politeness(GossamerHandle handle, const char* politeness);
+
+/// Set focus to a specific element by CSS selector.
+/// Useful for keyboard navigation and accessibility.
+GossamerResult gossamer_a11y_focus(GossamerHandle handle, const char* selector);
+
+/// Check if the user prefers reduced motion.
+/// Returns 1 for prefers-reduced-motion, 0 for no-preference, -1 on error.
+int32_t gossamer_a11y_prefers_reduced_motion(GossamerHandle handle);
+
+/// Check if the user prefers high contrast mode.
+/// Returns 1 for prefers-contrast: more, 0 for no-preference, -1 on error.
+int32_t gossamer_a11y_prefers_high_contrast(GossamerHandle handle);
+
+// ===========================================================================
 // Z-Ordering
 // ===========================================================================
 
@@ -362,6 +465,62 @@ void gossamer_groove_disconnect(uint32_t target_id);
 
 /// Disconnect from all Groove targets.
 void gossamer_groove_disconnect_all(void);
+
+// ===========================================================================
+// Application Bundler
+// ===========================================================================
+
+/// Initialize the bundler for an application.
+/// Must be called before other bundler functions.
+/// Returns GOSSAMER_OK on success.
+GossamerResult gossamer_bundler_init(GossamerHandle handle, const char* app_name);
+
+/// Get the extraction directory path.
+/// Returns a C string that the caller must free with gossamer_free().
+const char* gossamer_bundler_get_dir(GossamerHandle handle, const char* app_name);
+
+/// Get the full path to an asset in the extraction directory.
+/// Returns a C string that the caller must free with gossamer_free().
+const char* gossamer_bundler_get_path(GossamerHandle handle, const char* app_name, const char* asset_name);
+
+/// Get a file:// URL for an asset.
+/// Returns a C string that the caller must free with gossamer_free().
+const char* gossamer_bundler_get_url(GossamerHandle handle, const char* app_name, const char* asset_name);
+
+/// Clean up the extraction directory.
+void gossamer_bundler_cleanup(const char* app_name);
+
+// ===========================================================================
+// Auto-Updater
+// ===========================================================================
+
+/// Set the current application version string.
+/// Must be called before checking for updates.
+GossamerResult gossamer_updater_set_version(GossamerHandle handle, const char* version);
+
+/// Get the current application version string.
+/// Returns a C string that the caller must free with gossamer_free().
+const char* gossamer_updater_get_version(void);
+
+/// Configure the update source.
+/// source_type: 0 = http_json, 1 = github_releases, 2 = local_file
+/// For http_json: param1 is the API endpoint URL
+/// For github_releases: param1 is "owner/repo"
+/// For local_file: param1 is the path to the version file
+GossamerResult gossamer_updater_configure(GossamerHandle handle, uint32_t source_type, const char* param1);
+
+/// Check for updates.
+/// Returns: -1 = error, 0 = no update available, 1 = update available
+int32_t gossamer_updater_check(GossamerHandle handle);
+
+/// Get the latest version string from the configured source.
+/// Returns a C string that the caller must free with gossamer_free().
+const char* gossamer_updater_get_latest_version(GossamerHandle handle);
+
+/// Get the update version string if an update is available.
+/// Returns a C string that the caller must free with gossamer_free().
+/// Returns NULL if no update is available.
+const char* gossamer_updater_get_update_version(GossamerHandle handle);
 
 // ===========================================================================
 // Memory Management

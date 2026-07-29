@@ -30,6 +30,10 @@ pub const plugin = @import("plugin.zig");
 pub const clipboard = @import("clipboard.zig");
 pub const dialog = @import("dialog.zig");
 pub const tray = @import("tray.zig");
+pub const theme = @import("theme.zig");
+pub const accessibility = @import("accessibility.zig");
+pub const bundler = @import("bundler.zig");
+pub const updater = @import("updater.zig");
 
 extern fn gossamer_tray_clear_window() void;
 
@@ -82,6 +86,30 @@ comptime {
 // GTK clipboard implementation for system clipboard access.
 comptime {
     _ = @import("clipboard.zig");
+}
+
+// Theme system FFI functions (gossamer_theme_apply, gossamer_theme_light, etc.).
+// CSS injection for light/dark/custom theme support.
+comptime {
+    _ = @import("theme.zig");
+}
+
+// Accessibility system FFI functions (gossamer_a11y_announce, etc.).
+// ARIA live regions, focus management, and user preference detection.
+comptime {
+    _ = @import("accessibility.zig");
+}
+
+// Application bundler FFI functions (gossamer_bundler_*).
+// Single-binary asset embedding and extraction.
+comptime {
+    _ = @import("bundler.zig");
+}
+
+// Auto-updater FFI functions (gossamer_updater_*).
+// Version checking and update management.
+comptime {
+    _ = @import("updater.zig");
 }
 
 // Plugin system FFI functions (gossamer_plugin_load, gossamer_plugin_unload,
