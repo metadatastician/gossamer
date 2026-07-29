@@ -129,18 +129,291 @@ const unsupported_clipboard = struct {
     }
 };
 
+/// macOS Cocoa clipboard backend.
+/// Uses NSPasteboard for copy/paste operations.
+const cocoa_clipboard = struct {
+    const c = @cImport({
+        @cInclude("objc/runtime.h");
+        @cInclude("objc/message.h");
+    });
+
+    /// Get the general pasteboard (NSPasteboardNameGeneral).
+    fn getPasteboard() ?*anyopaque {
+        const cls = c.objc_getClass("NSPasteboard") orelse return null;
+        const sel = c.sel_registerName("generalPasteboard") orelse return null;
+        const func: *const fn (?*anyopaque, c.SEL) callconv(.c) ?*anyopaque = @ptrCast(&c.objc_msgSend);
+        return func(@ptrCast(cls), sel);
+    }
+
+    /// Create an NSString from a C string.
+    fn nsString(str: [*:0]const u8) ?*anyopaque {
+        const cls = c.objc_getClass("NSString") orelse return null;
+        const sel = c.sel_registerName("stringWithUTF8String:") orelse return null;
+        const func: *const fn (?*anyopaque, c.SEL, [*:0]const u8) callconv(.c) ?*anyopaque = @ptrCast(&c.objc_msgSend);
+        return func(@ptrCast(cls), sel, str);
+    }
+
+    /// Get UTF8 string from NSString.
+    fn nsStringToUTF8(str: ?*anyopaque) ?[*:0]const u8 {
+        if (str == null) return null;
+        const sel = c.sel_registerName("UTF8String") orelse return null;
+        const func: *const fn (?*anyopaque, c.SEL) callconv(.c) [*:0]const u8 = @ptrCast(&c.objc_msgSend);
+        return func(str, sel);
+    }
+
+    /// Read text from the system clipboard.
+    fn read(buf: [*]u8, buf_len: usize) c_int {
+        const pasteboard = getPasteboard();
+        if (pasteboard == null) {
+            setError("Clipboard: failed to get NSPasteboard");
+            return -1;
+        }
+
+        const cls = c.objc_getClass("NSString") orelse {
+            setError("Clipboard: failed to get NSString class");
+            return -1;
+        };
+        const sel = c.sel_registerName("stringForType:") orelse {
+            setError("Clipboard: failed to get stringForType: selector");
+            return -1;
+        };
+
+        // Get NSString from pasteboard for NSPasteboardTypeString
+        const type_str = nsString("NSPasteboardTypeString") orelse {
+            setError("Clipboard: failed to create type string");
+            return -1;
+        };
+
+        const func: *const fn (?*anyopaque, c.SEL, ?*anyopaque) callconv(.c) ?*anyopaque = @ptrCast(&c.objc_msgSend);
+        const str: ?*anyopaque = func(pasteboard, sel, type_str);
+
+        if (str == null) {
+            // Clipboard is empty
+            if (buf_len > 0) {
+                buf[0] = 0;
+            }
+            return 0;
+        }
+
+        const utf8_ptr = nsStringToUTF8(str);
+        if (utf8_ptr == null) {
+            setError("Clipboard: failed to convert NSString to UTF8");
+            return -1;
+        }
+
+        const text = std.mem.span(utf8_ptr.?);
+        const copy_len = @min(text.len, if (buf_len > 0) buf_len - 1 else 0);
+
+        if (copy_len > 0) {
+            @memcpy(buf[0..copy_len], text[0..copy_len]);
+        }
+        if (buf_len > 0) {
+            buf[copy_len] = 0;
+        }
+
+        return @intCast(copy_len);
+    }
+
+    /// Write text to the system clipboard.
+    fn write(text: [*:0]const u8) Result {
+        const pasteboard = getPasteboard();
+        if (pasteboard == null) {
+            setError("Clipboard: failed to get NSPasteboard");
+            return .@"error";
+        }
+
+        // Clear existing contents
+        const clear_sel = c.sel_registerName("clearContents") orelse {
+            setError("Clipboard: failed to get clearContents selector");
+            return .@"error";
+        };
+        const clear_func: *const fn (?*anyopaque, c.SEL) callconv(.c) void = @ptrCast(&c.objc_msgSend);
+        clear_func(pasteboard, clear_sel);
+
+        // Create NSString from text
+        const str = nsString(text) orelse {
+            setError("Clipboard: failed to create NSString");
+            return .@"error";
+        };
+
+        // Create array of items (single item with string)
+        const array_cls = c.objc_getClass("NSArray") orelse {
+            setError("Clipboard: failed to get NSArray class");
+            return .@"error";
+        };
+        const array_sel = c.sel_registerName("arrayWithObject:") orelse {
+            setError("Clipboard: failed to get arrayWithObject: selector");
+            return .@"error";
+        };
+        const func: *const fn (?*anyopaque, c.SEL, ?*anyopaque) callconv(.c) ?*anyopaque = @ptrCast(&c.objc_msgSend);
+        const items = func(@ptrCast(array_cls), array_sel, str);
+
+        if (items == null) {
+            setError("Clipboard: failed to create items array");
+            return .@"error";
+        }
+
+        // Write to pasteboard
+        const write_sel = c.sel_registerName("writeObjects:") orelse {
+            setError("Clipboard: failed to get writeObjects: selector");
+            return .@"error";
+        };
+        const write_func: *const fn (?*anyopaque, c.SEL, ?*anyopaque) callconv(.c) void = @ptrCast(&c.objc_msgSend);
+        write_func(pasteboard, write_sel, items);
+
+        clearError();
+        return .ok;
+    }
+};
+
+/// Windows Win32 clipboard backend.
+/// Uses the Win32 clipboard API (OpenClipboard, GetClipboardData, SetClipboardData).
+const win32_clipboard = struct {
+    const c = @cImport({
+        @cInclude("windows.h");
+    });
+
+    /// Read text from the system clipboard.
+    fn read(buf: [*]u8, buf_len: usize) c_int {
+        if (c.OpenClipboard(null) == 0) {
+            setError("Clipboard: OpenClipboard failed");
+            return -1;
+        }
+        defer c.CloseClipboard();
+
+        const h_data = c.GetClipboardData(c.CF_UNICODETEXT);
+        if (h_data == null) {
+            // Clipboard is empty or doesn't contain text
+            if (buf_len > 0) {
+                buf[0] = 0;
+            }
+            return 0;
+        }
+
+        const text_ptr = @ptrCast([*]const u16, c.GlobalLock(h_data));
+        if (text_ptr == null) {
+            setError("Clipboard: GlobalLock failed");
+            return -1;
+        }
+        defer c.GlobalUnlock(h_data);
+
+        // Convert UTF-16 to UTF-8
+        // Find null terminator
+        var len: usize = 0;
+        while (text_ptr[len] != 0 and len < 1000000) : (len += 1) {}
+
+        // Allocate temporary buffer for UTF-8 conversion
+        var utf8_buf: [1024]u8 = undefined;
+        const result = std.unicode.utf16ToUtf8(text_ptr[0..len], utf8_buf[0..]) catch |err| {
+            setError("Clipboard: UTF-16 to UTF-8 conversion failed");
+            return -1;
+        };
+
+        const utf8_len = result.length;
+        const copy_len = @min(utf8_len, if (buf_len > 0) buf_len - 1 else 0);
+
+        if (copy_len > 0) {
+            @memcpy(buf[0..copy_len], utf8_buf[0..copy_len]);
+        }
+        if (buf_len > 0) {
+            buf[copy_len] = 0;
+        }
+
+        return @intCast(copy_len);
+    }
+
+    /// Write text to the system clipboard.
+    fn write(text: [*:0]const u8) Result {
+        const text_len = std.mem.length(text);
+
+        // Allocate global memory for clipboard data
+        // UTF-16 buffer (2 bytes per char + null terminator)
+        const utf16_len = text_len * 2 + 2;
+        const h_mem = c.GlobalAlloc(c.GMEM_MOVEABLE, utf16_len);
+        if (h_mem == null) {
+            setError("Clipboard: GlobalAlloc failed");
+            return .@"error";
+        }
+
+        const utf16_ptr = @ptrCast([*]u16, c.GlobalLock(h_mem));
+        if (utf16_ptr == null) {
+            c.GlobalFree(h_mem);
+            setError("Clipboard: GlobalLock failed");
+            return .@"error";
+        }
+
+        // Convert UTF-8 to UTF-16
+        const result = std.unicode.utf8ToUtf16(std.mem.span(text)) catch |err| {
+            c.GlobalUnlock(h_mem);
+            c.GlobalFree(h_mem);
+            setError("Clipboard: UTF-8 to UTF-16 conversion failed");
+            return .@"error";
+        };
+
+        // Copy to global memory
+        @memcpy(utf16_ptr[0..result.length], result);
+        // Add null terminator
+        utf16_ptr[result.length] = 0;
+
+        // Unlock before setting clipboard data
+        c.GlobalUnlock(h_mem);
+
+        if (c.OpenClipboard(null) == 0) {
+            c.GlobalFree(h_mem);
+            setError("Clipboard: OpenClipboard failed");
+            return .@"error";
+        }
+        defer c.CloseClipboard();
+
+        // Empty clipboard first
+        if (c.EmptyClipboard() == 0) {
+            c.GlobalFree(h_mem);
+            setError("Clipboard: EmptyClipboard failed");
+            return .@"error";
+        }
+
+        const h_data = c.SetClipboardData(c.CF_UNICODETEXT, h_mem);
+        if (h_data == null) {
+            c.GlobalFree(h_mem);
+            setError("Clipboard: SetClipboardData failed");
+            return .@"error";
+        }
+
+        // SetClipboardData takes ownership of h_mem - do not free it
+        // The clipboard now owns the memory and will free it when cleared
+
+        clearError();
+        return .ok;
+    }
+};
+
+/// Unsupported platform fallback — all operations return errors.
+const unsupported_clipboard = struct {
+    fn read(_: [*]u8, _: usize) c_int {
+        setError("Clipboard: not supported on this platform");
+        return -1;
+    }
+
+    fn write(_: [*:0]const u8) Result {
+        setError("Clipboard: not supported on this platform");
+        return .@"error";
+    }
+};
+
 /// Compile-time platform dispatch for clipboard backend.
 ///
 /// Android reports `os.tag == .linux` (it runs a Linux kernel) but ships no
 /// GTK, so it is routed to the unsupported-platform stub BEFORE the os-tag
 /// switch — exactly as main.zig guards the webview backend with
-/// `abi == .android`. The comptime `if` means the `gtk_clipboard` struct (and
-/// its `@cImport("gtk/gtk.h")`) is never referenced, hence never analysed, on
-/// an Android target.
+/// `abi == .android`. The comptime `if` means the platform-specific structs (and
+/// their `@cImport` directives) are never referenced, hence never analysed, on
+/// non-matching targets.
 const backend = if (builtin.abi == .android)
     unsupported_clipboard
 else switch (builtin.os.tag) {
     .linux, .freebsd, .openbsd, .netbsd => gtk_clipboard,
+    .macos => cocoa_clipboard,
+    .windows => win32_clipboard,
     else => unsupported_clipboard,
 };
 
@@ -182,6 +455,72 @@ pub export fn gossamer_clipboard_write(text: ?[*:0]const u8) callconv(.c) c_int 
 
     clearError();
     return @intFromEnum(backend.write(text.?));
+}
+
+//==============================================================================
+// Capability-Gated Clipboard Functions
+//==============================================================================
+
+/// Read text from the system clipboard into a newly-allocated buffer.
+/// The caller must free the returned pointer with gossamer_free().
+///
+/// Validates the capability token is active and of type Clipboard (kind=3).
+///
+/// Returns null on error (check gossamer_last_error).
+/// Returns empty string ("") if clipboard is empty.
+pub export fn gossamer_clipboard_read_text(cap_token: u64) ?[*:0]u8 {
+    // Validate capability
+    if (main.gossamer_cap_check(cap_token) != .ok) {
+        main.setError("Clipboard capability denied — call gossamer_cap_grant(3) first");
+        return null;
+    }
+    if (main.gossamer_cap_resource_kind(cap_token) != 3) {
+        main.setError("Wrong capability kind — expected Clipboard (3)");
+        return null;
+    }
+
+    // Read with a temporary buffer
+    var tmp_buf: [4096]u8 = undefined;
+    const len = backend.read(&tmp_buf, tmp_buf.len);
+
+    if (len < 0) {
+        // Error already set by backend
+        return null;
+    }
+
+    // Allocate result buffer
+    const allocator = std.heap.c_allocator;
+    const result = allocator.allocSentinel(u8, @intCast(usize, len), 0) catch {
+        main.setError("Failed to allocate clipboard result");
+        return null;
+    };
+
+    if (len > 0) {
+        @memcpy(result[0..@intCast(usize, len)], tmp_buf[0..@intCast(usize, len)]);
+    }
+
+    main.clearError();
+    return result.ptr;
+}
+
+/// Write text to the system clipboard.
+///
+/// Validates the capability token is active and of type Clipboard (kind=3).
+///
+/// Returns Result (0=ok, error code on failure).
+pub export fn gossamer_clipboard_write_text(text: [*:0]const u8, cap_token: u64) main.Result {
+    // Validate capability
+    if (main.gossamer_cap_check(cap_token) != .ok) {
+        main.setError("Clipboard capability denied — call gossamer_cap_grant(3) first");
+        return .capability_denied;
+    }
+    if (main.gossamer_cap_resource_kind(cap_token) != 3) {
+        main.setError("Wrong capability kind — expected Clipboard (3)");
+        return .capability_denied;
+    }
+
+    clearError();
+    return backend.write(text);
 }
 
 //==============================================================================
