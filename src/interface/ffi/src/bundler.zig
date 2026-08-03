@@ -42,53 +42,42 @@ fn clearError() void {
 /// macOS: ~/Library/Caches/gossamer-bundler/<app>
 /// Windows: %LOCALAPPDATA%\gossamer-bundler\<app>
 /// Android: Not supported (returns null)
-fn getCacheDir(app_name: [*:0]const u8) ?[]const u8 {
-    const allocator = std.heap.page_allocator;
-    
+fn getCacheDir(allocator: std.mem.Allocator, app_name: []const u8) ?[]u8 {
     if (builtin.abi == .android) return null;
-    
-    return switch (builtin.os.tag) {
+
+    switch (builtin.os.tag) {
         .linux, .freebsd, .openbsd, .netbsd => {
-            const xdg = std.process.getEnvVar(allocator, "XDG_CACHE_HOME");
-            if (xdg) |cache| {
-                const path = std.fmt.allocPrint(allocator, "{s}/gossamer-bundler/{s}", .{cache, app_name}) catch {
-                    allocator.free(cache);
-                    return null;
-                };
-                return path;
+            if (std.process.getEnvVarOwned(allocator, "XDG_CACHE_HOME")) |cache| {
+                defer allocator.free(cache);
+                return std.fmt.allocPrint(allocator, "{s}/gossamer-bundler/{s}", .{ cache, app_name }) catch null;
+            } else |_| {
+                return std.fmt.allocPrint(allocator, "/tmp/gossamer-bundler/{s}", .{app_name}) catch null;
             }
-            std.fmt.allocPrint(allocator, "/tmp/gossamer-bundler/{s}", .{app_name}) catch null
         },
         .macos => {
-            const home = std.process.getEnvVar(allocator, "HOME");
-            if (home) |h| {
-                const path = std.fmt.allocPrint(allocator, "{s}/Library/Caches/gossamer-bundler/{s}", .{h, app_name}) catch {
-                    allocator.free(h);
-                    return null;
-                };
-                return path;
+            if (std.process.getEnvVarOwned(allocator, "HOME")) |home| {
+                defer allocator.free(home);
+                return std.fmt.allocPrint(allocator, "{s}/Library/Caches/gossamer-bundler/{s}", .{ home, app_name }) catch null;
+            } else |_| {
+                return null;
             }
-            null
         },
         .windows => {
-            const local_appdata = std.process.getEnvVar(allocator, "LOCALAPPDATA");
-            if (local_appdata) |appdata| {
-                const path = std.fmt.allocPrint(allocator, "{s}\\gossamer-bundler\\{s}", .{appdata, app_name}) catch {
-                    allocator.free(appdata);
-                    return null;
-                };
-                return path;
+            if (std.process.getEnvVarOwned(allocator, "LOCALAPPDATA")) |appdata| {
+                defer allocator.free(appdata);
+                return std.fmt.allocPrint(allocator, "{s}\\gossamer-bundler\\{s}", .{ appdata, app_name }) catch null;
+            } else |_| {
+                return null;
             }
-            null
         },
-        else => null,
-    };
+        else => return null,
+    }
 }
 
 /// Create directory and all parents.
 fn createDir(path: []const u8) bool {
-    const dir = std.mem.as([*]u8, @ptrCast([*]const u8, path));
-    return std.fs.createDirsAbsolute(dir) catch false;
+    std.fs.cwd().makePath(path) catch return false;
+    return true;
 }
 
 // ===========================================================================
@@ -106,26 +95,45 @@ var global_state: ExtractionState = .{};
 
 /// Initialize extraction for an app.
 /// Creates the extraction directory.
-fn initExtraction(app_name: [*:0]const u8) ?[]u8 {
-    if (global_state.initialized and std.mem.eql(u8, global_state.app_name orelse "", app_name)) {
-        return global_state.dir;
+fn initExtraction(app_name_z: [*:0]const u8) ?[]u8 {
+    const app_name = std.mem.span(app_name_z);
+    if (global_state.initialized) {
+        if (global_state.app_name) |stored| {
+            if (std.mem.eql(u8, stored, app_name)) {
+                return global_state.dir;
+            }
+        }
     }
-    
-    const allocator = std.heap.page_allocator;
-    const dir = getCacheDir(app_name) orelse return null;
-    
+
+    const allocator = std.heap.c_allocator;
+    const dir = getCacheDir(allocator, app_name) orelse return null;
+
     // Create the directory
     if (!createDir(dir)) {
         allocator.free(dir);
         return null;
     }
-    
-    // Store in global state
+
+    const name_copy = allocator.dupe(u8, app_name) catch {
+        allocator.free(dir);
+        return null;
+    };
+
+    // Store in global state (freeing any previous app's state)
+    if (global_state.dir) |d| allocator.free(d);
+    if (global_state.app_name) |n| allocator.free(n);
     global_state.dir = dir;
-    global_state.app_name = std.mem.dupe(allocator, u8, app_name);
+    global_state.app_name = name_copy;
     global_state.initialized = true;
-    
+
     return dir;
+}
+
+/// Build the full path of an asset inside the extraction directory.
+/// Caller frees the returned slice with `allocator`.
+fn assetFullPath(allocator: std.mem.Allocator, app_name: [*:0]const u8, asset_name: [*:0]const u8) ?[]u8 {
+    const dir = initExtraction(app_name) orelse return null;
+    return std.fmt.allocPrint(allocator, "{s}/{s}", .{ dir, std.mem.span(asset_name) }) catch null;
 }
 
 // ===========================================================================
@@ -136,19 +144,16 @@ fn initExtraction(app_name: [*:0]const u8) ?[]u8 {
 /// Must be called before extracting assets.
 /// Returns GOSSAMER_OK on success.
 pub export fn gossamer_bundler_init(handle_ptr: u64, app_name: [*:0]const u8) Result {
-    const handle = main.ptrFromU64(handle_ptr) orelse {
+    if (main.ptrFromU64(handle_ptr) == null) {
         setError("Bundler init: null handle");
         return .null_pointer;
-    };
-    
-    _ = handle;
-    
-    const dir = initExtraction(app_name);
-    if (dir == null) {
-        setError("Bundler init: failed to initialize extraction directory");
-        return .error;
     }
-    
+
+    if (initExtraction(app_name) == null) {
+        setError("Bundler init: failed to initialize extraction directory");
+        return .@"error";
+    }
+
     clearError();
     return .ok;
 }
@@ -157,27 +162,23 @@ pub export fn gossamer_bundler_init(handle_ptr: u64, app_name: [*:0]const u8) Re
 /// Returns a C string that the caller must free with gossamer_free().
 /// Caller owns the returned string.
 pub export fn gossamer_bundler_get_dir(handle_ptr: u64, app_name: [*:0]const u8) ?[*:0]const u8 {
-    const handle = main.ptrFromU64(handle_ptr) orelse {
+    if (main.ptrFromU64(handle_ptr) == null) {
         setError("Bundler get dir: null handle");
         return null;
-    };
-    
-    _ = handle;
-    
+    }
+
     const allocator = std.heap.c_allocator;
     const dir = initExtraction(app_name) orelse {
         setError("Bundler get dir: extraction not initialized");
         return null;
     };
-    
-    // Convert to C string (caller frees)
-    const c_dir = allocator.alloc(u8, dir.len + 1) catch {
+
+    // Convert to C string (caller frees with gossamer_free)
+    const c_dir = allocator.dupeZ(u8, dir) catch {
         setError("Bundler get dir: allocation failed");
         return null;
     };
-    @memcpy(c_dir[0..dir.len], dir);
-    c_dir[dir.len] = 0;
-    
+
     clearError();
     return c_dir.ptr;
 }
@@ -185,35 +186,24 @@ pub export fn gossamer_bundler_get_dir(handle_ptr: u64, app_name: [*:0]const u8)
 /// Get the full path to an asset in the extraction directory.
 /// Returns a C string that the caller must free with gossamer_free().
 pub export fn gossamer_bundler_get_path(handle_ptr: u64, app_name: [*:0]const u8, asset_name: [*:0]const u8) ?[*:0]const u8 {
-    const handle = main.ptrFromU64(handle_ptr) orelse {
+    if (main.ptrFromU64(handle_ptr) == null) {
         setError("Bundler get path: null handle");
         return null;
-    };
-    
-    _ = handle;
-    
+    }
+
     const allocator = std.heap.c_allocator;
-    const dir = initExtraction(app_name) orelse {
-        setError("Bundler get path: extraction not initialized");
+    const full = assetFullPath(allocator, app_name, asset_name) orelse {
+        setError("Bundler get path: extraction not initialized or allocation failed");
         return null;
     };
-    
-    // Build full path
-    const full = std.fmt.allocPrint(allocator, "{s}/{s}", .{dir, asset_name}) catch {
+    defer allocator.free(full);
+
+    // Convert to C string (caller frees with gossamer_free)
+    const c_full = allocator.dupeZ(u8, full) catch {
         setError("Bundler get path: allocation failed");
         return null;
     };
-    
-    // Convert to C string (caller frees)
-    const c_full = allocator.alloc(u8, full.len + 1) catch {
-        allocator.free(full);
-        setError("Bundler get path: allocation failed");
-        return null;
-    };
-    @memcpy(c_full[0..full.len], full);
-    c_full[full.len] = 0;
-    
-    allocator.free(full);
+
     clearError();
     return c_full.ptr;
 }
@@ -221,80 +211,74 @@ pub export fn gossamer_bundler_get_path(handle_ptr: u64, app_name: [*:0]const u8
 /// Get a file:// URL for an asset.
 /// Returns a C string that the caller must free with gossamer_free().
 pub export fn gossamer_bundler_get_url(handle_ptr: u64, app_name: [*:0]const u8, asset_name: [*:0]const u8) ?[*:0]const u8 {
-    const path = gossamer_bundler_get_path(handle_ptr, app_name, asset_name) orelse {
+    if (main.ptrFromU64(handle_ptr) == null) {
+        setError("Bundler get URL: null handle");
+        return null;
+    }
+
+    const allocator = std.heap.c_allocator;
+    const path = assetFullPath(allocator, app_name, asset_name) orelse {
+        setError("Bundler get URL: extraction not initialized or allocation failed");
         return null;
     };
-    
-    const allocator = std.heap.c_allocator;
-    
-    const url = if (builtin.abi == .windows)
-        convertWindowsPathToFileUrl(path)
+    defer allocator.free(path);
+
+    const url = if (builtin.os.tag == .windows)
+        convertWindowsPathToFileUrl(allocator, path)
     else
         std.fmt.allocPrint(allocator, "file://{s}", .{path}) catch null;
-    
-    if (url) |u| {
-        const c_url = allocator.alloc(u8, u.len + 1) catch {
-            allocator.free(u);
-            std.heap.c_allocator.free(path);
-            setError("Bundler get URL: allocation failed");
-            return null;
-        };
-        @memcpy(c_url[0..u.len], u);
-        c_url[u.len] = 0;
-        
-        allocator.free(u);
-        std.heap.c_allocator.free(path);
-        
-        clearError();
-        return c_url.ptr;
-    }
-    
-    std.heap.c_allocator.free(path);
-    setError("Bundler get URL: allocation failed");
-    return null;
+
+    const url_body = url orelse {
+        setError("Bundler get URL: allocation failed");
+        return null;
+    };
+    defer allocator.free(url_body);
+
+    const c_url = allocator.dupeZ(u8, url_body) catch {
+        setError("Bundler get URL: allocation failed");
+        return null;
+    };
+
+    clearError();
+    return c_url.ptr;
 }
 
 /// Convert a Windows path to a file:// URL.
-fn convertWindowsPathToFileUrl(path: [*:0]const u8) ?[]u8 {
-    const allocator = std.heap.page_allocator;
-    
-    // Convert backslashes to forward slashes
+fn convertWindowsPathToFileUrl(allocator: std.mem.Allocator, path: []const u8) ?[]u8 {
+    // Convert backslashes to forward slashes, drive-letter colon to '|'
     var temp: [1024]u8 = undefined;
-    var i: usize = 0;
     var j: usize = 0;
-    
-    while (path[i] != 0 and j < temp.len - 1) : (i += 1) {
-        if (path[i] == '\\') {
-            temp[j] = '/';
-        } else if (path[i] == ':') {
-            // Drive letter: C: -> C|
-            temp[j] = '|';
-        } else {
-            temp[j] = path[i];
-        }
+
+    for (path) |ch| {
+        if (j >= temp.len - 1) break;
+        temp[j] = switch (ch) {
+            '\\' => '/',
+            ':' => '|',
+            else => ch,
+        };
         j += 1;
     }
-    temp[j] = 0;
-    
+
     // Add file:/// prefix (three slashes for Windows absolute paths)
     return std.fmt.allocPrint(allocator, "file:///{s}", .{temp[0..j]}) catch null;
 }
 
 /// Clean up the extraction directory.
 /// Removes all extracted files.
-pub export fn gossamer_bundler_cleanup(app_name: [*:0]const u8) void {
-    const allocator = std.heap.page_allocator;
-    const dir = getCacheDir(app_name) orelse return;
-    
-    const dir_mut = std.mem.as([*]u8, @ptrCast([*]const u8, dir));
-    _ = std.fs.rmTreeAbsolute(dir_mut) catch {};
-    
-    allocator.free(dir);
-    
+pub export fn gossamer_bundler_cleanup(app_name_z: [*:0]const u8) void {
+    const allocator = std.heap.c_allocator;
+    const app_name = std.mem.span(app_name_z);
+    const dir = getCacheDir(allocator, app_name) orelse return;
+    defer allocator.free(dir);
+
+    std.fs.deleteTreeAbsolute(dir) catch {};
+
     // Reset global state
-    if (std.mem.eql(u8, global_state.app_name orelse "", app_name)) {
-        allocator.free(global_state.app_name orelse "");
-        allocator.free(global_state.dir orelse "");
-        global_state = .{};
+    if (global_state.app_name) |stored| {
+        if (std.mem.eql(u8, stored, app_name)) {
+            allocator.free(stored);
+            if (global_state.dir) |d| allocator.free(d);
+            global_state = .{};
+        }
     }
 }

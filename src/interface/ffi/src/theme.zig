@@ -11,7 +11,6 @@
 
 const std = @import("std");
 const main = @import("main.zig");
-const csp = @import("csp.zig");
 
 const Result = main.Result;
 
@@ -31,78 +30,80 @@ fn clearError() void {
 
 /// Built-in theme CSS strings.
 const ThemeCSS = struct {
-    pub const light: [*:0]const u8 = """
-        :root {
-            --bg-primary: #ffffff;
-            --bg-secondary: #f5f5f5;
-            --bg-tertiary: #e8e8e8;
-            --text-primary: #1a1a2e;
-            --text-secondary: #4a4a6e;
-            --text-tertiary: #8a8aae;
-            --border: #d1d1e0;
-            --accent: #0066cc;
-            --accent-hover: #0052a3;
-            --success: #008000;
-            --warning: #cc8800;
-            --error: #cc0000;
-            --code-bg: #f0f0f0;
-            --code-border: #cccccc;
-        }
-        body {
-            background-color: var(--bg-primary);
-            color: var(--text-primary);
-        }
-        """;
+    pub const light: [*:0]const u8 =
+        \\:root {
+        \\    --bg-primary: #ffffff;
+        \\    --bg-secondary: #f5f5f5;
+        \\    --bg-tertiary: #e8e8e8;
+        \\    --text-primary: #1a1a2e;
+        \\    --text-secondary: #4a4a6e;
+        \\    --text-tertiary: #8a8aae;
+        \\    --border: #d1d1e0;
+        \\    --accent: #0066cc;
+        \\    --accent-hover: #0052a3;
+        \\    --success: #008000;
+        \\    --warning: #cc8800;
+        \\    --error: #cc0000;
+        \\    --code-bg: #f0f0f0;
+        \\    --code-border: #cccccc;
+        \\}
+        \\body {
+        \\    background-color: var(--bg-primary);
+        \\    color: var(--text-primary);
+        \\}
+    ;
 
-    pub const dark: [*:0]const u8 = """
-        :root {
-            --bg-primary: #1a1a2e;
-            --bg-secondary: #16213e;
-            --bg-tertiary: #0f3460;
-            --text-primary: #e8e8e8;
-            --text-secondary: #b8b8c8;
-            --text-tertiary: #888898;
-            --border: #3a3a5e;
-            --accent: #4dabf7;
-            --accent-hover: #339af0;
-            --success: #50c878;
-            --warning: #ffa600;
-            --error: #ff6b81;
-            --code-bg: #0f3460;
-            --code-border: #3a3a5e;
-        }
-        body {
-            background-color: var(--bg-primary);
-            color: var(--text-primary);
-        }
-        """;
+    pub const dark: [*:0]const u8 =
+        \\:root {
+        \\    --bg-primary: #1a1a2e;
+        \\    --bg-secondary: #16213e;
+        \\    --bg-tertiary: #0f3460;
+        \\    --text-primary: #e8e8e8;
+        \\    --text-secondary: #b8b8c8;
+        \\    --text-tertiary: #888898;
+        \\    --border: #3a3a5e;
+        \\    --accent: #4dabf7;
+        \\    --accent-hover: #339af0;
+        \\    --success: #50c878;
+        \\    --warning: #ffa600;
+        \\    --error: #ff6b81;
+        \\    --code-bg: #0f3460;
+        \\    --code-border: #3a3a5e;
+        \\}
+        \\body {
+        \\    background-color: var(--bg-primary);
+        \\    color: var(--text-primary);
+        \\}
+    ;
 
-    pub const high_contrast: [*:0]const u8 = """
-        :root {
-            --bg-primary: #000000;
-            --bg-secondary: #000000;
-            --bg-tertiary: #000000;
-            --text-primary: #ffffff;
-            --text-secondary: #ffffff;
-            --text-tertiary: #cccccc;
-            --border: #ffffff;
-            --accent: #ffff00;
-            --accent-hover: #cccc00;
-            --success: #00ff00;
-            --warning: #ffcc00;
-            --error: #ff0000;
-            --code-bg: #000000;
-            --code-border: #ffffff;
-        }
-        body {
-            background-color: var(--bg-primary);
-            color: var(--text-primary);
-        }
-        """;
+    pub const high_contrast: [*:0]const u8 =
+        \\:root {
+        \\    --bg-primary: #000000;
+        \\    --bg-secondary: #000000;
+        \\    --bg-tertiary: #000000;
+        \\    --text-primary: #ffffff;
+        \\    --text-secondary: #ffffff;
+        \\    --text-tertiary: #cccccc;
+        \\    --border: #ffffff;
+        \\    --accent: #ffff00;
+        \\    --accent-hover: #cccc00;
+        \\    --success: #00ff00;
+        \\    --warning: #ffcc00;
+        \\    --error: #ff0000;
+        \\    --code-bg: #000000;
+        \\    --code-border: #ffffff;
+        \\}
+        \\body {
+        \\    background-color: var(--bg-primary);
+        \\    color: var(--text-primary);
+        \\}
+    ;
 };
 
 /// Predefined theme identifiers.
-pub const ThemeKind = enum { .light, .dark, .high_contrast, .custom };
+/// Explicitly c_int-tagged: this enum crosses the C ABI (gossamer_theme_apply
+/// parameter), and a tagless enum is not permitted in an `export fn` signature.
+pub const ThemeKind = enum(c_int) { light, dark, high_contrast, custom };
 
 /// Map theme kind to CSS string.
 fn themeCSS(kind: ThemeKind, custom_css: ?[*:0]const u8) [*:0]const u8 {
@@ -133,10 +134,10 @@ fn themeCSS(kind: ThemeKind, custom_css: ?[*:0]const u8) [*:0]const u8 {
 /// Returns:
 ///   Result.ok on success, error code on failure
 pub export fn gossamer_theme_apply(handle_ptr: u64, kind: ThemeKind, custom_css: ?[*:0]const u8) Result {
-    const handle = main.ptrFromU64(handle_ptr) orelse {
+    if (main.ptrFromU64(handle_ptr) == null) {
         setError("Theme apply: null handle");
         return .null_pointer;
-    };
+    }
 
     const css = themeCSS(kind, custom_css);
 
@@ -215,7 +216,7 @@ pub export fn gossamer_theme_apply(handle_ptr: u64, kind: ThemeKind, custom_css:
     js[k] = 0;
 
     // Evaluate the JavaScript
-    const result = csp.gossamer_eval_injected(&handle.?, &js);
+    const result = main.gossamer_eval(handle_ptr, js[0..k :0].ptr);
     if (result != .ok) {
         // Error already set by eval
         return result;
@@ -265,51 +266,34 @@ pub export fn gossamer_theme_system_detect() c_int {
     };
 }
 
-/// Linux theme detection (read XDG settings or GTK theme)
+/// Linux theme detection (read the GTK prefer-dark-theme setting).
+/// GtkSettings is a GObject, so the property is read with g_object_get —
+/// not g_settings_get_value, which takes a GSettings (different type).
 fn detectLinuxTheme() c_int {
     const c = @cImport({
         @cInclude("gtk/gtk.h");
     });
 
-    // Try GTK settings first
     if (c.gtk_init_check(null, null) != 0) {
         const settings = c.gtk_settings_get_default();
         if (settings != null) {
-            const g_variant = c.g_settings_get_value(settings, "gtk-application-prefer-dark-theme");
-            if (g_variant != null) {
-                const result = c.g_variant_get_boolean(g_variant);
-                c.g_variant_unref(g_variant);
-                return if (result != 0) 1 else 0;
-            }
+            var prefer_dark: c.gboolean = 0;
+            c.g_object_get(settings, "gtk-application-prefer-dark-theme", &prefer_dark, @as(?*anyopaque, null));
+            return if (prefer_dark != 0) 1 else 0;
         }
     }
 
-    // Try reading XDG config file
-    // This is a simplified approach - would need proper file reading
     return -1;
 }
 
-/// macOS theme detection (read AppleInterfaceStyle)
+/// macOS theme detection (read AppleInterfaceStyle).
+/// Placeholder: needs a CFPreferences query; reported unavailable until then.
 fn detectMacosTheme() c_int {
-    const c = @cImport({
-        @cInclude("CoreFoundation/CoreFoundation.h"),
-        @cInclude("objc/runtime.h"),
-    });
-
-    // macOS 10.14+ has AppleInterfaceStyle preference
-    // This would need proper CFPreferencesQuery implementation
-    // Simplified placeholder
     return -1;
 }
 
-/// Windows theme detection (read registry)
+/// Windows theme detection (read AppsUseLightTheme from the registry).
+/// Placeholder: needs registry access; reported unavailable until then.
 fn detectWindowsTheme() c_int {
-    const c = @cImport({
-        @cInclude("windows.h"),
-    });
-
-    // Windows 10+ has registry key for AppsUseLightTheme
-    // This would need proper registry reading
-    // Simplified placeholder
     return -1;
 }

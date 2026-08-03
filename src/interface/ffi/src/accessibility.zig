@@ -15,7 +15,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const main = @import("main.zig");
-const csp = @import("csp.zig");
 
 const Result = main.Result;
 
@@ -44,10 +43,10 @@ fn clearError() void {
 ///
 /// Returns Result.ok on success, error code on failure.
 pub export fn gossamer_a11y_announce(handle_ptr: u64, message: [*:0]const u8, politeness: [*:0]const u8) Result {
-    const handle = main.ptrFromU64(handle_ptr) orelse {
+    if (main.ptrFromU64(handle_ptr) == null) {
         setError("Accessibility announce: null handle");
         return .null_pointer;
-    };
+    }
 
     // Escape the message for JavaScript
     var escaped_msg: [1024]u8 = undefined;
@@ -122,10 +121,6 @@ pub export fn gossamer_a11y_announce(handle_ptr: u64, message: [*:0]const u8, po
 
     // Build JavaScript
     var js: [2048]u8 = undefined;
-    const js_template = "(function() { var region = document.getElementById('gossamer-a11y-region'); if (!region) { region = document.createElement('div'); region.id = 'gossamer-a11y-region'; region.setAttribute('role', 'status'); region.setAttribute('aria-live', '{{politeness}}'); region.setAttribute('aria-atomic', 'true'); document.body.appendChild(region); } region.textContent = '{{message}}'; })();";
-
-    // We need to replace {{politeness}} and {{message}} in the template
-    // For simplicity, just build the JS directly
     var k: usize = 0;
     const prefix = "(function() { var region = document.getElementById('gossamer-a11y-region'); if (!region) { region = document.createElement('div'); region.id = 'gossamer-a11y-region'; region.setAttribute('role', 'status'); region.setAttribute('aria-live', '";
     var m: usize = 0;
@@ -161,7 +156,7 @@ pub export fn gossamer_a11y_announce(handle_ptr: u64, message: [*:0]const u8, po
     }
     js[k] = 0;
 
-    const result = csp.gossamer_eval_injected(&handle.?, &js);
+    const result = main.gossamer_eval(handle_ptr, js[0..k :0].ptr);
     if (result != .ok) {
         return result;
     }
@@ -173,10 +168,10 @@ pub export fn gossamer_a11y_announce(handle_ptr: u64, message: [*:0]const u8, po
 /// Set the ARIA live region politeness mode.
 /// Politeness can be "polite" (waits for user idle) or "assertive" (interrupts immediately).
 pub export fn gossamer_a11y_set_politeness(handle_ptr: u64, politeness: [*:0]const u8) Result {
-    const handle = main.ptrFromU64(handle_ptr) orelse {
+    if (main.ptrFromU64(handle_ptr) == null) {
         setError("Accessibility set politeness: null handle");
         return .null_pointer;
-    };
+    }
 
     var escaped: [64]u8 = undefined;
     var i: usize = 0;
@@ -226,7 +221,7 @@ pub export fn gossamer_a11y_set_politeness(handle_ptr: u64, politeness: [*:0]con
     }
     js[k] = 0;
 
-    const result = csp.gossamer_eval_injected(&handle.?, &js);
+    const result = main.gossamer_eval(handle_ptr, js[0..k :0].ptr);
     if (result != .ok) {
         return result;
     }
@@ -242,10 +237,10 @@ pub export fn gossamer_a11y_set_politeness(handle_ptr: u64, politeness: [*:0]con
 /// Set focus to a specific element by CSS selector.
 /// Useful for keyboard navigation and accessibility.
 pub export fn gossamer_a11y_focus(handle_ptr: u64, selector: [*:0]const u8) Result {
-    const handle = main.ptrFromU64(handle_ptr) orelse {
+    if (main.ptrFromU64(handle_ptr) == null) {
         setError("Accessibility focus: null handle");
         return .null_pointer;
-    };
+    }
 
     // Build JavaScript to focus element
     var escaped: [256]u8 = undefined;
@@ -302,7 +297,7 @@ pub export fn gossamer_a11y_focus(handle_ptr: u64, selector: [*:0]const u8) Resu
     }
     js[k] = 0;
 
-    const result = csp.gossamer_eval_injected(&handle.?, &js);
+    const result = main.gossamer_eval(handle_ptr, js[0..k :0].ptr);
     if (result != .ok) {
         return result;
     }
@@ -318,16 +313,14 @@ pub export fn gossamer_a11y_focus(handle_ptr: u64, selector: [*:0]const u8) Resu
 /// Check if the user prefers reduced motion.
 /// Returns 1 for prefers-reduced-motion, 0 for no-preference, -1 on error.
 pub export fn gossamer_a11y_prefers_reduced_motion(handle_ptr: u64) c_int {
-    const handle = main.ptrFromU64(handle_ptr) orelse {
+    if (main.ptrFromU64(handle_ptr) == null) {
         setError("Accessibility prefers reduced motion: null handle");
         return -1;
-    };
+    }
 
-    const js = "(function() { var mq = window.matchMedia('(prefers-reduced-motion: reduce)'); return mq.matches ? 1 : 0; })()";
-    
-    // For now, we'll use a simpler approach - just inject a script and read back
-    // This would need a way to return values from eval, which we don't have yet
-    // So we'll just set a global variable and return a placeholder
+    // Inject a script that stashes the media-query result on a global.
+    // Reading it back needs gossamer_eval with return-value support (TODO);
+    // until then the return value below is a placeholder.
     var js_set: [256]u8 = undefined;
     const template = "window.__gossamer_a11y_prefers_reduced_motion = (window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 0);";
     var k: usize = 0;
@@ -338,7 +331,7 @@ pub export fn gossamer_a11y_prefers_reduced_motion(handle_ptr: u64) c_int {
     }
     js_set[k] = 0;
 
-    const result = csp.gossamer_eval_injected(&handle.?, &js_set);
+    const result = main.gossamer_eval(handle_ptr, js_set[0..k :0].ptr);
     if (result != .ok) {
         return -1;
     }
@@ -352,10 +345,10 @@ pub export fn gossamer_a11y_prefers_reduced_motion(handle_ptr: u64) c_int {
 /// Check if the user prefers high contrast mode.
 /// Returns 1 for prefers-contrast: more, 0 for no-preference, -1 on error.
 pub export fn gossamer_a11y_prefers_high_contrast(handle_ptr: u64) c_int {
-    const handle = main.ptrFromU64(handle_ptr) orelse {
+    if (main.ptrFromU64(handle_ptr) == null) {
         setError("Accessibility prefers high contrast: null handle");
         return -1;
-    };
+    }
 
     var js: [256]u8 = undefined;
     const template = "window.__gossamer_a11y_prefers_high_contrast = (window.matchMedia('(prefers-contrast: more)').matches ? 1 : 0);";
@@ -367,7 +360,7 @@ pub export fn gossamer_a11y_prefers_high_contrast(handle_ptr: u64) c_int {
     }
     js[k] = 0;
 
-    const result = csp.gossamer_eval_injected(&handle.?, &js);
+    const result = main.gossamer_eval(handle_ptr, js[0..k :0].ptr);
     if (result != .ok) {
         return -1;
     }
