@@ -2948,6 +2948,16 @@ pub export fn gossamer_cap_resource_kind(token: u64) u32 {
     return 0xFFFFFFFF;
 }
 
+/// Free a buffer previously returned by a gossamer_* function that documents
+/// "caller must free with gossamer_free()" (bundler paths/URLs, updater
+/// version strings, clipboard read_text). Those buffers are allocated with
+/// the libc allocator, so this is exactly free(); null is a no-op.
+pub export fn gossamer_free(ptr: ?*anyopaque) void {
+    if (ptr != null) {
+        std.c.free(ptr);
+    }
+}
+
 /// Revoke a capability token. Consumes it — future checks will fail.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__capRevoke

@@ -23,7 +23,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const main = @import("main.zig");
-const csp = @import("csp.zig");
 
 const Result = main.Result;
 
@@ -51,43 +50,31 @@ pub const SemVer = struct {
     patch: u32,
 };
 
-fn parseSemVer(version: [*:0]const u8) ?SemVer {
-    var major: u32 = 0;
-    var minor: u32 = 0;
-    var patch: u32 = 0;
-    
-    var i: usize = 0;
-    var part: usize = 0;
-    var num: u32 = 0;
-    
-    while (version[i] != 0) : (i += 1) {
-        if (version[i] >= '0' and version[i] <= '9') {
-            num = num * 10 + (version[i] - '0');
-        } else if (version[i] == '.') {
-            switch (part) {
-                0 => major = num,
-                1 => minor = num,
-                _ => {}
-            }
-            part += 1;
-            num = 0;
-        }
-    }
-    // Get the last part
-    switch (part) {
-        0 => minor = num,
-        1 => patch = num,
-        2 => patch = num,
-        else => {}
-    }
-    
+fn parseSemVer(version: []const u8) ?SemVer {
+    const trimmed = std.mem.trim(u8, version, " \t\r\n");
+    if (trimmed.len == 0) return null;
+
+    var it = std.mem.splitScalar(u8, trimmed, '.');
+    const major_s = it.next() orelse return null;
+    const minor_s = it.next() orelse "0";
+    const patch_s = it.next() orelse "0";
+    if (it.next() != null) return null;
+
+    const major = std.fmt.parseInt(u32, major_s, 10) catch return null;
+    const minor = std.fmt.parseInt(u32, minor_s, 10) catch return null;
+    const patch = std.fmt.parseInt(u32, patch_s, 10) catch return null;
+
     return .{ .major = major, .minor = minor, .patch = patch };
 }
 
-fn semVerToString(ver: SemVer, allocator: std.mem.Allocator) []u8 {
-    return std.fmt.allocPrint(allocator, "{d}.{d}.{d}", .{ver.major, ver.minor, ver.patch}) catch {
-        return "0.0.0";
-    };
+/// Format a version as a heap-allocated, null-terminated C string
+/// (caller frees with gossamer_free). Returns null on allocation failure.
+fn semVerToCString(ver: SemVer) ?[*:0]u8 {
+    const allocator = std.heap.c_allocator;
+    const s = std.fmt.allocPrint(allocator, "{d}.{d}.{d}", .{ ver.major, ver.minor, ver.patch }) catch return null;
+    defer allocator.free(s);
+    const z = allocator.dupeZ(u8, s) catch return null;
+    return z.ptr;
 }
 
 fn compareSemVer(a: SemVer, b: SemVer) i32 {
@@ -132,18 +119,16 @@ var current_version: ?SemVer = null;
 
 /// Set the current application version.
 pub export fn gossamer_updater_set_version(handle_ptr: u64, version: [*:0]const u8) Result {
-    const handle = main.ptrFromU64(handle_ptr) orelse {
+    if (main.ptrFromU64(handle_ptr) == null) {
         setError("Updater set version: null handle");
         return .null_pointer;
-    };
-    
-    _ = handle;
-    
-    const ver = parseSemVer(version) orelse {
+    }
+
+    const ver = parseSemVer(std.mem.span(version)) orelse {
         setError("Updater set version: invalid version string");
         return .invalid_param;
     };
-    
+
     current_version = ver;
     clearError();
     return .ok;
@@ -152,25 +137,18 @@ pub export fn gossamer_updater_set_version(handle_ptr: u64, version: [*:0]const 
 /// Get the current application version as a string.
 /// Returns a C string that the caller must free with gossamer_free().
 pub export fn gossamer_updater_get_version() ?[*:0]const u8 {
-    const allocator = std.heap.c_allocator;
-    
-    if (current_version == null) {
+    const ver = current_version orelse {
         setError("Updater get version: version not set");
         return null;
-    }
-    
-    const ver_str = semVerToString(current_version.?, allocator);
-    const c_str = allocator.alloc(u8, ver_str.len + 1) catch {
-        allocator.free(ver_str);
+    };
+
+    const c_str = semVerToCString(ver) orelse {
         setError("Updater get version: allocation failed");
         return null;
     };
-    @memcpy(c_str[0..ver_str.len], ver_str);
-    c_str[ver_str.len] = 0;
-    
-    allocator.free(ver_str);
+
     clearError();
-    return c_str.ptr;
+    return c_str;
 }
 
 // ===========================================================================
@@ -183,13 +161,11 @@ pub export fn gossamer_updater_get_version() ?[*:0]const u8 {
 ///    0 = no update available
 ///    1 = update available
 pub export fn gossamer_updater_check(handle_ptr: u64) c_int {
-    const handle = main.ptrFromU64(handle_ptr) orelse {
+    if (main.ptrFromU64(handle_ptr) == null) {
         setError("Updater check: null handle");
         return -1;
-    };
-    
-    _ = handle;
-    
+    }
+
     if (update_source == null) {
         setError("Updater check: no update source configured");
         return -1;
@@ -229,6 +205,7 @@ fn getLatestVersion() ?SemVer {
 fn fetchVersionFromHttp(url: [*:0]const u8) ?SemVer {
     // This would use libcurl or similar to fetch JSON from the URL
     // For now, return null (not implemented)
+    _ = url;
     setError("Updater: HTTP JSON source not yet implemented");
     return null;
 }
@@ -237,6 +214,7 @@ fn fetchVersionFromHttp(url: [*:0]const u8) ?SemVer {
 fn fetchVersionFromGitHub(repo: [*:0]const u8) ?SemVer {
     // This would use libcurl to fetch from https://api.github.com/repos/<repo>/releases/latest
     // For now, return null (not implemented)
+    _ = repo;
     setError("Updater: GitHub source not yet implemented");
     return null;
 }
@@ -244,39 +222,27 @@ fn fetchVersionFromGitHub(repo: [*:0]const u8) ?SemVer {
 /// Read version from local file.
 fn readVersionFromFile(path: [*:0]const u8) ?SemVer {
     const allocator = std.heap.page_allocator;
-    
-    const file = std.fs.cwd().openFile(path, .{}) catch {
+
+    const file = std.fs.cwd().openFile(std.mem.span(path), .{}) catch {
         setError("Updater: failed to open version file");
         return null;
     };
     defer file.close();
-    
-    const contents = file.readToEndAlloc(allocator, std.math.maxInt(usize)) catch {
+
+    const contents = file.readToEndAlloc(allocator, 1 << 20) catch {
         setError("Updater: failed to read version file");
         return null;
     };
     defer allocator.free(contents);
-    
+
     // Parse version from file (expects first line to be version)
     var i: usize = 0;
     while (i < contents.len and contents[i] != '\n' and contents[i] != '\r') : (i += 1) {}
-    
-    const version_str = allocator.alloc(u8, i + 1) catch {
-        setError("Updater: allocation failed");
-        return null;
-    };
-    @memcpy(version_str[0..i], contents[0..i]);
-    version_str[i] = 0;
-    
-    const ver = parseSemVer(version_str.?);
-    allocator.free(version_str);
-    
-    if (ver == null) {
+
+    return parseSemVer(contents[0..i]) orelse {
         setError("Updater: invalid version in file");
         return null;
-    }
-    
-    return ver;
+    };
 }
 
 // ===========================================================================
@@ -289,13 +255,11 @@ fn readVersionFromFile(path: [*:0]const u8) ?SemVer {
 /// For github_releases: github_repo is "owner/repo"
 /// For local_file: local_path is the path to the version file
 pub export fn gossamer_updater_configure(handle_ptr: u64, source_type: u32, param1: [*:0]const u8) Result {
-    const handle = main.ptrFromU64(handle_ptr) orelse {
+    if (main.ptrFromU64(handle_ptr) == null) {
         setError("Updater configure: null handle");
         return .null_pointer;
-    };
-    
-    _ = handle;
-    
+    }
+
     const source = UpdateSource{
         .source_type = switch (source_type) {
             0 => .http_json,
@@ -319,43 +283,33 @@ pub export fn gossamer_updater_configure(handle_ptr: u64, source_type: u32, para
 /// Get the latest version string.
 /// Returns a C string that the caller must free with gossamer_free().
 pub export fn gossamer_updater_get_latest_version(handle_ptr: u64) ?[*:0]const u8 {
-    const handle = main.ptrFromU64(handle_ptr) orelse {
+    if (main.ptrFromU64(handle_ptr) == null) {
         setError("Updater get latest: null handle");
         return null;
-    };
-    
-    _ = handle;
-    
-    const allocator = std.heap.c_allocator;
+    }
+
     const latest = getLatestVersion() orelse {
         return null;
     };
-    
-    const ver_str = semVerToString(latest, allocator);
-    const c_str = allocator.alloc(u8, ver_str.len + 1) catch {
-        allocator.free(ver_str);
+
+    const c_str = semVerToCString(latest) orelse {
         setError("Updater get latest: allocation failed");
         return null;
     };
-    @memcpy(c_str[0..ver_str.len], ver_str);
-    c_str[ver_str.len] = 0;
-    
-    allocator.free(ver_str);
+
     clearError();
-    return c_str.ptr;
+    return c_str;
 }
 
 /// Check if an update is available and get the version string.
 /// Returns a C string that the caller must free with gossamer_free().
 /// Returns null if no update is available or on error.
 pub export fn gossamer_updater_get_update_version(handle_ptr: u64) ?[*:0]const u8 {
-    const handle = main.ptrFromU64(handle_ptr) orelse {
+    if (main.ptrFromU64(handle_ptr) == null) {
         setError("Updater get update: null handle");
         return null;
-    };
-    
-    _ = handle;
-    
+    }
+
     if (update_source == null) {
         setError("Updater get update: no update source configured");
         return null;
@@ -378,17 +332,11 @@ pub export fn gossamer_updater_get_update_version(handle_ptr: u64) ?[*:0]const u
     }
     
     // Update available
-    const allocator = std.heap.c_allocator;
-    const ver_str = semVerToString(latest, allocator);
-    const c_str = allocator.alloc(u8, ver_str.len + 1) catch {
-        allocator.free(ver_str);
+    const c_str = semVerToCString(latest) orelse {
         setError("Updater get update: allocation failed");
         return null;
     };
-    @memcpy(c_str[0..ver_str.len], ver_str);
-    c_str[ver_str.len] = 0;
-    
-    allocator.free(ver_str);
+
     clearError();
-    return c_str.ptr;
+    return c_str;
 }

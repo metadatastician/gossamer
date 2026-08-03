@@ -169,10 +169,6 @@ const cocoa_clipboard = struct {
             return -1;
         }
 
-        const cls = c.objc_getClass("NSString") orelse {
-            setError("Clipboard: failed to get NSString class");
-            return -1;
-        };
         const sel = c.sel_registerName("stringForType:") orelse {
             setError("Clipboard: failed to get stringForType: selector");
             return -1;
@@ -290,12 +286,13 @@ const win32_clipboard = struct {
             return 0;
         }
 
-        const text_ptr = @ptrCast([*]const u16, c.GlobalLock(h_data));
-        if (text_ptr == null) {
+        const locked = c.GlobalLock(h_data);
+        if (locked == null) {
             setError("Clipboard: GlobalLock failed");
             return -1;
         }
-        defer c.GlobalUnlock(h_data);
+        defer _ = c.GlobalUnlock(h_data);
+        const text_ptr: [*]const u16 = @ptrCast(@alignCast(locked));
 
         // Convert UTF-16 to UTF-8
         // Find null terminator
@@ -304,12 +301,11 @@ const win32_clipboard = struct {
 
         // Allocate temporary buffer for UTF-8 conversion
         var utf8_buf: [1024]u8 = undefined;
-        const result = std.unicode.utf16ToUtf8(text_ptr[0..len], utf8_buf[0..]) catch |err| {
+        const utf8_len = std.unicode.utf16LeToUtf8(utf8_buf[0..], text_ptr[0..len]) catch {
             setError("Clipboard: UTF-16 to UTF-8 conversion failed");
             return -1;
         };
 
-        const utf8_len = result.length;
         const copy_len = @min(utf8_len, if (buf_len > 0) buf_len - 1 else 0);
 
         if (copy_len > 0) {
@@ -324,57 +320,56 @@ const win32_clipboard = struct {
 
     /// Write text to the system clipboard.
     fn write(text: [*:0]const u8) Result {
-        const text_len = std.mem.length(text);
+        const text_slice = std.mem.span(text);
 
         // Allocate global memory for clipboard data
-        // UTF-16 buffer (2 bytes per char + null terminator)
-        const utf16_len = text_len * 2 + 2;
-        const h_mem = c.GlobalAlloc(c.GMEM_MOVEABLE, utf16_len);
+        // UTF-16 buffer (worst case 2 bytes per UTF-8 byte + null terminator)
+        const utf16_cap = text_slice.len + 1;
+        const h_mem = c.GlobalAlloc(c.GMEM_MOVEABLE, utf16_cap * 2);
         if (h_mem == null) {
             setError("Clipboard: GlobalAlloc failed");
             return .@"error";
         }
 
-        const utf16_ptr = @ptrCast([*]u16, c.GlobalLock(h_mem));
-        if (utf16_ptr == null) {
-            c.GlobalFree(h_mem);
+        const locked = c.GlobalLock(h_mem);
+        if (locked == null) {
+            _ = c.GlobalFree(h_mem);
             setError("Clipboard: GlobalLock failed");
             return .@"error";
         }
+        const utf16_ptr: [*]u16 = @ptrCast(@alignCast(locked));
 
         // Convert UTF-8 to UTF-16
-        const result = std.unicode.utf8ToUtf16(std.mem.span(text)) catch |err| {
-            c.GlobalUnlock(h_mem);
-            c.GlobalFree(h_mem);
+        const utf16_len = std.unicode.utf8ToUtf16Le(utf16_ptr[0..utf16_cap], text_slice) catch {
+            _ = c.GlobalUnlock(h_mem);
+            _ = c.GlobalFree(h_mem);
             setError("Clipboard: UTF-8 to UTF-16 conversion failed");
             return .@"error";
         };
 
-        // Copy to global memory
-        @memcpy(utf16_ptr[0..result.length], result);
         // Add null terminator
-        utf16_ptr[result.length] = 0;
+        utf16_ptr[utf16_len] = 0;
 
         // Unlock before setting clipboard data
-        c.GlobalUnlock(h_mem);
+        _ = c.GlobalUnlock(h_mem);
 
         if (c.OpenClipboard(null) == 0) {
-            c.GlobalFree(h_mem);
+            _ = c.GlobalFree(h_mem);
             setError("Clipboard: OpenClipboard failed");
             return .@"error";
         }
-        defer c.CloseClipboard();
+        defer _ = c.CloseClipboard();
 
         // Empty clipboard first
         if (c.EmptyClipboard() == 0) {
-            c.GlobalFree(h_mem);
+            _ = c.GlobalFree(h_mem);
             setError("Clipboard: EmptyClipboard failed");
             return .@"error";
         }
 
         const h_data = c.SetClipboardData(c.CF_UNICODETEXT, h_mem);
         if (h_data == null) {
-            c.GlobalFree(h_mem);
+            _ = c.GlobalFree(h_mem);
             setError("Clipboard: SetClipboardData failed");
             return .@"error";
         }
@@ -384,19 +379,6 @@ const win32_clipboard = struct {
 
         clearError();
         return .ok;
-    }
-};
-
-/// Unsupported platform fallback — all operations return errors.
-const unsupported_clipboard = struct {
-    fn read(_: [*]u8, _: usize) c_int {
-        setError("Clipboard: not supported on this platform");
-        return -1;
-    }
-
-    fn write(_: [*:0]const u8) Result {
-        setError("Clipboard: not supported on this platform");
-        return .@"error";
     }
 };
 
@@ -490,13 +472,14 @@ pub export fn gossamer_clipboard_read_text(cap_token: u64) ?[*:0]u8 {
 
     // Allocate result buffer
     const allocator = std.heap.c_allocator;
-    const result = allocator.allocSentinel(u8, @intCast(usize, len), 0) catch {
+    const result_len: usize = @intCast(len);
+    const result = allocator.allocSentinel(u8, result_len, 0) catch {
         main.setError("Failed to allocate clipboard result");
         return null;
     };
 
-    if (len > 0) {
-        @memcpy(result[0..@intCast(usize, len)], tmp_buf[0..@intCast(usize, len)]);
+    if (result_len > 0) {
+        @memcpy(result[0..result_len], tmp_buf[0..result_len]);
     }
 
     main.clearError();
