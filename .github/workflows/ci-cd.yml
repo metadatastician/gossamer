@@ -1,3 +1,4 @@
+# This workflow is managed by gh actions-lock.
 # SPDX-License-Identifier: MPL-2.0
 # Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 #
@@ -54,7 +55,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Run clippy-style checks (via just)
         run: |
@@ -75,7 +76,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Run static-analysis-gate workflow
         uses: ./.github/workflows/static-analysis-gate.yml
@@ -91,10 +92,10 @@ jobs:
     needs: [lint, static-analysis]
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Install Zig
-        uses: goto-bus-stop/setup-zig@v2
+        uses: goto-bus-stop/setup-zig@v2.2.1
         with:
           version: 0.15.2
 
@@ -133,10 +134,10 @@ jobs:
     needs: [lint, static-analysis]
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Install Zig
-        uses: goto-bus-stop/setup-zig@v2
+        uses: goto-bus-stop/setup-zig@v2.2.1
         with:
           version: 0.15.2
 
@@ -157,10 +158,10 @@ jobs:
     needs: [lint, static-analysis]
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Install Zig
-        uses: goto-bus-stop/setup-zig@v2
+        uses: goto-bus-stop/setup-zig@v2.2.1
         with:
           version: 0.15.2
 
@@ -185,10 +186,10 @@ jobs:
     needs: [build-linux]
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Install Zig
-        uses: goto-bus-stop/setup-zig@v2
+        uses: goto-bus-stop/setup-zig@v2.2.1
         with:
           version: 0.15.2
 
@@ -205,7 +206,7 @@ jobs:
           just package-rpm
 
       - name: Upload packages as artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: linux-packages
           path: |
@@ -219,10 +220,10 @@ jobs:
     needs: [build-macos]
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Install Zig
-        uses: goto-bus-stop/setup-zig@v2
+        uses: goto-bus-stop/setup-zig@v2.2.1
         with:
           version: 0.15.2
 
@@ -230,7 +231,7 @@ jobs:
         run: just package-macos
 
       - name: Upload package as artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: macos-package
           path: packaging/macos/*.dmg
@@ -245,13 +246,13 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Build site
         run: just build-site
 
       - name: Upload site as artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: documentation
           path: site/dist/
@@ -271,12 +272,12 @@ jobs:
       packages: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v8.0.1
         with:
           path: artifacts
 
@@ -289,7 +290,7 @@ jobs:
           echo "Creating release for v$VERSION"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@v3.0.2
         with:
           tag_name: v${{ steps.tag.outputs.version }}
           name: Gossamer v${{ steps.tag.outputs.version }}
@@ -328,7 +329,7 @@ jobs:
     if: success()
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Trigger push-email-notify workflow
         uses: ./.github/workflows/push-email-notify.yml
