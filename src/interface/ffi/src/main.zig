@@ -43,6 +43,13 @@ comptime {
     _ = @import("ssg.zig");
 }
 
+// Bebop VoiceSignal decoder (spline ADR-0005 criterion (b)) — pure Zig, no
+// C exports; imported so its tests (incl. the vendored burble fixture
+// interop test) run under `zig build test`.
+comptime {
+    _ = @import("bebop_voice_signal.zig");
+}
+
 // Game Server Admin Bridge FFI functions (bridge_*, ssh_exec, json_field).
 // Imported here to ensure all exports are included in the shared library.
 comptime {
