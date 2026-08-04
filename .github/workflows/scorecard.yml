@@ -1,3 +1,4 @@
+# This workflow is managed by gh actions-lock.
 # SPDX-License-Identifier: PMPL-1.0-or-later
 name: OSSF Scorecard
 
