@@ -54,7 +54,16 @@ fn parseSemVer(version: []const u8) ?SemVer {
     const trimmed = std.mem.trim(u8, version, " \t\r\n");
     if (trimmed.len == 0) return null;
 
-    var it = std.mem.splitScalar(u8, trimmed, '.');
+    // Tolerate a single leading tag-form "v"/"V" prefix (e.g. "v1.2.3", as
+    // git tags and VERSION files commonly write it); everything after it
+    // must still be strict MAJOR[.MINOR[.PATCH]].
+    const unprefixed = if (trimmed[0] == 'v' or trimmed[0] == 'V')
+        trimmed[1..]
+    else
+        trimmed;
+    if (unprefixed.len == 0) return null;
+
+    var it = std.mem.splitScalar(u8, unprefixed, '.');
     const major_s = it.next() orelse return null;
     const minor_s = it.next() orelse "0";
     const patch_s = it.next() orelse "0";
@@ -85,6 +94,26 @@ fn compareSemVer(a: SemVer, b: SemVer) i32 {
     if (a.patch > b.patch) return 1;
     if (a.patch < b.patch) return -1;
     return 0;
+}
+
+test "parseSemVer accepts a tag-form \"v\" prefix" {
+    const ver = parseSemVer("v1.2.3") orelse return error.TestUnexpectedNull;
+    try std.testing.expectEqual(@as(u32, 1), ver.major);
+    try std.testing.expectEqual(@as(u32, 2), ver.minor);
+    try std.testing.expectEqual(@as(u32, 3), ver.patch);
+}
+
+test "parseSemVer accepts the unprefixed form unchanged" {
+    const ver = parseSemVer("1.2.3") orelse return error.TestUnexpectedNull;
+    try std.testing.expectEqual(@as(u32, 1), ver.major);
+    try std.testing.expectEqual(@as(u32, 2), ver.minor);
+    try std.testing.expectEqual(@as(u32, 3), ver.patch);
+}
+
+test "parseSemVer still rejects genuinely invalid input" {
+    try std.testing.expect(parseSemVer("not-a-version") == null);
+    try std.testing.expect(parseSemVer("v") == null);
+    try std.testing.expect(parseSemVer("1.2.3.4") == null);
 }
 
 // ===========================================================================
