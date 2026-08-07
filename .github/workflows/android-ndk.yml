@@ -1,5 +1,5 @@
-# This workflow is managed by gh actions-lock.
 # SPDX-License-Identifier: MPL-2.0
+# This workflow is managed by gh actions-lock.
 # Android NDK build + gradle-free packaging (issues #67, #68).
 #
 #   apk-pipeline   — compiles the Java shim base classes + sample subclasses and

@@ -1,5 +1,5 @@
-# This workflow is managed by gh actions-lock.
 # SPDX-License-Identifier: MPL-2.0
+# This workflow is managed by gh actions-lock.
 # Android component-host logic tests — runs the pure-Zig registry/dispatch/
 # JSON/directive tests for the JNI binding and the Service/Receiver/Widget
 # hosts (src/interface/ffi/src/{jni,android_*}.zig).
