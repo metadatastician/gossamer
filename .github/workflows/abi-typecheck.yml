@@ -1,5 +1,5 @@
-# This workflow is managed by gh actions-lock.
 # SPDX-License-Identifier: MPL-2.0
+# This workflow is managed by gh actions-lock.
 # ABI Typecheck Gate — machine-checks the formal Idris2 ABI proofs
 # (gossamer-abi.ipkg). Required so the ABI proof modules cannot silently
 # bit-rot (the Justfile previously marked idris2 "optional"). Refs

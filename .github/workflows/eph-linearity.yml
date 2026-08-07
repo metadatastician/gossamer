@@ -1,5 +1,5 @@
-# This workflow is managed by gh actions-lock.
 # SPDX-License-Identifier: MPL-2.0
+# This workflow is managed by gh actions-lock.
 # Ephapax Linearity Gate — machine-checks that the src/core/*.eph bindings to
 # the libgossamer C ABI genuinely type-check under Ephapax's linear discipline,
 # and that leaking a linear resource handle is a compile error. Refs
