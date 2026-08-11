@@ -16,6 +16,26 @@ module Gossamer.ABI.ForeignGen
 %default total
 
 export
+%foreign "C:gossamer_a11y_announce, libgossamer"
+prim__gossamer_a11y_announce : Bits64 -> String -> String -> PrimIO Bits32
+
+export
+%foreign "C:gossamer_a11y_focus, libgossamer"
+prim__gossamer_a11y_focus : Bits64 -> String -> PrimIO Bits32
+
+export
+%foreign "C:gossamer_a11y_prefers_high_contrast, libgossamer"
+prim__gossamer_a11y_prefers_high_contrast : Bits64 -> PrimIO Bits32
+
+export
+%foreign "C:gossamer_a11y_prefers_reduced_motion, libgossamer"
+prim__gossamer_a11y_prefers_reduced_motion : Bits64 -> PrimIO Bits32
+
+export
+%foreign "C:gossamer_a11y_set_politeness, libgossamer"
+prim__gossamer_a11y_set_politeness : Bits64 -> String -> PrimIO Bits32
+
+export
 %foreign "C:gossamer_activity_get, libgossamer"
 prim__gossamer_activity_get : Bits64 -> PrimIO Bits32
 
@@ -58,6 +78,26 @@ prim__gossamer_broadcast : String -> String -> PrimIO Bits32
 export
 %foreign "C:gossamer_build_info, libgossamer"
 prim__gossamer_build_info : PrimIO Bits64
+
+export
+%foreign "C:gossamer_bundler_cleanup, libgossamer"
+prim__gossamer_bundler_cleanup : String -> PrimIO ()
+
+export
+%foreign "C:gossamer_bundler_get_dir, libgossamer"
+prim__gossamer_bundler_get_dir : Bits64 -> String -> PrimIO Bits64
+
+export
+%foreign "C:gossamer_bundler_get_path, libgossamer"
+prim__gossamer_bundler_get_path : Bits64 -> String -> String -> PrimIO Bits64
+
+export
+%foreign "C:gossamer_bundler_get_url, libgossamer"
+prim__gossamer_bundler_get_url : Bits64 -> String -> String -> PrimIO Bits64
+
+export
+%foreign "C:gossamer_bundler_init, libgossamer"
+prim__gossamer_bundler_init : Bits64 -> String -> PrimIO Bits32
 
 export
 %foreign "C:gossamer_cap_check, libgossamer"
@@ -108,8 +148,16 @@ export
 prim__gossamer_clipboard_read : Bits64 -> Bits64 -> PrimIO Bits32
 
 export
+%foreign "C:gossamer_clipboard_read_text, libgossamer"
+prim__gossamer_clipboard_read_text : Bits64 -> PrimIO Bits64
+
+export
 %foreign "C:gossamer_clipboard_write, libgossamer"
 prim__gossamer_clipboard_write : String -> PrimIO Bits32
+
+export
+%foreign "C:gossamer_clipboard_write_text, libgossamer"
+prim__gossamer_clipboard_write_text : String -> Bits64 -> PrimIO Bits32
 
 export
 %foreign "C:gossamer_conf_free, libgossamer"
@@ -190,6 +238,10 @@ prim__gossamer_emit_binary : Bits64 -> String -> Bits64 -> Bits32 -> PrimIO Bits
 export
 %foreign "C:gossamer_eval, libgossamer"
 prim__gossamer_eval : Bits64 -> String -> PrimIO Bits32
+
+export
+%foreign "C:gossamer_free, libgossamer"
+prim__gossamer_free : Bits64 -> PrimIO ()
 
 export
 %foreign "C:gossamer_fs_copy_file, libgossamer"
@@ -488,6 +540,30 @@ export
 prim__gossamer_ssg_write_file : String -> String -> PrimIO Bits32
 
 export
+%foreign "C:gossamer_theme_apply, libgossamer"
+prim__gossamer_theme_apply : Bits64 -> Bits32 -> String -> PrimIO Bits32
+
+export
+%foreign "C:gossamer_theme_custom, libgossamer"
+prim__gossamer_theme_custom : Bits64 -> String -> PrimIO Bits32
+
+export
+%foreign "C:gossamer_theme_dark, libgossamer"
+prim__gossamer_theme_dark : Bits64 -> PrimIO Bits32
+
+export
+%foreign "C:gossamer_theme_high_contrast, libgossamer"
+prim__gossamer_theme_high_contrast : Bits64 -> PrimIO Bits32
+
+export
+%foreign "C:gossamer_theme_light, libgossamer"
+prim__gossamer_theme_light : Bits64 -> PrimIO Bits32
+
+export
+%foreign "C:gossamer_theme_system_detect, libgossamer"
+prim__gossamer_theme_system_detect : PrimIO Bits32
+
+export
 %foreign "C:gossamer_transmute, libgossamer"
 prim__gossamer_transmute : Bits64 -> Bits32 -> PrimIO Bits32
 
@@ -538,6 +614,30 @@ prim__gossamer_tray_set_visible : Bits64 -> Bits32 -> PrimIO Bits32
 export
 %foreign "C:gossamer_tray_set_window, libgossamer"
 prim__gossamer_tray_set_window : Bits64 -> Bits64 -> PrimIO Bits32
+
+export
+%foreign "C:gossamer_updater_check, libgossamer"
+prim__gossamer_updater_check : Bits64 -> PrimIO Bits32
+
+export
+%foreign "C:gossamer_updater_configure, libgossamer"
+prim__gossamer_updater_configure : Bits64 -> Bits32 -> String -> PrimIO Bits32
+
+export
+%foreign "C:gossamer_updater_get_latest_version, libgossamer"
+prim__gossamer_updater_get_latest_version : Bits64 -> PrimIO Bits64
+
+export
+%foreign "C:gossamer_updater_get_update_version, libgossamer"
+prim__gossamer_updater_get_update_version : Bits64 -> PrimIO Bits64
+
+export
+%foreign "C:gossamer_updater_get_version, libgossamer"
+prim__gossamer_updater_get_version : PrimIO Bits64
+
+export
+%foreign "C:gossamer_updater_set_version, libgossamer"
+prim__gossamer_updater_set_version : Bits64 -> String -> PrimIO Bits32
 
 export
 %foreign "C:gossamer_version, libgossamer"

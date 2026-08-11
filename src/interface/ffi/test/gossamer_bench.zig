@@ -1,6 +1,6 @@
-// Gossamer Core Operations Benchmarks
 // SPDX-License-Identifier: MPL-2.0
-// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+// Gossamer Core Operations Benchmarks
 //
 // Ported 1:1 from tests/bench/gossamer_bench.ts. Zig has no built-in bench
 // harness comparable to Deno.bench, so each bench is implemented as a

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
-// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //
 // Gossamer Webview Shell — Zig FFI Implementation
 //
@@ -11,8 +11,6 @@
 // - macOS:   webview_cocoa.zig (WKWebView)   [Phase 2]
 // - Windows: webview_win32.zig (WebView2)    [Phase 2]
 //
-// SPDX-License-Identifier: MPL-2.0
-// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 const std = @import("std");
 const builtin = @import("builtin");
@@ -32,6 +30,10 @@ pub const plugin = @import("plugin.zig");
 pub const clipboard = @import("clipboard.zig");
 pub const dialog = @import("dialog.zig");
 pub const tray = @import("tray.zig");
+pub const theme = @import("theme.zig");
+pub const accessibility = @import("accessibility.zig");
+pub const bundler = @import("bundler.zig");
+pub const updater = @import("updater.zig");
 
 extern fn gossamer_tray_clear_window() void;
 
@@ -39,6 +41,13 @@ extern fn gossamer_tray_clear_window() void;
 // Imported here to ensure all exports are included in the shared library.
 comptime {
     _ = @import("ssg.zig");
+}
+
+// Bebop VoiceSignal decoder (spline ADR-0005 criterion (b)) — pure Zig, no
+// C exports; imported so its tests (incl. the vendored burble fixture
+// interop test) run under `zig build test`.
+comptime {
+    _ = @import("bebop_voice_signal.zig");
 }
 
 // Game Server Admin Bridge FFI functions (bridge_*, ssh_exec, json_field).
@@ -84,6 +93,30 @@ comptime {
 // GTK clipboard implementation for system clipboard access.
 comptime {
     _ = @import("clipboard.zig");
+}
+
+// Theme system FFI functions (gossamer_theme_apply, gossamer_theme_light, etc.).
+// CSS injection for light/dark/custom theme support.
+comptime {
+    _ = @import("theme.zig");
+}
+
+// Accessibility system FFI functions (gossamer_a11y_announce, etc.).
+// ARIA live regions, focus management, and user preference detection.
+comptime {
+    _ = @import("accessibility.zig");
+}
+
+// Application bundler FFI functions (gossamer_bundler_*).
+// Single-binary asset embedding and extraction.
+comptime {
+    _ = @import("bundler.zig");
+}
+
+// Auto-updater FFI functions (gossamer_updater_*).
+// Version checking and update management.
+comptime {
+    _ = @import("updater.zig");
 }
 
 // Plugin system FFI functions (gossamer_plugin_load, gossamer_plugin_unload,
@@ -2920,6 +2953,16 @@ pub export fn gossamer_cap_resource_kind(token: u64) u32 {
         }
     }
     return 0xFFFFFFFF;
+}
+
+/// Free a buffer previously returned by a gossamer_* function that documents
+/// "caller must free with gossamer_free()" (bundler paths/URLs, updater
+/// version strings, clipboard read_text). Those buffers are allocated with
+/// the libc allocator, so this is exactly free(); null is a no-op.
+pub export fn gossamer_free(ptr: ?*anyopaque) void {
+    if (ptr != null) {
+        std.c.free(ptr);
+    }
 }
 
 /// Revoke a capability token. Consumes it — future checks will fail.

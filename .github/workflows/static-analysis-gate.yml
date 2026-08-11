@@ -1,20 +1,18 @@
 # SPDX-License-Identifier: MPL-2.0
+# This workflow is managed by gh actions-lock.
 # Static Analysis Gate — Required by branch protection rules.
 # Runs panic-attack and hypatia, deposits findings for gitbot-fleet learning.
 name: Static Analysis Gate
-
 on:
   pull_request:
     branches: ['**']
   push:
     branches: [main, master]
-
 permissions:
+  actions: read
   contents: read
-
 env:
   REPO_OWNER: ${{ github.repository_owner }}
-
 jobs:
   # ---------------------------------------------------------------------------
   # Job 1: panic-attack assail
@@ -26,10 +24,9 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
-
       - name: Install panic-attack (if available)
         id: install
         run: |
@@ -45,7 +42,6 @@ jobs:
             echo "::notice::panic-attack binary not available — skipping assail"
             echo "installed=false" >> "$GITHUB_OUTPUT"
           fi
-
       - name: Run panic-attack assail
         id: assail
         if: steps.install.outputs.installed == 'true'
@@ -74,7 +70,6 @@ jobs:
           echo "medium=$MEDIUM" >> "$GITHUB_OUTPUT"
           echo "low=$LOW" >> "$GITHUB_OUTPUT"
           echo "exit_code=$PA_EXIT" >> "$GITHUB_OUTPUT"
-
       - name: Emit check annotations
         if: steps.install.outputs.installed == 'true'
         run: |
@@ -88,7 +83,6 @@ jobs:
               "::warning file=\(.location)::[panic-attack] \(.description)"
             end
           ' panic-attack-findings.json || true
-
       - name: Write step summary
         if: steps.install.outputs.installed == 'true'
         run: |
@@ -103,7 +97,6 @@ jobs:
           | Low      | ${{ steps.assail.outputs.low }} |
           | **Total**| ${{ steps.assail.outputs.total }} |
           EOF
-
       - name: Create stub findings (when panic-attack unavailable)
         if: steps.install.outputs.installed != 'true'
         run: |
@@ -111,20 +104,17 @@ jobs:
           echo "## panic-attack assail" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Skipped: panic-attack not available in this environment." >> "$GITHUB_STEP_SUMMARY"
-
       - name: Upload panic-attack findings
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: panic-attack-findings
           path: panic-attack-findings.json
           retention-days: 90
-
       - name: Fail on critical findings
         if: github.event_name == 'push' && steps.install.outputs.installed == 'true' && steps.assail.outputs.critical > 0
         run: |
           echo "::error::panic-attack found ${{ steps.assail.outputs.critical }} critical issue(s) — blocking merge"
           exit 1
-
   # ---------------------------------------------------------------------------
   # Job 2: hypatia-scan
   # ---------------------------------------------------------------------------
@@ -135,18 +125,16 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
-
       - name: Setup Elixir for Hypatia scanner
         id: beam
         continue-on-error: true
-        uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.18.2
+        uses: erlef/setup-beam@v1.24.1
         with:
           elixir-version: '1.19.4'
           otp-version: '28.3'
-
       - name: Clone and build Hypatia
         id: build
         continue-on-error: true
@@ -163,7 +151,6 @@ jobs:
             echo "::notice::Hypatia scanner not available — skipping scan"
             echo "ready=false" >> "$GITHUB_OUTPUT"
           fi
-
       - name: Run Hypatia scan
         id: scan
         if: steps.build.outputs.ready == 'true'
@@ -188,7 +175,6 @@ jobs:
           echo "high=$HIGH" >> "$GITHUB_OUTPUT"
           echo "medium=$MEDIUM" >> "$GITHUB_OUTPUT"
           echo "low=$LOW" >> "$GITHUB_OUTPUT"
-
       - name: Emit check annotations
         if: steps.build.outputs.ready == 'true'
         run: |
@@ -201,7 +187,6 @@ jobs:
               "::warning file=\(.file),line=\(.line // 1)::[hypatia] \(.message)"
             end
           ' hypatia-findings.json || true
-
       - name: Write step summary
         if: steps.build.outputs.ready == 'true'
         run: |
@@ -216,7 +201,6 @@ jobs:
           | Low      | ${{ steps.scan.outputs.low }} |
           | **Total**| ${{ steps.scan.outputs.total }} |
           EOF
-
       - name: Create stub findings (when Hypatia unavailable)
         if: steps.build.outputs.ready != 'true'
         run: |
@@ -224,20 +208,17 @@ jobs:
           echo "## Hypatia Scan" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Skipped: Hypatia scanner not available in this environment." >> "$GITHUB_STEP_SUMMARY"
-
       - name: Upload hypatia findings
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: hypatia-findings
           path: hypatia-findings.json
           retention-days: 90
-
       - name: Fail on critical security findings
         if: steps.build.outputs.ready == 'true' && steps.scan.outputs.critical > 0
         run: |
           echo "::error::Hypatia found ${{ steps.scan.outputs.critical }} critical security issue(s) — blocking merge"
           exit 1
-
   # ---------------------------------------------------------------------------
   # Job 3: patch-bridge triage (CVE contextual assessment)
   # ---------------------------------------------------------------------------
@@ -248,10 +229,9 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
-
       - name: Install panic-attack (if available)
         id: install
         run: |
@@ -266,7 +246,6 @@ jobs:
             echo "::notice::panic-attack binary not available — skipping Patch Bridge"
             echo "installed=false" >> "$GITHUB_OUTPUT"
           fi
-
       - name: Run Patch Bridge triage
         id: triage
         if: steps.install.outputs.installed == 'true'
@@ -289,7 +268,6 @@ jobs:
           echo "mitigated=$MITIGATED" >> "$GITHUB_OUTPUT"
           echo "concatenative=$CONCATENATIVE" >> "$GITHUB_OUTPUT"
           echo "informational=$INFORMATIONAL" >> "$GITHUB_OUTPUT"
-
       - name: Write step summary
         if: steps.install.outputs.installed == 'true'
         run: |
@@ -307,7 +285,6 @@ jobs:
           Mitigated CVEs have active controls with soundness proofs.
           Concatenative risks are CVE combinations that multiply severity.
           EOF
-
       - name: Create stub report (when unavailable)
         if: steps.install.outputs.installed != 'true'
         run: |
@@ -315,21 +292,18 @@ jobs:
           echo "## Patch Bridge CVE Triage" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Skipped: panic-attack not available in this environment." >> "$GITHUB_STEP_SUMMARY"
-
       - name: Upload bridge report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: bridge-report
           path: bridge-report.json
           retention-days: 90
-
       - name: Fail on unmitigable CVEs in critical paths
         if: steps.install.outputs.installed == 'true' && steps.triage.outputs.unmitigable > 0
         run: |
           echo "::warning::Patch Bridge found ${{ steps.triage.outputs.unmitigable }} unmitigable CVE(s) — review required"
           # Warning only, not blocking. Unmitigable means the developer needs
           # to make an architectural decision, not that the PR is wrong.
-
   # ---------------------------------------------------------------------------
   # Job 4: deposit-findings (combines + archives for gitbot-fleet)
   # ---------------------------------------------------------------------------
@@ -339,26 +313,22 @@ jobs:
     timeout-minutes: 60
     needs: [panic-attack-assail, hypatia-scan, patch-bridge-triage]
     if: always()
-
     steps:
       - name: Download panic-attack findings
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        uses: actions/download-artifact@v8.0.1
         with:
           name: panic-attack-findings
           path: findings/
-
       - name: Download hypatia findings
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        uses: actions/download-artifact@v8.0.1
         with:
           name: hypatia-findings
           path: findings/
-
       - name: Download bridge report
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        uses: actions/download-artifact@v8.0.1
         with:
           name: bridge-report
           path: findings/
-
       - name: Combine findings into unified report
         id: combine
         run: |
@@ -414,14 +384,12 @@ jobs:
           echo "high=$HIGH"         >> "$GITHUB_OUTPUT"
           echo "medium=$MEDIUM"     >> "$GITHUB_OUTPUT"
           echo "low=$LOW"           >> "$GITHUB_OUTPUT"
-
       - name: Upload unified findings (fleet scanner picks these up)
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: unified-findings
           path: findings/unified-findings.json
           retention-days: 90
-
       - name: Write deposit summary
         run: |
           cat <<EOF >> "$GITHUB_STEP_SUMMARY"

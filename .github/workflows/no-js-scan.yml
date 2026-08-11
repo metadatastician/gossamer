@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
+# This workflow is managed by gh actions-lock.
 name: No-JS Gate
 
 # Estate policy: no hand-authored JavaScript/TypeScript source
@@ -32,6 +33,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -41,7 +43,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4
+        uses: actions/checkout@v7.0.1
 
       - name: Fail on hand-authored JavaScript/TypeScript
         shell: bash

@@ -1,22 +1,8 @@
-# Security Policy
-
-<!-- 
-============================================================================
-TEMPLATE INSTRUCTIONS (delete this block before publishing)
-============================================================================
-Replace all {{PLACEHOLDER}} values with your information:
-  gossamer     - Your project name
-  hyperpolymath            - GitHub username or org (e.g., hyperpolymath)
-  gossamer             - Repository name
-  j.d.a.jewell@open.ac.uk   - Security contact email
-    - Your PGP key fingerprint (40 chars, no spaces)
-        - URL to your public PGP key
-  hyperpolymath.github.io/gossamer          - Your website/domain
-  2026     - Current year for copyright
-
-Optional: Remove sections that don't apply (e.g., PGP if you don't use it)
-============================================================================
+<!--
+SPDX-License-Identifier: MPL-2.0
+Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 -->
+# Security Policy
 
 We take security seriously. We appreciate your efforts to responsibly disclose vulnerabilities and will make every effort to acknowledge your contributions.
 

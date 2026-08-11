@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
+# This workflow is managed by gh actions-lock.
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
 # dogfood-gate.yml — Hyperpolymath Dogfooding Quality Gate
@@ -13,6 +14,7 @@ on:
     branches: [main, master]
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -26,7 +28,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@v7.0.1
 
       - name: Check for A2ML files
         id: detect
@@ -39,7 +41,7 @@ jobs:
 
       - name: Validate A2ML manifests
         if: steps.detect.outputs.count > 0
-        uses: hyperpolymath/a2ml-validate-action@05bcb78917c09702e90ed18004298a6728753914 # main @ 2026-07-09
+        uses: hyperpolymath/a2ml-ecosystem/validate-action@main
         with:
           path: '.'
           strict: 'false'
@@ -71,7 +73,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@v7.0.1
 
       - name: Check for K9 files
         id: detect
@@ -88,7 +90,7 @@ jobs:
 
       - name: Validate K9 contracts
         if: steps.detect.outputs.k9_count > 0
-        uses: hyperpolymath/k9-validate-action@bddcd9109ee96f9ea3fdb4bf51084fe9cd0909ce # main @ 2026-07-09
+        uses: hyperpolymath/k9-ecosystem/validate-action@main
         with:
           path: '.'
           strict: 'false'
@@ -121,7 +123,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@v7.0.1
 
       - name: Scan for invisible characters
         id: lint
@@ -186,7 +188,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@v7.0.1
 
       - name: Check for Groove manifest
         id: groove
@@ -245,7 +247,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@v7.0.1
 
       - name: Check and validate eclexiaiser manifest
         id: eclex
@@ -295,7 +297,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@v7.0.1
 
       - name: Generate dogfooding scorecard
         run: |

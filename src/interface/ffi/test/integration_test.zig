@@ -1,6 +1,6 @@
-// Gossamer Integration Tests
 // SPDX-License-Identifier: MPL-2.0
-// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+// Gossamer Integration Tests
 //
 // These tests verify that the Zig FFI correctly implements the Idris2 ABI.
 // They exercise the exported C API surface without requiring a display server

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
+# This workflow is managed by gh actions-lock.
 name: Hypatia Security Scan
 
 on:
@@ -11,10 +12,12 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   security-events: write
 
 jobs:
   scan:
+    timeout-minutes: 10
     uses: hyperpolymath/standards/.github/workflows/hypatia-scan-reusable.yml@2ccc38eaaf8787034ed099e0b72c9ca8b85dc563
     secrets: inherit

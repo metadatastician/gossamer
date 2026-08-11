@@ -1,66 +1,116 @@
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
-# Contributing
+# Clone the repository
+git clone https://github.com/metadatastician/gossamer.git
+cd gossamer
 
-Thank you for your interest in contributing! We follow a "Dual-Track" architecture where human-readable documentation lives in the root and machine-readable policies live in `.machine_readable/`.
+# Using Nix (recommended for reproducibility)
+nix develop
+
+# Or using toolbox/distrobox
+toolbox create gossamer-dev
+toolbox enter gossamer-dev
+# Install dependencies manually
+
+# Verify setup
+just check   # or: cargo check / mix compile / etc.
+just test    # Run test suite
+```
+
+### Repository Structure
+```
+gossamer/
+├── src/                 # Source code (Perimeter 1-2)
+├── lib/                 # Library code (Perimeter 1-2)
+├── extensions/          # Extensions (Perimeter 2)
+├── plugins/             # Plugins (Perimeter 2)
+├── tools/               # Tooling (Perimeter 2)
+├── docs/                # Documentation (Perimeter 3)
+│   ├── architecture/    # ADRs, specs (Perimeter 2)
+│   └── proposals/       # RFCs (Perimeter 3)
+├── examples/            # Examples (Perimeter 3)
+├── spec/                # Spec tests (Perimeter 3)
+├── tests/               # Test suite (Perimeter 2-3)
+├── .well-known/         # Protocol files (Perimeter 1-3)
+├── .github/             # GitHub config (Perimeter 1)
+│   ├── ISSUE_TEMPLATE/
+│   └── workflows/
+├── CHANGELOG.md
+├── CODE_OF_CONDUCT.md
+├── CONTRIBUTING.md      # This file
+├── GOVERNANCE.md
+├── LICENSE
+├── MAINTAINERS.md
+├── README.adoc
+├── SECURITY.md
+├── flake.nix            # Nix flake (Perimeter 1)
+└── Justfile             # Task runner (Perimeter 1)
+```
+
+---
 
 ## How to Contribute
 
-We welcome contributions in many forms:
+### Reporting Bugs
 
-- **Code:** Improving the core stack or extensions
-- **Documentation:** Enhancing docs or AI manifests
-- **Testing:** Adding property-based tests or formal proofs
-- **Bug reports:** Filing clear, reproducible issues
+**Before reporting**:
+1. Search existing issues
+2. Check if it's already fixed in `main`
+3. Determine which perimeter the bug affects
 
-## Getting Started
+**When reporting**:
 
-1. **Read the AI Manifest:** Start with `0-AI-MANIFEST.a2ml` (if present) to understand the repository structure.
-2. **Environment:** Use `nix develop` or `direnv allow` to set up your tools.
-3. **Task Runner:** Use `just` to see available commands (`just --list`).
+Use the [bug report template](.github/ISSUE_TEMPLATE/bug_report.md) and include:
+
+- Clear, descriptive title
+- Environment details (OS, versions, toolchain)
+- Steps to reproduce
+- Expected vs actual behaviour
+- Logs, screenshots, or minimal reproduction
+
+### Suggesting Features
+
+**Before suggesting**:
+1. Check the [roadmap](ROADMAP.md) if available
+2. Search existing issues and discussions
+3. Consider which perimeter the feature belongs to
+
+**When suggesting**:
+
+Use the [feature request template](.github/ISSUE_TEMPLATE/feature_request.md) and include:
+
+- Problem statement (what pain point does this solve?)
+- Proposed solution
+- Alternatives considered
+- Which perimeter this affects
+
+### Your First Contribution
+
+Look for issues labelled:
+
+- [`good first issue`](https://github.com/metadatastician/gossamer/labels/good%20first%20issue) — Simple Perimeter 3 tasks
+- [`help wanted`](https://github.com/metadatastician/gossamer/labels/help%20wanted) — Community help needed
+- [`documentation`](https://github.com/metadatastician/gossamer/labels/documentation) — Docs improvements
+- [`perimeter-3`](https://github.com/metadatastician/gossamer/labels/perimeter-3) — Community sandbox scope
+
+---
 
 ## Development Workflow
 
 ### Branch Naming
-
 ```
-docs/short-description       # Documentation
-test/what-added              # Test additions
-feat/short-description       # New features
-fix/issue-number-description # Bug fixes
-refactor/what-changed        # Code improvements
-security/what-fixed          # Security fixes
+docs/short-description       # Documentation (P3)
+test/what-added              # Test additions (P3)
+feat/short-description       # New features (P2)
+fix/issue-number-description # Bug fixes (P2)
+refactor/what-changed        # Code improvements (P2)
+security/what-fixed          # Security fixes (P1-2)
 ```
 
 ### Commit Messages
 
 We follow [Conventional Commits](https://www.conventionalcommits.org/):
-
 ```
 <type>(<scope>): <description>
 
 [optional body]
 
 [optional footer]
-```
-
-Types: `feat`, `fix`, `docs`, `test`, `refactor`, `ci`, `chore`, `security`
-
-## Reporting Bugs
-
-Before reporting:
-1. Search existing issues
-2. Check if it's already fixed in `main`
-
-When reporting, include:
-- Clear, descriptive title
-- Environment details (OS, versions, toolchain)
-- Steps to reproduce
-- Expected vs actual behaviour
-
-## Code of Conduct
-
-All contributors are expected to adhere to our [Code of Conduct](CODE_OF_CONDUCT.md).
-
-## License
-
-By contributing, you agree that your contributions will be licensed under the same license as the project (see [LICENSE](LICENSE)).

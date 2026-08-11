@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
+# This workflow is managed by gh actions-lock.
 # ABI Typecheck Gate — machine-checks the formal Idris2 ABI proofs
 # (gossamer-abi.ipkg). Required so the ABI proof modules cannot silently
 # bit-rot (the Justfile previously marked idris2 "optional"). Refs
@@ -7,7 +8,6 @@
 # Path-filtered and concurrency-guarded so it does not add load to the
 # estate CI pool on unrelated changes.
 name: ABI Typecheck Gate
-
 on:
   pull_request:
     branches: ['**']
@@ -33,14 +33,12 @@ on:
       - 'scripts/check-abi-ffi-cleave.sh'
       - 'scripts/gen-abi-foreign.sh'
       - '.github/workflows/abi-typecheck.yml'
-
 permissions:
+  actions: read
   contents: read
-
 concurrency:
   group: abi-typecheck-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
   # Fast, toolchain-free structural gates. Run in seconds before the ~15-min
   # Idris2 build:
@@ -53,7 +51,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@v7.0.1
       - name: Check ABI decoupling (symlinks + groove split)
         run: ./scripts/check-abi-decoupling.sh
       - name: Check ABI/FFI cleave (no phantom %foreign)
@@ -66,11 +64,10 @@ jobs:
     needs: abi-structure
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@v7.0.1
 
       - name: Install Chez Scheme
         run: sudo apt-get update && sudo apt-get install -y chezscheme
-
       - name: Build & install Idris2 (pinned v0.8.0)
         run: |
           set -euo pipefail

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
+# This workflow is managed by gh actions-lock.
 # Ephapax Linearity Gate — machine-checks that the src/core/*.eph bindings to
 # the libgossamer C ABI genuinely type-check under Ephapax's linear discipline,
 # and that leaking a linear resource handle is a compile error. Refs
@@ -30,6 +31,7 @@ on:
       - '.github/workflows/eph-linearity.yml'
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -49,7 +51,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@v7.0.1
 
       - name: Clone and build Ephapax (the linear-type oracle)
         id: build

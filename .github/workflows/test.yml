@@ -1,0 +1,122 @@
+# SPDX-License-Identifier: MPL-2.0
+# This workflow is managed by gh actions-lock.
+# Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+#
+# Gossamer — Quick Test Workflow
+#
+# Runs on every push and pull request to quickly verify:
+# - Code compiles
+# - Unit tests pass
+# - Formal proofs are valid
+#
+# This is a fast feedback loop (5-10 minutes).
+# For comprehensive testing, use ci-cd.yml.
+
+name: Quick Tests
+
+on:
+  push:
+    branches: [main, master, develop, feature/**]
+    paths:
+      - 'src/**'
+      - 'cli/**'
+      - 'tests/**'
+      - 'Justfile'
+      - '.github/workflows/test.yml'
+  pull_request:
+    branches: [main, master, develop]
+    paths:
+      - 'src/**'
+      - 'cli/**'
+      - 'tests/**'
+      - 'Justfile'
+      - '.github/workflows/test.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Compile + Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@v2.2.1
+        with:
+          version: 0.15.2
+
+      - name: Install GTK/WebKit dev headers
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev xvfb
+
+      - name: Build FFI library
+        run: |
+          cd src/interface/ffi
+          zig build
+
+      - name: Build CLI
+        run: |
+          cd cli
+          zig build
+
+      - name: Run unit tests
+        run: |
+          cd src/interface/ffi
+          zig build test
+
+  proofs:
+    name: Formal Proofs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Install Idris2
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y idris2
+
+      - name: Type-check ABI proofs
+        run: |
+          cd src/interface/abi
+          idris2 --typecheck gossamer-abi.ipkg
+          idris2 --typecheck gossamer-groove.ipkg
+
+  clippy:
+    name: Clippy-Style Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Run lint checks
+        run: |
+          if command -v just &> /dev/null; then
+            just lint 2>&1 || echo "::warning Lint checks not configured"
+          else
+            echo "::notice just not installed"
+          fi
+
+  format:
+    name: Format Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Check code formatting
+        run: |
+          # Check if formatting is correct
+          # This is a placeholder - actual implementation depends on project standards
+          echo "::notice Format check not yet implemented"

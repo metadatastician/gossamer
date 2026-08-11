@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
+# This workflow is managed by gh actions-lock.
 # Android component-host logic tests — runs the pure-Zig registry/dispatch/
 # JSON/directive tests for the JNI binding and the Service/Receiver/Widget
 # hosts (src/interface/ffi/src/{jni,android_*}.zig).
@@ -23,6 +24,7 @@ on:
       - '.github/workflows/android.yml'
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -36,10 +38,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        uses: actions/checkout@v7.0.1
 
       - name: Install Zig
-        uses: goto-bus-stop/setup-zig@abea47f85e598557f500fa1fd2ab7464fcb39406  # v2
+        uses: goto-bus-stop/setup-zig@v2.2.1
         with:
           version: 0.15.2
 

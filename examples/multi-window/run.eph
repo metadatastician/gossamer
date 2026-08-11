@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+//
+// Gossamer Multi-Window Example — opens two real GTK/WebKitGTK windows.
+//
+// Run from desktop:
+//   bash examples/multi-window/run.sh
+//
+// This demonstrates:
+// - Creating multiple webview windows
+// - Registering windows in the global registry
+// - Creating and managing window groups
+// - Multi-window lifecycle management
+
+fn main(): I64 =
+  -- Create first window (main window)
+  let! handle1 = __ffi("gossamer_create", "Multi-Window - Main", 1024, 768, 1, 1, 0) in
+  
+  -- Create second window (sidebar/auxiliary)
+  let! handle2 = __ffi("gossamer_create", "Multi-Window - Sidebar", 400, 768, 1, 1, 0) in
+
+  -- Register both windows in the global registry
+  let! id1 = __ffi("gossamer_registry_add", handle1) in
+  let! id2 = __ffi("gossamer_registry_add", handle2) in
+  
+  -- Create a window group
+  let! group_id = __ffi("gossamer_group_create", "main-group") in
+  
+  -- Add both windows to the group
+  let! _ = __ffi("gossamer_group_add", group_id, id1) in
+  let! _ = __ffi("gossamer_group_add", group_id, id2) in
+
+  -- Load HTML into first window
+  let! _ = __ffi("gossamer_load_html", handle1, """<html><head><style>body{font-family:system-ui,sans-serif;margin:0;padding:20px;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);color:#e0e0e0}h1{color:#ff6b6b}.info{background:rgba(255,255,255,0.1);padding:15px;border-radius:8px;margin-top:20px}</style></head><body><h1>Main Window (ID: 1)</h1><p>Primary window in multi-window application.</p><div class=\"info\"><p><strong>Registry ID:</strong> """ + __ffi("gossamer_registry_count") + """ + " windows registered</p><p><strong>Group:</strong> main-group</p><p>Close both windows to exit.</p></div></body></html>""") in
+
+  -- Load HTML into second window
+  let! _ = __ffi("gossamer_load_html", handle2, """<html><head><style>body{font-family:system-ui,sans-serif;margin:0;padding:20px;background:linear-gradient(135deg,#0f3460 0%,#16213e 100%);color:#e0e0e0}h1{color:#e94560}.info{background:rgba(255,255,255,0.1);padding:15px;border-radius:8px;margin-top:20px}</style></head><body><h1>Sidebar Window (ID: 2)</h1><p>Auxiliary window demonstrating multi-window support.</p><div class=\"info\"><p><strong>Registry ID:</strong> 2</p><p><strong>Group:</strong> main-group</p><p>Part of the same window group.</p></div></body></html>""") in
+
+  -- Log window count for demonstration
+  let! count = __ffi("gossamer_registry_count") in
+  let! _ = __ffi("gossamer_log", "Multi-window: " + count + " windows registered in global registry") in
+
+  -- Run first window (this will block until closed)
+  -- Note: In a real application, each window would run in its own thread
+  -- to allow simultaneous interaction with both windows
+  let! _ = __ffi("gossamer_run", handle1) in
+
+  -- Run second window
+  __ffi("gossamer_run", handle2)
