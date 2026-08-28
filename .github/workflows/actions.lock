@@ -41,6 +41,8 @@ workflows:
         - 'hyperpolymath/standards@2ccc38eaaf8787034ed099e0b72c9ca8b85dc563'
     '.github/workflows/instant-sync.yml':
         - 'peter-evans/repository-dispatch@v4.0.1'
+    '.github/workflows/label-triage.yml': []
+    '.github/workflows/labels.yml': []
     '.github/workflows/main-estate-audit.yml':
         - 'actions/checkout@v7.0.1'
         - 'hyperpolymath/cicd-suite@main'
