@@ -275,7 +275,7 @@ const win32_clipboard = struct {
             setError("Clipboard: OpenClipboard failed");
             return -1;
         }
-        defer c.CloseClipboard();
+        defer _ = c.CloseClipboard();
 
         const h_data = c.GetClipboardData(c.CF_UNICODETEXT);
         if (h_data == null) {

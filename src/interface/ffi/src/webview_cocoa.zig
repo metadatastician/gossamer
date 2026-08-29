@@ -138,7 +138,10 @@ pub fn create(
     const init_func: *const fn (
         ?*anyopaque,
         c.SEL,
-        f64, f64, f64, f64, // CGRect as 4 doubles
+        f64,
+        f64,
+        f64,
+        f64, // CGRect as 4 doubles
         c_ulong, // style
         c_ulong, // backing
         c.BOOL, // defer
@@ -146,7 +149,10 @@ pub fn create(
     const window = init_func(
         window_raw,
         init_sel,
-        0, 0, @floatFromInt(width), @floatFromInt(height),
+        0,
+        0,
+        @floatFromInt(width),
+        @floatFromInt(height),
         style_mask,
         2, // NSBackingStoreBuffered
         0, // NO
@@ -193,13 +199,19 @@ pub fn create(
     const wk_init_func: *const fn (
         ?*anyopaque,
         c.SEL,
-        f64, f64, f64, f64, // CGRect
+        f64,
+        f64,
+        f64,
+        f64, // CGRect
         ?*anyopaque, // configuration
     ) callconv(.c) ?*anyopaque = @ptrCast(&objc_msgSend);
     const webview = wk_init_func(
         wk_raw,
         wk_init_sel,
-        0, 0, @floatFromInt(width), @floatFromInt(height),
+        0,
+        0,
+        @floatFromInt(width),
+        @floatFromInt(height),
         config,
     ) orelse return PlatformError.WebviewCreateFailed;
 
@@ -548,10 +560,11 @@ fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8
     const allocator = std.heap.c_allocator;
     const escaped = escapeForJS(allocator, response) catch return;
     defer allocator.free(escaped);
-    const js = std.fmt.allocPrintZ(
+    const js = std.fmt.allocPrintSentinel(
         allocator,
         "if (window.__gossamer_callbacks[\"{s}\"]) {{ window.__gossamer_callbacks[\"{s}\"].resolve(JSON.parse(\"{s}\")); delete window.__gossamer_callbacks[\"{s}\"]; }}",
         .{ id, id, escaped, id },
+        0,
     ) catch return;
     defer allocator.free(js);
     eval(&handle.webview, js) catch {};
@@ -559,10 +572,11 @@ fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8
 
 fn sendIPCError(handle: *GossamerHandle, id: []const u8, msg_text: []const u8) void {
     const allocator = std.heap.c_allocator;
-    const js = std.fmt.allocPrintZ(
+    const js = std.fmt.allocPrintSentinel(
         allocator,
         "if (window.__gossamer_callbacks[\"{s}\"]) {{ window.__gossamer_callbacks[\"{s}\"].reject(new Error(\"{s}\")); delete window.__gossamer_callbacks[\"{s}\"]; }}",
         .{ id, id, msg_text, id },
+        0,
     ) catch return;
     defer allocator.free(js);
     eval(&handle.webview, js) catch {};

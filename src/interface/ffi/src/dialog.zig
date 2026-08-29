@@ -351,8 +351,13 @@ const stub_dialog = struct {
     }
 };
 
-/// Compile-time platform dispatch for the dialog backend.
-const backend = if (builtin.abi == .android) stub_dialog else gtk_dialog;
+/// Compile-time platform dispatch for the dialog backend. The implemented
+/// backend is GTK-only; selecting it on Windows/macOS previously pulled GTK
+/// headers into otherwise-native builds and made those targets uncompilable.
+const backend = switch (builtin.os.tag) {
+    .linux, .freebsd, .openbsd, .netbsd => if (builtin.abi == .android) stub_dialog else gtk_dialog,
+    else => stub_dialog,
+};
 
 //==============================================================================
 // Exported FFI Functions
