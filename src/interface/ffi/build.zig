@@ -48,9 +48,8 @@ fn androidLibTriple(arch: std.Target.Cpu.Arch) []const u8 {
 
 /// Point the linker at the Android NDK sysroot so `-llog` / `-landroid` resolve.
 ///
-/// Zig supplies Bionic libc for `*-linux-android`, but the platform stubs the
-/// shell needs (liblog, libandroid) live in the NDK sysroot, keyed by lib-triple
-/// and API level:
+/// Android's Bionic libc and the platform stubs the shell needs (liblog,
+/// libandroid) live in the NDK sysroot, keyed by lib-triple and API level:
 ///   <ndk>/toolchains/llvm/prebuilt/<host>/sysroot/usr/lib/<triple>/<api>/
 /// Reads ANDROID_NDK_HOME, which `just android-build` and the NDK CI job set.
 fn addAndroidNdk(b: *std.Build, module: *std.Build.Module, arch: std.Target.Cpu.Arch, ndk: []const u8) void {
@@ -71,8 +70,8 @@ fn addAndroidNdk(b: *std.Build, module: *std.Build.Module, arch: std.Target.Cpu.
 /// The Android ABI is consulted first because an Android target reports
 /// `os == .linux` (it runs a Linux kernel) yet must NOT link GTK/WebKitGTK — its
 /// WebView and component hosts are reached entirely over JNI. The only NDK
-/// libraries the shell needs are liblog (diagnostics) and libandroid; Bionic
-/// libc is supplied by Zig.
+/// libraries the shell needs are liblog (diagnostics) and libandroid. The
+/// caller supplies Bionic through Zig's `--libc` option; see android-build.sh.
 fn linkPlatformLibs(b: *std.Build, module: *std.Build.Module, target: std.Build.ResolvedTarget, ndk: ?[]const u8) void {
     const t = target.result;
     // `.android` is reported by aarch64/x86_64 targets; 32-bit ARM reports
