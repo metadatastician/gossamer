@@ -106,18 +106,11 @@ extern "C" {
     #[allow(dead_code)]
     fn gossamer_tray_create(tooltip: *const c_char) -> u64;
     #[allow(dead_code)]
-    fn gossamer_tray_add_item(
-        tray: u64,
-        label: *const c_char,
-        item_id: u32,
-    ) -> c_int;
+    fn gossamer_tray_add_item(tray: u64, label: *const c_char, item_id: u32) -> c_int;
     #[allow(dead_code)]
     fn gossamer_tray_add_separator(tray: u64) -> c_int;
     #[allow(dead_code)]
-    fn gossamer_tray_set_callback(
-        tray: u64,
-        callback: *const c_void,
-    ) -> c_int;
+    fn gossamer_tray_set_callback(tray: u64, callback: *const c_void) -> c_int;
     #[allow(dead_code)]
     fn gossamer_tray_set_icon(tray: u64, icon_name: *const c_char) -> c_int;
     #[allow(dead_code)]
@@ -133,11 +126,7 @@ extern "C" {
     fn gossamer_notify(title: *const c_char, body: *const c_char) -> c_int;
 
     fn gossamer_set_csp(handle: u64, csp: *const c_char) -> c_int;
-    fn gossamer_emit(
-        handle: u64,
-        event_name: *const c_char,
-        payload_json: *const c_char,
-    ) -> c_int;
+    fn gossamer_emit(handle: u64, event_name: *const c_char, payload_json: *const c_char) -> c_int;
 }
 
 // =============================================================================
@@ -182,10 +171,7 @@ fn check_result(code: c_int) -> Result<(), Error> {
         Ok(())
     } else {
         let message = last_error().unwrap_or_else(|| format!("unknown error (code {code})"));
-        Err(Error::OperationFailed {
-            code,
-            message,
-        })
+        Err(Error::OperationFailed { code, message })
     }
 }
 
@@ -241,8 +227,9 @@ extern "C" fn command_trampoline(payload: *const c_char, user_data: *mut c_void)
 
     // Serialize the response to a C string
     let response = serde_json::to_string(&result).unwrap_or_else(|_| "{}".to_string());
-    let c_response = CString::new(response)
-        .unwrap_or_else(|_| CString::new("{}").expect("the literal \"{}\" contains no interior NUL byte"));
+    let c_response = CString::new(response).unwrap_or_else(|_| {
+        CString::new("{}").expect("the literal \"{}\" contains no interior NUL byte")
+    });
 
     // Leak the CString — Zig copies it via std.mem.span, so this is safe.
     // The leaked memory is small and bounded by the number of IPC calls.
@@ -640,14 +627,11 @@ impl App {
     /// # }
     /// ```
     pub fn emit(&self, event_name: &str, payload_json: &str) -> Result<(), Error> {
-        let event_c =
-            CString::new(event_name).map_err(|e| Error::InvalidString(e.to_string()))?;
+        let event_c = CString::new(event_name).map_err(|e| Error::InvalidString(e.to_string()))?;
         let payload_c =
             CString::new(payload_json).map_err(|e| Error::InvalidString(e.to_string()))?;
         // SAFETY: handle is valid, both strings are null-terminated
-        check_result(unsafe {
-            gossamer_emit(self.handle, event_c.as_ptr(), payload_c.as_ptr())
-        })
+        check_result(unsafe { gossamer_emit(self.handle, event_c.as_ptr(), payload_c.as_ptr()) })
     }
 
     /// Send a desktop notification.
@@ -689,7 +673,8 @@ impl App {
 
     /// Set the system tray icon by icon name.
     pub fn tray_set_icon(&self, tray: u64, icon_name: &str) -> Result<(), Error> {
-        let icon_name_c = CString::new(icon_name).map_err(|e| Error::InvalidString(e.to_string()))?;
+        let icon_name_c =
+            CString::new(icon_name).map_err(|e| Error::InvalidString(e.to_string()))?;
         // SAFETY: valid null-terminated string
         check_result(unsafe { gossamer_tray_set_icon(tray, icon_name_c.as_ptr()) })
     }

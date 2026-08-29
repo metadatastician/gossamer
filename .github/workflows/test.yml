@@ -88,10 +88,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7.0.1
 
-      - name: Install Idris2
+      - name: Install Chez Scheme
+        run: sudo apt-get update && sudo apt-get install -y chezscheme
+
+      - name: Build and install Idris2 (pinned v0.8.0)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y idris2
+          set -euo pipefail
+          git clone --depth 1 --branch v0.8.0 https://github.com/idris-lang/Idris2.git "$RUNNER_TEMP/Idris2"
+          cd "$RUNNER_TEMP/Idris2"
+          make bootstrap SCHEME=chezscheme
+          make install
+          echo "$HOME/.idris2/bin" >> "$GITHUB_PATH"
 
       - name: Type-check ABI proofs
         run: |
@@ -107,13 +114,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7.0.1
 
-      - name: Run lint checks
-        run: |
-          if command -v just &> /dev/null; then
-            just lint 2>&1 || echo "::warning Lint checks not configured"
-          else
-            echo "::notice just not installed"
-          fi
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@v2.2.1
+        with:
+          version: 0.15.2
+
+      - name: Install GTK/WebKit dev headers
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Run strict Rust lint checks against native Gossamer
+        env:
+          GOSSAMER_ZIG: zig
+        run: cargo clippy --manifest-path bindings/rust/Cargo.toml --all-targets --locked -- -D warnings
 
   format:
     name: Format Check
@@ -123,8 +135,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7.0.1
 
-      - name: Check code formatting
-        run: |
-          # Check if formatting is correct
-          # This is a placeholder - actual implementation depends on project standards
-          echo "::notice Format check not yet implemented"
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@v2.2.1
+        with:
+          version: 0.15.2
+
+      - name: Check Zig formatting
+        run: zig fmt --check src/interface/ffi/build.zig cli/build.zig cli/launcher/build.zig
+
+      - name: Check Rust binding formatting
+        run: cargo fmt --manifest-path bindings/rust/Cargo.toml --all -- --check
