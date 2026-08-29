@@ -30,8 +30,8 @@ The architecture is:
 | Tool | Version | Install
 
 | Zig
-| 0.14+
-| `asdf install zig 0.14.0`
+| 0.15.2 (exact)
+| `asdf install zig 0.15.2`
 
 | GTK 3 (dev headers)
 | 3.24+

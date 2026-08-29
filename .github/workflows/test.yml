@@ -20,6 +20,7 @@ on:
     branches: [main, master, develop, feature/**]
     paths:
       - 'src/**'
+      - 'bindings/rust/**'
       - 'cli/**'
       - 'tests/**'
       - 'Justfile'
@@ -28,6 +29,7 @@ on:
     branches: [main, master, develop]
     paths:
       - 'src/**'
+      - 'bindings/rust/**'
       - 'cli/**'
       - 'tests/**'
       - 'Justfile'
@@ -72,6 +74,11 @@ jobs:
         run: |
           cd src/interface/ffi
           zig build test
+
+      - name: Build and test the Rust binding against native Gossamer
+        env:
+          GOSSAMER_ZIG: zig
+        run: cargo test --manifest-path bindings/rust/Cargo.toml --all-targets --locked
 
   proofs:
     name: Formal Proofs

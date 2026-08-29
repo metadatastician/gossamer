@@ -36,7 +36,7 @@ The Zig export surface is the **single source of truth** for the C ABI (`gossame
 
 Three independent toolchains. `just` wraps the raw commands; the raw form is shown so you know what runs.
 
-**1 — Zig FFI (the native library).** Requires Zig 0.15 and the platform webview dev headers (on Fedora: `gtk3-devel webkit2gtk4.1-devel`).
+**1 — Zig FFI (the native library).** Requires exactly Zig 0.15.2 and the platform webview dev headers (on Fedora: `gtk3-devel webkit2gtk4.1-devel`). The Rust binding enforces this exact compiler for source builds; see `bindings/rust/README.adoc` for its prebuilt-library escape hatch.
 
 ```bash
 cd src/interface/ffi && zig build      # libgossamer.so + libgossamer.a   (just build-ffi)

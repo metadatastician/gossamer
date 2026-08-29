@@ -183,7 +183,7 @@ fn check_result(code: c_int) -> Result<(), Error> {
     } else {
         let message = last_error().unwrap_or_else(|| format!("unknown error (code {code})"));
         Err(Error::OperationFailed {
-            code: code as i32,
+            code,
             message,
         })
     }
@@ -779,4 +779,12 @@ impl Drop for App {
 /// Get the Gossamer library version.
 pub fn version() -> String {
     App::version()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn linked_library_reports_a_version() {
+        assert_ne!(super::version(), "unknown");
+    }
 }

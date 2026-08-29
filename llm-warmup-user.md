@@ -32,7 +32,7 @@ just doctor       # Full prerequisite check
 
 ## Prerequisites
 
-Zig 0.14+, GTK3 (gtk3-devel), WebKit2GTK 4.1 (webkit2gtk4.1-devel),
+Zig 0.15.2 (exact), GTK3 (gtk3-devel), WebKit2GTK 4.1 (webkit2gtk4.1-devel),
 Ephapax compiler, pkg-config, just. Optional: Idris2.
 
 ## Key Concepts
