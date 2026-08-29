@@ -355,7 +355,7 @@ const stub_dialog = struct {
 /// backend is GTK-only; selecting it on Windows/macOS previously pulled GTK
 /// headers into otherwise-native builds and made those targets uncompilable.
 const backend = switch (builtin.os.tag) {
-    .linux, .freebsd, .openbsd, .netbsd => if (builtin.abi == .android) stub_dialog else gtk_dialog,
+    .linux, .freebsd, .openbsd, .netbsd => if (builtin.abi == .android or builtin.abi == .androideabi) stub_dialog else gtk_dialog,
     else => stub_dialog,
 };
 

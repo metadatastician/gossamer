@@ -352,7 +352,7 @@ const stub_csp = struct {
 /// implemented marshalling path depends on GLib and is therefore restricted to
 /// GTK desktop targets. Unsupported targets fail explicitly through stub_csp.
 const backend = switch (builtin.os.tag) {
-    .linux, .freebsd, .openbsd, .netbsd => if (builtin.abi == .android) stub_csp else gtk_csp,
+    .linux, .freebsd, .openbsd, .netbsd => if (builtin.abi == .android or builtin.abi == .androideabi) stub_csp else gtk_csp,
     else => stub_csp,
 };
 

@@ -355,7 +355,7 @@ const stub_tray = struct {
 /// Compile-time platform dispatch for the tray backend. This implementation is
 /// GTK-only; native Windows/macOS tray backends must opt in when implemented.
 const backend = switch (builtin.os.tag) {
-    .linux, .freebsd, .openbsd, .netbsd => if (builtin.abi == .android) stub_tray else gtk_tray,
+    .linux, .freebsd, .openbsd, .netbsd => if (builtin.abi == .android or builtin.abi == .androideabi) stub_tray else gtk_tray,
     else => stub_tray,
 };
 

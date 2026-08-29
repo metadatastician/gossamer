@@ -389,20 +389,20 @@ pub fn moveTo(state: *WebviewState, x: i32, y: i32) PlatformError!void {
     }
 }
 
-/// Dock a groove panel. TODO: implement with NSSplitView on macOS.
+/// Dock a groove panel. TODO(#163): implement with NSSplitView on macOS.
 pub fn dock(_: *WebviewState, _: [*:0]const u8, _: u32) PlatformError!void {}
 /// Undock.
 pub fn undock(_: *WebviewState) void {}
 
 /// Query screen dimensions. Falls back to 1920x1080.
 pub fn getScreenSize(_: *WebviewState) [2]u32 {
-    // TODO: Use NSScreen.mainScreen.visibleFrame on macOS
+    // TODO(#163): Use NSScreen.mainScreen.visibleFrame on macOS
     return .{ 1920, 1080 };
 }
 
 /// Register a persistent user script (re-injected on every page load).
 pub fn addUserScript(_: *WebviewState, _: [*:0]const u8) PlatformError!void {
-    // TODO: Use WKUserContentController.addUserScript on macOS
+    // TODO(#163): Use WKUserContentController.addUserScript on macOS
 }
 
 /// Request that the window close.

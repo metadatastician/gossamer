@@ -390,7 +390,7 @@ const win32_clipboard = struct {
 /// `abi == .android`. The comptime `if` means the platform-specific structs (and
 /// their `@cImport` directives) are never referenced, hence never analysed, on
 /// non-matching targets.
-const backend = if (builtin.abi == .android)
+const backend = if (builtin.abi == .android or builtin.abi == .androideabi)
     unsupported_clipboard
 else switch (builtin.os.tag) {
     .linux, .freebsd, .openbsd, .netbsd => gtk_clipboard,

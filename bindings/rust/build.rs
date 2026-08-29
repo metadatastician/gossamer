@@ -2,7 +2,8 @@
 // Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 
 use std::env;
-use std::path::PathBuf;
+use std::ffi::{OsStr, OsString};
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const SUPPORTED_ZIG: &str = "0.15.2";
@@ -79,6 +80,18 @@ fn build_from_source(target: &str) -> PathBuf {
     );
 
     let zig = env::var_os("GOSSAMER_ZIG").unwrap_or_else(|| "zig".into());
+    verify_zig_version(&zig);
+
+    let library_dir = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo must set OUT_DIR"))
+        .join("gossamer-native");
+    std::fs::create_dir_all(&library_dir)
+        .unwrap_or_else(|error| panic!("could not create native output directory: {error}"));
+    compile_native_library(&zig, &source_dir, &library_dir, target);
+
+    validate_prebuilt(library_dir, target)
+}
+
+fn verify_zig_version(zig: &OsStr) {
     let version = Command::new(&zig)
         .arg("version")
         .output()
@@ -98,11 +111,9 @@ fn build_from_source(target: &str) -> PathBuf {
              set GOSSAMER_ZIG to the exact compiler or provide GOSSAMER_LIB_DIR"
         );
     }
+}
 
-    let library_dir = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo must set OUT_DIR"))
-        .join("gossamer-native");
-    std::fs::create_dir_all(&library_dir)
-        .unwrap_or_else(|error| panic!("could not create native output directory: {error}"));
+fn compile_native_library(zig: &OsString, source_dir: &Path, library_dir: &Path, target: &str) {
     let library = library_dir.join(static_library_name(target));
     let local_cache = library_dir.join("zig-cache");
     let global_cache = library_dir.join("zig-global-cache");
@@ -142,8 +153,6 @@ fn build_from_source(target: &str) -> PathBuf {
              toolchain and the native webview development packages for target {target}"
         );
     }
-
-    validate_prebuilt(library_dir, target)
 }
 
 fn link_platform_dependencies(target: &str) {

@@ -35,7 +35,7 @@ const builtin = @import("builtin");
 /// `@cImport` behind `abi != .android` is what keeps `glib.h` off the NDK
 /// include search — mirroring how main.zig routes the webview backend.
 const glib = switch (builtin.os.tag) {
-    .linux, .freebsd, .openbsd, .netbsd => if (builtin.abi == .android) struct {} else @cImport({
+    .linux, .freebsd, .openbsd, .netbsd => if (builtin.abi == .android or builtin.abi == .androideabi) struct {} else @cImport({
         @cInclude("glib.h");
     }),
     else => struct {},
@@ -396,7 +396,7 @@ fn addTrackedFile(state: *WatcherState, path_hash: u64, mtime_ns: i128) void {
 /// can replace this branch later.)
 fn scheduleReload(handle: u64) void {
     switch (builtin.os.tag) {
-        .linux, .freebsd, .openbsd, .netbsd => if (builtin.abi != .android) {
+        .linux, .freebsd, .openbsd, .netbsd => if (builtin.abi != .android and builtin.abi != .androideabi) {
             const ctx = std.heap.c_allocator.create(ReloadContext) catch return;
             ctx.* = .{
                 .handle = handle,

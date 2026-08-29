@@ -110,7 +110,10 @@ jobs:
   
   build-macos:
     name: Build (macOS)
-    runs-on: macos-latest
+    # Zig 0.15.2 cannot link its build runner against the macOS 26 SDK.
+    # macos-15 supplies the supported Xcode 16.4 SDK while the estate remains
+    # on the exact 0.15.2 toolchain.
+    runs-on: macos-15
     timeout-minutes: 30
     needs: [lint]
     steps:
@@ -123,17 +126,11 @@ jobs:
           version: 0.15.2
 
       - name: Build FFI library (macOS)
-        env:
-          # Zig 0.15.2 otherwise mis-detects the macOS 26 SDK on the current
-          # runner image and fails while linking its own build runner.
-          DEVELOPER_DIR: /Library/Developer/CommandLineTools
         run: |
           cd src/interface/ffi
           zig build -Dtarget=native -Doptimize=ReleaseSafe
 
       - name: Build CLI (macOS)
-        env:
-          DEVELOPER_DIR: /Library/Developer/CommandLineTools
         run: |
           cd cli
           zig build -Dtarget=native -Doptimize=ReleaseSafe
@@ -184,11 +181,36 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
 
       - name: Install packaging tools
-        run: sudo apt-get install -y dpkg-dev rpm build-essential just
+        run: sudo apt-get install -y dpkg-dev rpm build-essential just xz-utils
+
+      - name: Install integrity-pinned Wasmtime C API
+        run: |
+          archive="$RUNNER_TEMP/wasmtime-c-api.tar.xz"
+          curl -fsSLo "$archive" \
+            https://github.com/bytecodealliance/wasmtime/releases/download/v48.0.1/wasmtime-v48.0.1-x86_64-linux-c-api.tar.xz
+          echo '67683d04b416a8b91f0e607e7b4c22bd32f18f947c10b5372eb8c277ae3b883a  '"$archive" | sha256sum -c -
+          sudo tar -xJf "$archive" --strip-components=1 -C /usr/local
+          test -f /usr/local/include/wasmtime.h
+          test -f /usr/local/lib/libwasmtime.a
+
+      - name: Build pinned Ephapax compiler
+        id: ephapax
+        env:
+          EPHAPAX_REF: 55d6a24cebf3e6fb4dc59212c4550e0df0544f52
+        run: |
+          src="$RUNNER_TEMP/ephapax"
+          git init "$src"
+          git -C "$src" remote add origin https://github.com/hyperpolymath/ephapax.git
+          git -C "$src" fetch --depth 1 origin "$EPHAPAX_REF"
+          git -C "$src" checkout --detach FETCH_HEAD
+          cargo build --locked --release --manifest-path "$src/Cargo.toml" --bin ephapax
+          "$src/target/release/ephapax" --version
+          echo "bin=$src/target/release/ephapax" >> "$GITHUB_OUTPUT"
 
       - name: Build packages
+        env:
+          EPHAPAX: ${{ steps.ephapax.outputs.bin }}
         run: |
-          just build-ffi-release
           just package-deb
           just package-rpm
 
@@ -196,13 +218,12 @@ jobs:
         uses: actions/upload-artifact@v7.0.1
         with:
           name: linux-packages
-          path: |
-            packaging/debian/*.deb
-            packaging/rpm/*.rpm
+          path: dist/linux/*
+          if-no-files-found: error
 
   package-macos:
     name: Package (macOS .dmg)
-    runs-on: macos-latest
+    runs-on: macos-15
     timeout-minutes: 45
     needs: [build-macos]
     steps:
@@ -218,15 +239,14 @@ jobs:
         run: brew install just
 
       - name: Build macOS package
-        env:
-          DEVELOPER_DIR: /Library/Developer/CommandLineTools
         run: just package-macos
 
       - name: Upload package as artifact
         uses: actions/upload-artifact@v7.0.1
         with:
           name: macos-package
-          path: packaging/macos/*.dmg
+          path: dist/macos/*.dmg
+          if-no-files-found: error
 
   # ===========================================================================
   # Stage 6: Documentation

@@ -256,7 +256,7 @@ pub export fn gossamer_theme_system_detect() c_int {
     // Platform detection
     const builtin = @import("builtin");
 
-    return if (builtin.abi == .android)
+    return if (builtin.abi == .android or builtin.abi == .androideabi)
         -1 // Not available on Android
     else switch (builtin.os.tag) {
         .linux => detectLinuxTheme(),

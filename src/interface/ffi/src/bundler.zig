@@ -43,7 +43,7 @@ fn clearError() void {
 /// Windows: %LOCALAPPDATA%\gossamer-bundler\<app>
 /// Android: Not supported (returns null)
 fn getCacheDir(allocator: std.mem.Allocator, app_name: []const u8) ?[]u8 {
-    if (builtin.abi == .android) return null;
+    if (builtin.abi == .android or builtin.abi == .androideabi) return null;
 
     switch (builtin.os.tag) {
         .linux, .freebsd, .openbsd, .netbsd => {
