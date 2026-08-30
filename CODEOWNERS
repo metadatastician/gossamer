@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: MPL-2.0
+# Root compatibility copy required by the central estate audit. GitHub's
+# canonical discovery copy remains at .github/CODEOWNERS.
+
+* @hyperpolymath
+
+SECURITY.md @hyperpolymath
+.github/workflows/ @hyperpolymath
+Trustfile.a2ml @hyperpolymath
+.machine_readable/ @hyperpolymath

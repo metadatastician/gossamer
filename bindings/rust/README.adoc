@@ -1,0 +1,29 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell
+= Gossamer Rust bindings
+
+`gossamer-rs` is a statically linked Rust interface to Gossamer's native C ABI.
+It does not use `dlopen` and does not silently search a sibling checkout.
+
+== Native library delivery
+
+For a native Linux build, the build script compiles
+`src/interface/ffi` with the repository's supported Zig *0.15.2* toolchain and
+links the resulting static `libgossamer`. Set `GOSSAMER_ZIG` to the exact Zig
+0.15.2 executable when it is not named `zig`.
+
+Linux builds also require the GTK 3 and WebKitGTK 4.1 development packages.
+The build fails with an actionable error when the compiler, source, library, or
+platform dependencies are unavailable; no successful native link is claimed.
+
+For macOS, Windows, Android, or any cross-compilation target, build the static
+library separately. Set
+`GOSSAMER_LIB_DIR` to the directory containing `libgossamer.a` (or
+`gossamer.lib` on Windows). Cross-compilation requires this explicit prebuilt
+path so a host library can never be linked into a target binary accidentally.
+
+The in-repository source build is available to Git dependencies. Publishing is
+disabled in `Cargo.toml`: a future crates.io release must first package the
+native source inside the crate or define a supported prebuilt-artifact delivery
+contract. The build script detects and explains a missing source tree rather
+than falling back to an unrelated filesystem location.

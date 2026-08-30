@@ -88,7 +88,7 @@ conformance/               Linear type conformance tests
 ## Dependencies
 
 - **System**: GTK 3 (gtk3-devel), WebKit2GTK 4.1 (webkit2gtk4.1-devel)
-- **Build**: Zig 0.14+, pkg-config
+- **Build**: Zig 0.15.2 (exact), pkg-config
 - **Type checking**: Ephapax compiler (built from ~/Documents/hyperpolymath-repos/ephapax)
 - **ABI layer**: Idris2 0.7+ (optional)
 - **Bindings**: Rust (gossamer-rs crate), ReScript

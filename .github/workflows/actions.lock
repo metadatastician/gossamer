@@ -211,7 +211,7 @@ dependencies:
         repo_id: 1275649586
     'hyperpolymath/cicd-suite@main':
         ref: 'main'
-        commit: 'sha1-11b5ab51a1600b7b798572200094e611ae0654c2'
+        commit: 'sha1-e429cf0722a59c2a29798e96dc886663bd060631'
         owner_id: 6759885
         repo_id: 1326697643
     'hyperpolymath/k9-ecosystem@main':

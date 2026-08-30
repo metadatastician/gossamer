@@ -319,7 +319,7 @@ pub export fn gossamer_a11y_prefers_reduced_motion(handle_ptr: u64) c_int {
     }
 
     // Inject a script that stashes the media-query result on a global.
-    // Reading it back needs gossamer_eval with return-value support (TODO);
+    // Reading it back needs gossamer_eval with return-value support (TODO(#163));
     // until then the return value below is a placeholder.
     var js_set: [256]u8 = undefined;
     const template = "window.__gossamer_a11y_prefers_reduced_motion = (window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 0);";
@@ -336,7 +336,7 @@ pub export fn gossamer_a11y_prefers_reduced_motion(handle_ptr: u64) c_int {
         return -1;
     }
 
-    // TODO: Read the value back - would need gossamer_eval with return value support
+    // TODO(#163): Read the value back - would need gossamer_eval with return value support
     // For now, return 0 as placeholder
     clearError();
     return 0;

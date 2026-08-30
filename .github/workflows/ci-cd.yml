@@ -1,4 +1,3 @@
-# This workflow is managed by gh actions-lock.
 # SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
 # Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
@@ -58,29 +57,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7.0.1
 
-      - name: Run clippy-style checks (via just)
-        run: |
-          # Check if just is available
-          if command -v just &> /dev/null; then
-            just lint 2>&1 || echo "::warning Just lint not configured"
-          else
-            echo "::notice just not installed, skipping lint"
-          fi
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@v2.2.1
+        with:
+          version: 0.15.2
 
-  # ===========================================================================
-  # Stage 2: Static Analysis
-  # ===========================================================================
-  
-  static-analysis:
-    name: Static Analysis
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7.0.1
+      - name: Check Zig formatting
+        run: zig fmt --check src/interface/ffi/build.zig cli/build.zig cli/launcher/build.zig
 
-      - name: Run static-analysis-gate workflow
-        uses: ./.github/workflows/static-analysis-gate.yml
+      - name: Check Rust binding formatting
+        run: cargo fmt --manifest-path bindings/rust/Cargo.toml --all -- --check
 
   # ===========================================================================
   # Stage 3: Build & Test (Linux)
@@ -90,7 +76,7 @@ jobs:
     name: Build + Test (Linux)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [lint, static-analysis]
+    needs: [lint]
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
@@ -118,21 +104,18 @@ jobs:
           cd src/interface/ffi
           zig build test
 
-      - name: Run ABI typecheck gate
-        uses: ./.github/workflows/abi-typecheck.yml
-
-      - name: Run Ephapax linearity gate
-        uses: ./.github/workflows/eph-linearity.yml
-
   # ===========================================================================
   # Stage 4: Cross-Platform Builds
   # ===========================================================================
   
   build-macos:
     name: Build (macOS)
-    runs-on: macos-latest
+    # Zig 0.15.2 cannot link its build runner against the macOS 26 SDK.
+    # macos-15 supplies the supported Xcode 16.4 SDK while the estate remains
+    # on the exact 0.15.2 toolchain.
+    runs-on: macos-15
     timeout-minutes: 30
-    needs: [lint, static-analysis]
+    needs: [lint]
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
@@ -156,7 +139,7 @@ jobs:
     name: Build (Windows)
     runs-on: windows-latest
     timeout-minutes: 30
-    needs: [lint, static-analysis]
+    needs: [lint]
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
@@ -198,11 +181,36 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
 
       - name: Install packaging tools
-        run: sudo apt-get install -y dpkg-dev rpm build-essential
+        run: sudo apt-get install -y dpkg-dev rpm build-essential just xz-utils
+
+      - name: Install integrity-pinned Wasmtime C API
+        run: |
+          archive="$RUNNER_TEMP/wasmtime-c-api.tar.xz"
+          curl -fsSLo "$archive" \
+            https://github.com/bytecodealliance/wasmtime/releases/download/v48.0.1/wasmtime-v48.0.1-x86_64-linux-c-api.tar.xz
+          echo '67683d04b416a8b91f0e607e7b4c22bd32f18f947c10b5372eb8c277ae3b883a  '"$archive" | sha256sum -c -
+          sudo tar -xJf "$archive" --strip-components=1 -C /usr/local
+          test -f /usr/local/include/wasmtime.h
+          test -f /usr/local/lib/libwasmtime.a
+
+      - name: Build pinned Ephapax compiler
+        id: ephapax
+        env:
+          EPHAPAX_REF: 55d6a24cebf3e6fb4dc59212c4550e0df0544f52
+        run: |
+          src="$RUNNER_TEMP/ephapax"
+          git init "$src"
+          git -C "$src" remote add origin https://github.com/hyperpolymath/ephapax.git
+          git -C "$src" fetch --depth 1 origin "$EPHAPAX_REF"
+          git -C "$src" checkout --detach FETCH_HEAD
+          cargo build --locked --release --manifest-path "$src/Cargo.toml" --bin ephapax
+          "$src/target/release/ephapax" --version
+          echo "bin=$src/target/release/ephapax" >> "$GITHUB_OUTPUT"
 
       - name: Build packages
+        env:
+          EPHAPAX: ${{ steps.ephapax.outputs.bin }}
         run: |
-          just build-ffi-release
           just package-deb
           just package-rpm
 
@@ -210,13 +218,12 @@ jobs:
         uses: actions/upload-artifact@v7.0.1
         with:
           name: linux-packages
-          path: |
-            packaging/debian/*.deb
-            packaging/rpm/*.rpm
+          path: dist/linux/*
+          if-no-files-found: error
 
   package-macos:
     name: Package (macOS .dmg)
-    runs-on: macos-latest
+    runs-on: macos-15
     timeout-minutes: 45
     needs: [build-macos]
     steps:
@@ -228,6 +235,9 @@ jobs:
         with:
           version: 0.15.2
 
+      - name: Install just
+        run: brew install just
+
       - name: Build macOS package
         run: just package-macos
 
@@ -235,7 +245,8 @@ jobs:
         uses: actions/upload-artifact@v7.0.1
         with:
           name: macos-package
-          path: packaging/macos/*.dmg
+          path: dist/macos/*.dmg
+          if-no-files-found: error
 
   # ===========================================================================
   # Stage 6: Documentation
@@ -248,6 +259,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
+
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@v2.2.1
+        with:
+          version: 0.15.2
+
+      - name: Install GTK/WebKit dev headers
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Install just
+        run: cargo install just --locked --version 1.58.0
 
       - name: Build site
         run: just build-site
@@ -287,7 +309,7 @@ jobs:
         run: |
           # Get version from main.zig
           VERSION=$(grep '^const VERSION' src/interface/ffi/src/main.zig | head -1 | cut -d'"' -f2)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Creating release for v$VERSION"
 
       - name: Create GitHub Release
@@ -317,20 +339,3 @@ jobs:
             **Verification:**
             All 192 integration tests passed.
             All 16 ABI proof modules type-check green.
-
-  # ===========================================================================
-  # Stage 8: Notifications
-  # ===========================================================================
-  
-  notify:
-    name: Send Release Notifications
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: [release]
-    if: success()
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7.0.1
-
-      - name: Trigger push-email-notify workflow
-        uses: ./.github/workflows/push-email-notify.yml

@@ -34,9 +34,12 @@ const builtin = @import("builtin");
 /// dispatch below takes an Android-specific (no-op) path instead. Guarding the
 /// `@cImport` behind `abi != .android` is what keeps `glib.h` off the NDK
 /// include search — mirroring how main.zig routes the webview backend.
-const glib = if (builtin.abi == .android) struct {} else @cImport({
-    @cInclude("glib.h");
-});
+const glib = switch (builtin.os.tag) {
+    .linux, .freebsd, .openbsd, .netbsd => if (builtin.abi == .android or builtin.abi == .androideabi) struct {} else @cImport({
+        @cInclude("glib.h");
+    }),
+    else => struct {},
+};
 
 //==============================================================================
 // Configuration
@@ -129,7 +132,7 @@ extern fn gossamer_eval(handle: u64, js: [*:0]const u8) c_int;
 ///
 /// Returns 0 (G_SOURCE_REMOVE) to run only once.
 fn reloadIdleCallback(user_data: ?*anyopaque) callconv(.c) c_int {
-    const ctx: *ReloadContext = @alignCast(@ptrCast(user_data orelse return 0));
+    const ctx: *ReloadContext = @ptrCast(@alignCast(user_data orelse return 0));
     _ = gossamer_eval(ctx.handle, ctx.js);
     std.heap.c_allocator.destroy(ctx);
     return 0; // G_SOURCE_REMOVE — do not repeat
@@ -392,16 +395,16 @@ fn addTrackedFile(state: *WatcherState, path_hash: u64, mtime_ns: i128) void {
 /// (Hot reload is a desktop developer convenience; a JNI-side implementation
 /// can replace this branch later.)
 fn scheduleReload(handle: u64) void {
-    if (builtin.abi == .android) {
-        // No-op on Android (see doc comment above). `handle` is intentionally
-        // unused here; Zig does not require unused parameters to be discarded.
-    } else {
-        const ctx = std.heap.c_allocator.create(ReloadContext) catch return;
-        ctx.* = .{
-            .handle = handle,
-            .js = "location.reload(true)",
-        };
-        _ = glib.g_idle_add(@ptrCast(&reloadIdleCallback), @ptrCast(ctx));
+    switch (builtin.os.tag) {
+        .linux, .freebsd, .openbsd, .netbsd => if (builtin.abi != .android and builtin.abi != .androideabi) {
+            const ctx = std.heap.c_allocator.create(ReloadContext) catch return;
+            ctx.* = .{
+                .handle = handle,
+                .js = "location.reload(true)",
+            };
+            _ = glib.g_idle_add(@ptrCast(&reloadIdleCallback), @ptrCast(ctx));
+        },
+        else => {},
     }
 }
 
@@ -592,6 +595,6 @@ export fn gossamer_watcher_start(
 /// watcher-owned resources. Safe to call with null (no-op).
 export fn gossamer_watcher_stop(opaque_handle: ?*anyopaque) void {
     const p = opaque_handle orelse return;
-    const state: *WatcherState = @alignCast(@ptrCast(p));
+    const state: *WatcherState = @ptrCast(@alignCast(p));
     stop(state);
 }
