@@ -31,7 +31,7 @@ jobs:
         id: install
         run: |
           # Try to fetch the latest release binary from the org
-          PA_URL="https://github.com/${REPO_OWNER}/panic-attack/releases/latest/download/panic-attack-linux-x86_64"
+          PA_URL="https://github.com/hyperpolymath/panic-attack/releases/latest/download/panic-attack-linux-x86_64"
           mkdir -p "$HOME/.local/bin"
           if curl -fsSL --head "$PA_URL" >/dev/null 2>&1; then
             curl -fsSL -o "$HOME/.local/bin/panic-attack" "$PA_URL"
@@ -139,7 +139,7 @@ jobs:
         id: build
         continue-on-error: true
         run: |
-          git clone "https://github.com/${REPO_OWNER}/hypatia.git" "$HOME/hypatia" 2>/dev/null || true
+          git clone https://github.com/hyperpolymath/hypatia.git "$HOME/hypatia" 2>/dev/null || true
           if [ -f "$HOME/hypatia/mix.exs" ]; then
             cd "$HOME/hypatia"
             if [ ! -f hypatia ] && [ ! -f hypatia-v2 ]; then
@@ -148,7 +148,7 @@ jobs:
             fi
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::notice::Hypatia scanner not available — skipping scan"
+            echo "::error::Hypatia scanner could not be prepared -- the scan is SKIPPED and this gate enforces NOTHING on this run"
             echo "ready=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Run Hypatia scan
@@ -251,7 +251,7 @@ jobs:
       - name: Install panic-attack (if available)
         id: install
         run: |
-          PA_URL="https://github.com/${REPO_OWNER}/panic-attack/releases/latest/download/panic-attack-linux-x86_64"
+          PA_URL="https://github.com/hyperpolymath/panic-attack/releases/latest/download/panic-attack-linux-x86_64"
           mkdir -p "$HOME/.local/bin"
           if curl -fsSL --head "$PA_URL" >/dev/null 2>&1; then
             curl -fsSL -o "$HOME/.local/bin/panic-attack" "$PA_URL"
