@@ -7,7 +7,7 @@ workflows:
         - 'actions/checkout@v7.0.1'
     '.github/workflows/android-ndk.yml':
         - 'actions/checkout@v7.0.1'
-        - 'actions/setup-java@v5.7.0'
+        - 'actions/setup-java@v6.0.0'
         - 'actions/upload-artifact@v7.0.1'
         - 'android-actions/setup-android@v4.0.1'
         - 'goto-bus-stop/setup-zig@v2.2.1'
@@ -25,7 +25,7 @@ workflows:
         - 'softprops/action-gh-release@v3.0.2'
     '.github/workflows/codeql.yml':
         - 'actions/checkout@v7.0.1'
-        - 'github/codeql-action@v4.37.7'
+        - 'github/codeql-action@v4.37.9'
     '.github/workflows/dogfood-gate.yml':
         - 'actions/checkout@v7.0.1'
         - 'hyperpolymath/a2ml-ecosystem@main'
@@ -55,7 +55,7 @@ workflows:
         - 'actions/deploy-pages@v5.0.0'
         - 'actions/upload-pages-artifact@v5.0.0'
     '.github/workflows/push-email-notify.yml':
-        - 'dawidd6/action-send-mail@v3.12.0'
+        - 'hyperpolymath/smtp-notify-action@v0.2.0'
     '.github/workflows/release.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/upload-artifact@v7.0.1'
@@ -107,9 +107,9 @@ dependencies:
         commit: 'sha1-3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c'
         owner_id: 44036562
         repo_id: 192626254
-    'actions/setup-java@v5.7.0':
-        ref: 'v5.7.0'
-        commit: 'sha1-b6effb05e454b25005698d916606bdc6ffcbf961'
+    'actions/setup-java@v6.0.0':
+        ref: 'v6.0.0'
+        commit: 'sha1-dd06d9cba3e5552c54d9f8ea23572deb30010f7c'
         owner_id: 44036562
         repo_id: 196057608
     'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a':
@@ -139,11 +139,6 @@ dependencies:
         commit: 'sha1-40fd30fb8d7440372e1316f5d1809ec01dcd3699'
         owner_id: 69522701
         repo_id: 286780795
-    'dawidd6/action-send-mail@v3.12.0':
-        ref: 'v3.12.0'
-        commit: 'sha1-94de994a9f6fffee200243214e17002e2920bb59'
-        owner_id: 9713907
-        repo_id: 222439721
     'denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed':
         ref: 'v2.0.5'
         commit: 'sha1-22d081ff2d3a40755e97629de92e3bcbfa7cf2ed'
@@ -189,9 +184,9 @@ dependencies:
         commit: 'sha1-99df26d4f13ea111d4ec1a7dddef6063f76b97e9'
         owner_id: 9919
         repo_id: 259445878
-    'github/codeql-action@v4.37.7':
-        ref: 'v4.37.7'
-        commit: 'sha1-ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd'
+    'github/codeql-action@v4.37.9':
+        ref: 'v4.37.9'
+        commit: 'sha1-cdf488f595d80d6e07e03d4674febd5ab45fa938'
         owner_id: 9919
         repo_id: 259445878
     'gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e':
@@ -219,6 +214,11 @@ dependencies:
         commit: 'sha1-cfc9bfa56f352680608a4a54adde445587db24a2'
         owner_id: 6759885
         repo_id: 1275650185
+    'hyperpolymath/smtp-notify-action@v0.2.0':
+        ref: 'v0.2.0'
+        commit: 'sha1-ede1191ef6ff3ac02c4f4d9efdf837ee517e11d7'
+        owner_id: 6759885
+        repo_id: 1352485172
     'hyperpolymath/standards@2ccc38eaaf8787034ed099e0b72c9ca8b85dc563':
         ref: '2ccc38eaaf8787034ed099e0b72c9ca8b85dc563'
         commit: 'sha1-2ccc38eaaf8787034ed099e0b72c9ca8b85dc563'
