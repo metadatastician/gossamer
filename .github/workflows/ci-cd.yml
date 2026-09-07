@@ -198,7 +198,9 @@ jobs:
       - name: Build pinned Ephapax compiler
         id: ephapax
         env:
-          EPHAPAX_REF: 55d6a24cebf3e6fb4dc59212c4550e0df0544f52
+          # Includes the validator-backed extern Unit/local-width repairs;
+          # verified locally against this repository's real Main.eph.
+          EPHAPAX_REF: 82d709991328a7bd2b0775f01e7d3e3259fdd2d3
         run: |
           src="$RUNNER_TEMP/ephapax"
           git init "$src"

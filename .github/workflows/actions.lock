@@ -39,9 +39,9 @@ workflows:
     '.github/workflows/eph-linearity.yml':
         - 'actions/checkout@v7.0.1'
     '.github/workflows/governance.yml':
-        - 'hyperpolymath/standards@6208833f327ea18f58f558762dbed9bc0effc049'
+        - 'hyperpolymath/standards@fcb566cfb8a86cea2d3666bf65a4f177a49b1313'
     '.github/workflows/hypatia-scan.yml':
-        - 'hyperpolymath/standards@2ccc38eaaf8787034ed099e0b72c9ca8b85dc563'
+        - 'hyperpolymath/standards@fcb566cfb8a86cea2d3666bf65a4f177a49b1313'
     '.github/workflows/instant-sync.yml':
         - 'peter-evans/repository-dispatch@v4.0.1'
     '.github/workflows/joinery-native.yml':
@@ -71,11 +71,11 @@ workflows:
     '.github/workflows/rhodibot.yml':
         - 'actions/checkout@v7.0.1'
     '.github/workflows/scorecard.yml':
-        - 'hyperpolymath/standards@6208833f327ea18f58f558762dbed9bc0effc049'
+        - 'hyperpolymath/standards@fcb566cfb8a86cea2d3666bf65a4f177a49b1313'
     '.github/workflows/secret-scanner.yml':
-        - 'hyperpolymath/standards@6208833f327ea18f58f558762dbed9bc0effc049'
+        - 'hyperpolymath/standards@fcb566cfb8a86cea2d3666bf65a4f177a49b1313'
     '.github/workflows/spark-theatre-gate.yml':
-        - 'hyperpolymath/standards@d135b05bfc647d0c0fbfedc7e80f37ea50f49236'
+        - 'hyperpolymath/standards@fcb566cfb8a86cea2d3666bf65a4f177a49b1313'
     '.github/workflows/static-analysis-gate.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/download-artifact@v8.0.1'
@@ -97,6 +97,11 @@ dependencies:
         commit: 'sha1-55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
         owner_id: 44036562
         repo_id: 215566462
+    'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1':
+        ref: '3d3c42e5aac5ba805825da76410c181273ba90b1'
+        commit: 'sha1-3d3c42e5aac5ba805825da76410c181273ba90b1'
+        owner_id: 44036562
+        repo_id: 197814629
     'actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0':
         ref: 'v7.0.0'
         commit: 'sha1-9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0'
@@ -149,11 +154,6 @@ dependencies:
         commit: 'sha1-40fd30fb8d7440372e1316f5d1809ec01dcd3699'
         owner_id: 69522701
         repo_id: 286780795
-    'denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed':
-        ref: 'v2.0.5'
-        commit: 'sha1-22d081ff2d3a40755e97629de92e3bcbfa7cf2ed'
-        owner_id: 42048915
-        repo_id: 356423100
     'denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282':
         ref: 'v2.0.4'
         commit: 'sha1-667a34cdef165d8d2b2e98dde39547c9daac7282'
@@ -162,11 +162,6 @@ dependencies:
     'dtolnay/rust-toolchain@67ef31d5b988238dd797d409d6f9574278e20537':
         ref: 'master'
         commit: 'sha1-67ef31d5b988238dd797d409d6f9574278e20537'
-        owner_id: 1940490
-        repo_id: 260749683
-    'dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88':
-        ref: 'master'
-        commit: 'sha1-fa04a1451ff1842e2626ccb99004d0195b455a88'
         owner_id: 1940490
         repo_id: 260749683
     'dtolnay/rust-toolchain@v1':
@@ -194,9 +189,9 @@ dependencies:
         commit: 'sha1-54075bcc5e249e4758d363f27d099f55d843f124'
         owner_id: 47606891
         repo_id: 331103973
-    'github/codeql-action@99df26d4f13ea111d4ec1a7dddef6063f76b97e9':
-        ref: 'v4.37.0'
-        commit: 'sha1-99df26d4f13ea111d4ec1a7dddef6063f76b97e9'
+    'github/codeql-action@cdf488f595d80d6e07e03d4674febd5ab45fa938':
+        ref: 'v4.37.9'
+        commit: 'sha1-cdf488f595d80d6e07e03d4674febd5ab45fa938'
         owner_id: 9919
         repo_id: 259445878
     'github/codeql-action@v4.37.9':
@@ -221,7 +216,7 @@ dependencies:
         repo_id: 1275649586
     'hyperpolymath/cicd-suite@main':
         ref: 'main'
-        commit: 'sha1-e429cf0722a59c2a29798e96dc886663bd060631'
+        commit: 'sha1-fc64172aa53e85289d5d7d6e15c2435a867cc1c9'
         owner_id: 6759885
         repo_id: 1326697643
     'hyperpolymath/k9-ecosystem@main':
@@ -234,41 +229,6 @@ dependencies:
         commit: 'sha1-ede1191ef6ff3ac02c4f4d9efdf837ee517e11d7'
         owner_id: 6759885
         repo_id: 1352485172
-    'hyperpolymath/standards@2ccc38eaaf8787034ed099e0b72c9ca8b85dc563':
-        ref: '2ccc38eaaf8787034ed099e0b72c9ca8b85dc563'
-        commit: 'sha1-2ccc38eaaf8787034ed099e0b72c9ca8b85dc563'
-        owner_id: 6759885
-        repo_id: 1116521501
-        uses:
-            - 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
-            - 'actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0'
-            - 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a'
-            - 'denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed'
-            - 'dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88'
-            - 'editorconfig-checker/action-editorconfig-checker@840e866d93b8e032123c23bac69dece044d4d84c'
-            - 'erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124'
-            - 'github/codeql-action@99df26d4f13ea111d4ec1a7dddef6063f76b97e9'
-            - 'gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e'
-            - 'ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a'
-            - 'trufflesecurity/trufflehog@00155c9dc586f34d189adc83d3ac2698c2ec551f'
-            - 'webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555'
-    'hyperpolymath/standards@6208833f327ea18f58f558762dbed9bc0effc049':
-        ref: '6208833f327ea18f58f558762dbed9bc0effc049'
-        commit: 'sha1-6208833f327ea18f58f558762dbed9bc0effc049'
-        owner_id: 6759885
-        repo_id: 1116521501
-        uses:
-            - 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
-            - 'actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0'
-            - 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a'
-            - 'denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed'
-            - 'dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88'
-            - 'editorconfig-checker/action-editorconfig-checker@840e866d93b8e032123c23bac69dece044d4d84c'
-            - 'erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124'
-            - 'gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e'
-            - 'ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a'
-            - 'trufflesecurity/trufflehog@00155c9dc586f34d189adc83d3ac2698c2ec551f'
-            - 'webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555'
     'hyperpolymath/standards@d135b05bfc647d0c0fbfedc7e80f37ea50f49236':
         ref: 'd135b05bfc647d0c0fbfedc7e80f37ea50f49236'
         commit: 'sha1-d135b05bfc647d0c0fbfedc7e80f37ea50f49236'
@@ -286,11 +246,29 @@ dependencies:
             - 'ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a'
             - 'trufflesecurity/trufflehog@d411fff7b8879a62509f3fa98c07f247ac089a51'
             - 'webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555'
+    'hyperpolymath/standards@fcb566cfb8a86cea2d3666bf65a4f177a49b1313':
+        ref: 'fcb566cfb8a86cea2d3666bf65a4f177a49b1313'
+        commit: 'sha1-fcb566cfb8a86cea2d3666bf65a4f177a49b1313'
+        owner_id: 6759885
+        repo_id: 1116521501
+        uses:
+            - 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
+            - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
+            - 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a'
+            - 'editorconfig-checker/action-editorconfig-checker@840e866d93b8e032123c23bac69dece044d4d84c'
+            - 'erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124'
+            - 'github/codeql-action@cdf488f595d80d6e07e03d4674febd5ab45fa938'
+            - 'ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc'
     'mlugg/setup-zig@v2.2.1':
         ref: 'v2.2.1'
         commit: 'sha1-d1434d08867e3ee9daa34448df10607b98908d29'
         owner_id: 7289241
         repo_id: 812112570
+    'ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc':
+        ref: 'v2.4.4'
+        commit: 'sha1-2d1146689b8cda280b9bc96326124645441f03bc'
+        owner_id: 67707773
+        repo_id: 421101922
     'ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a':
         ref: 'v2.4.3'
         commit: 'sha1-4eaacf0543bb3f2c246792bd56e8cdeffafb205a'
@@ -316,11 +294,6 @@ dependencies:
         commit: 'sha1-efb35369e0ad2afab669f228072c1b0d510eae64'
         owner_id: 2242
         repo_id: 204253808
-    'trufflesecurity/trufflehog@00155c9dc586f34d189adc83d3ac2698c2ec551f':
-        ref: 'v3.95.8'
-        commit: 'sha1-00155c9dc586f34d189adc83d3ac2698c2ec551f'
-        owner_id: 79229934
-        repo_id: 77726177
     'trufflesecurity/trufflehog@d411fff7b8879a62509f3fa98c07f247ac089a51':
         ref: 'v3.95.5'
         commit: 'sha1-d411fff7b8879a62509f3fa98c07f247ac089a51'
