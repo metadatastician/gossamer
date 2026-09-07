@@ -39,6 +39,9 @@ pub fn build(b: *std.Build) void {
         .windows => {
             exe_module.linkSystemLibrary("ole32", .{});
             exe_module.linkSystemLibrary("user32", .{});
+            // libgossamer's Groove transport uses Winsock. Static library
+            // consumers must link that dependency at the final executable.
+            exe_module.linkSystemLibrary("ws2_32", .{});
         },
         else => {},
     }
