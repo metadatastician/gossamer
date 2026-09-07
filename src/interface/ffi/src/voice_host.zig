@@ -8,6 +8,35 @@ const Scope = @import("groove_voice.zig").Scope;
 const Atomic = std.atomic.Value;
 const allocator = std.heap.c_allocator;
 
+// 32-bit Android targets do not provide lock-free 64-bit atomics. Keep the
+// full-width monotonic deadline/counter without tearing or truncation. This
+// independent mutex protects a single integer only, never network I/O.
+const SharedU64 = struct {
+    guard: std.Thread.Mutex = .{},
+    value: u64 = 0,
+
+    fn init(value: u64) SharedU64 {
+        return .{ .value = value };
+    }
+    pub fn load(self: *SharedU64, comptime _: std.builtin.AtomicOrder) u64 {
+        self.guard.lock();
+        defer self.guard.unlock();
+        return self.value;
+    }
+    fn store(self: *SharedU64, value: u64, comptime _: std.builtin.AtomicOrder) void {
+        self.guard.lock();
+        defer self.guard.unlock();
+        self.value = value;
+    }
+    fn fetchAdd(self: *SharedU64, value: u64, comptime _: std.builtin.AtomicOrder) u64 {
+        self.guard.lock();
+        defer self.guard.unlock();
+        const previous = self.value;
+        self.value +%= value;
+        return previous;
+    }
+};
+
 pub const Status = enum(c_int) { connecting = 1, active = 2, ended = 3, failed = 4, stopping = 5, stopped = 6 };
 fn receiveFailureStatus(mode: c_int, result: i32) Status {
     return if (mode == 1 and result == -2) .ended else .failed;
@@ -43,11 +72,11 @@ pub const Host = struct {
     mode: c_int,
     ttl: u32,
     origin: std.time.Instant,
-    valid_until: Atomic(u64) = .init(0),
+    valid_until: SharedU64 = .init(0),
     thread: ?std.Thread = null,
     stop: Atomic(bool) = .init(false),
     status: Atomic(c_int) = .init(@intFromEnum(Status.connecting)),
-    sent: Atomic(u64) = .init(0),
+    sent: SharedU64 = .init(0),
     mutex: std.Thread.Mutex = .{},
     outbound: Queue = .{},
     inbound: Queue = .{},
@@ -101,12 +130,12 @@ pub const Host = struct {
         return std.math.add(u64, self.elapsed() orelse return null, @as(u64, self.ttl) * windows * std.time.ns_per_s) catch null;
     }
 
-    fn leaseFresh(self: *const Host) bool {
+    fn leaseFresh(self: *Host) bool {
         const now = self.elapsed() orelse return false;
         return now < self.valid_until.load(.acquire);
     }
 
-    fn isActive(self: *const Host) bool {
+    fn isActive(self: *Host) bool {
         return !self.stop.load(.acquire) and
             self.status.load(.acquire) == @intFromEnum(Status.active) and self.leaseFresh();
     }
@@ -225,6 +254,17 @@ pub const Host = struct {
         }
     }
 };
+
+test "shared deadlines retain all 64 bits on every target" {
+    const high = @as(u64, std.math.maxInt(u32)) + 1234;
+    var value = SharedU64.init(high);
+    try std.testing.expectEqual(high, value.load(.acquire));
+    try std.testing.expectEqual(high, value.fetchAdd(1, .acq_rel));
+    try std.testing.expectEqual(high + 1, value.load(.acquire));
+    value.store(std.math.maxInt(u64), .release);
+    try std.testing.expectEqual(std.math.maxInt(u64), value.fetchAdd(1, .acq_rel));
+    try std.testing.expectEqual(@as(u64, 0), value.load(.acquire));
+}
 
 test "worker queues are bounded, ordered, and clear consumed storage" {
     var queue: Queue = .{};

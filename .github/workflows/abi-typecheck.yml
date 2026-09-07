@@ -1,39 +1,20 @@
-# This workflow is managed by gh actions-lock.
 # SPDX-License-Identifier: MPL-2.0
+# This workflow is managed by gh actions-lock.
 # This workflow is managed by gh actions-lock.
 # ABI Typecheck Gate — machine-checks the formal Idris2 ABI proofs
 # (gossamer-abi.ipkg). Required so the ABI proof modules cannot silently
 # bit-rot (the Justfile previously marked idris2 "optional"). Refs
 # hyperpolymath/standards#131.
 #
-# Path-filtered and concurrency-guarded so it does not add load to the
-# estate CI pool on unrelated changes.
+# Always reports the required checks on PRs and merge groups.
 name: ABI Typecheck Gate
 on:
+  merge_group:
+    types: [checks_requested]
   pull_request:
     branches: ['**']
-    paths:
-      - 'src/interface/**'
-      - 'tests/idris2/**'
-      - 'gossamer-abi.ipkg'
-      - 'gossamer-groove.ipkg'
-      - 'gossamer-abi-tests.ipkg'
-      - 'scripts/check-abi-decoupling.sh'
-      - 'scripts/check-abi-ffi-cleave.sh'
-      - 'scripts/gen-abi-foreign.sh'
-      - '.github/workflows/abi-typecheck.yml'
   push:
     branches: [main, master]
-    paths:
-      - 'src/interface/**'
-      - 'tests/idris2/**'
-      - 'gossamer-abi.ipkg'
-      - 'gossamer-groove.ipkg'
-      - 'gossamer-abi-tests.ipkg'
-      - 'scripts/check-abi-decoupling.sh'
-      - 'scripts/check-abi-ffi-cleave.sh'
-      - 'scripts/gen-abi-foreign.sh'
-      - '.github/workflows/abi-typecheck.yml'
 permissions:
   actions: read
   contents: read
@@ -73,6 +54,7 @@ jobs:
         run: |
           set -euo pipefail
           git clone --depth 1 --branch v0.8.0 https://github.com/idris-lang/Idris2.git "$RUNNER_TEMP/Idris2"
+          test "$(git -C "$RUNNER_TEMP/Idris2" rev-parse HEAD)" = 15a3e4e70843f7a34100f6470c04b791330788df
           cd "$RUNNER_TEMP/Idris2"
           make bootstrap SCHEME=chezscheme
           make install

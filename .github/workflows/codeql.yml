@@ -1,5 +1,5 @@
-# This workflow is managed by gh actions-lock.
 # SPDX-License-Identifier: MPL-2.0
+# This workflow is managed by gh actions-lock.
 # This workflow is managed by gh actions-lock.
 name: CodeQL Security Analysis
 on:
@@ -43,6 +43,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - language: java-kotlin
+            build-mode: none
           - language: rust
             build-mode: none
           - language: c-cpp

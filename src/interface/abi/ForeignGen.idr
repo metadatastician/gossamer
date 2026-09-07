@@ -364,6 +364,22 @@ export
 prim__gossamer_groove_undock : Bits64 -> PrimIO Bits32
 
 export
+%foreign "C:gossamer_groove_voice_connect, libgossamer"
+prim__gossamer_groove_voice_connect : Bits32 -> Bits32 -> Bits32 -> Bits64 -> Bits64 -> Bits64 -> Bits64 -> Bits64 -> Bits64 -> Bits64 -> Bits64 -> PrimIO Bits64
+
+export
+%foreign "C:gossamer_groove_voice_recv, libgossamer"
+prim__gossamer_groove_voice_recv : Bits64 -> Bits64 -> Bits64 -> PrimIO Bits32
+
+export
+%foreign "C:gossamer_groove_voice_send, libgossamer"
+prim__gossamer_groove_voice_send : Bits64 -> Bits64 -> Bits64 -> PrimIO Bits32
+
+export
+%foreign "C:gossamer_groove_voice_tick, libgossamer"
+prim__gossamer_groove_voice_tick : PrimIO ()
+
+export
 %foreign "C:gossamer_group_add, libgossamer"
 prim__gossamer_group_add : Bits32 -> Bits32 -> PrimIO Bits32
 
@@ -644,6 +660,10 @@ export
 prim__gossamer_version : PrimIO Bits64
 
 export
+%foreign "C:gossamer_voice_worker_count, libgossamer"
+prim__gossamer_voice_worker_count : PrimIO Bits32
+
+export
 %foreign "C:gossamer_watcher_start, libgossamer"
 prim__gossamer_watcher_start : Bits64 -> String -> String -> PrimIO Bits64
 
@@ -654,3 +674,27 @@ prim__gossamer_watcher_stop : Bits64 -> PrimIO ()
 export
 %foreign "C:gossamer_webview_engine, libgossamer"
 prim__gossamer_webview_engine : PrimIO Bits64
+
+export
+%foreign "C:gossamer_window_voice_recv, libgossamer"
+prim__gossamer_window_voice_recv : Bits64 -> Bits64 -> Bits64 -> PrimIO Bits32
+
+export
+%foreign "C:gossamer_window_voice_send, libgossamer"
+prim__gossamer_window_voice_send : Bits64 -> Bits64 -> Bits64 -> PrimIO Bits32
+
+export
+%foreign "C:gossamer_window_voice_sent, libgossamer"
+prim__gossamer_window_voice_sent : Bits64 -> PrimIO Bits64
+
+export
+%foreign "C:gossamer_window_voice_start, libgossamer"
+prim__gossamer_window_voice_start : Bits64 -> Bits32 -> Bits32 -> Bits64 -> Bits64 -> Bits64 -> Bits64 -> Bits64 -> Bits64 -> Bits64 -> Bits64 -> PrimIO Bits32
+
+export
+%foreign "C:gossamer_window_voice_status, libgossamer"
+prim__gossamer_window_voice_status : Bits64 -> PrimIO Bits32
+
+export
+%foreign "C:gossamer_window_voice_stop, libgossamer"
+prim__gossamer_window_voice_stop : Bits64 -> PrimIO Bits32
