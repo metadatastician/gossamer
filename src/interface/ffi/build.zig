@@ -149,6 +149,7 @@ pub fn build(b: *std.Build) void {
     });
 
     b.installArtifact(shared_lib);
+    b.installFile("include/gossamer_voice.h", "include/gossamer_voice.h");
 
     // --- Static library (.a) ---
     const static_module = b.createModule(.{
