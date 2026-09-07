@@ -1,3 +1,4 @@
+# This workflow is managed by gh actions-lock.
 # SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
 # Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
@@ -20,17 +21,19 @@
 name: CI/CD Pipeline
 
 on:
+  merge_group:
+    types: [checks_requested]
   push:
     branches: [main, master, develop]
-    paths-ignore:
-      - 'docs/**'
-      - '*.md'
-      - '*.adoc'
-      - 'LICENSE'
-      - '.github/**'
   pull_request:
     branches: [main, master, develop]
   workflow_dispatch:
+    inputs:
+      prepare_release:
+        description: Prepare a draft release after all verification jobs pass
+        type: boolean
+        default: false
+        required: false
   schedule:
     # Run daily at 02:00 UTC
     - cron: '0 2 * * *'
@@ -38,7 +41,6 @@ on:
 permissions:
   contents: read
   actions: read
-  checks: write
 
 concurrency:
   group: ci-cd-${{ github.ref }}
@@ -289,7 +291,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     needs: [build-linux, build-macos, build-windows, package-linux, package-macos, docs]
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    if: github.event_name == 'workflow_dispatch' && inputs.prepare_release && github.ref == 'refs/heads/main'
     permissions:
       contents: write
       packages: write
@@ -317,8 +319,8 @@ jobs:
         with:
           tag_name: v${{ steps.tag.outputs.version }}
           name: Gossamer v${{ steps.tag.outputs.version }}
-          draft: false
-          prerelease: false
+          draft: true
+          prerelease: true
           files: |
             artifacts/linux-packages/*.deb
             artifacts/linux-packages/*.rpm
@@ -337,5 +339,7 @@ jobs:
             - macOS disk image (.dmg)
             
             **Verification:**
-            All 192 integration tests passed.
-            All 16 ABI proof modules type-check green.
+            See the completed jobs and artifacts for this exact revision:
+            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            This is a draft prerelease, not production-beta qualification.
+            Native microphone/camera and real media acceptance remain unqualified.
