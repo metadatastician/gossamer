@@ -275,7 +275,7 @@ const win32_clipboard = struct {
             setError("Clipboard: OpenClipboard failed");
             return -1;
         }
-        defer c.CloseClipboard();
+        defer _ = c.CloseClipboard();
 
         const h_data = c.GetClipboardData(c.CF_UNICODETEXT);
         if (h_data == null) {
@@ -390,7 +390,7 @@ const win32_clipboard = struct {
 /// `abi == .android`. The comptime `if` means the platform-specific structs (and
 /// their `@cImport` directives) are never referenced, hence never analysed, on
 /// non-matching targets.
-const backend = if (builtin.abi == .android)
+const backend = if (builtin.abi == .android or builtin.abi == .androideabi)
     unsupported_clipboard
 else switch (builtin.os.tag) {
     .linux, .freebsd, .openbsd, .netbsd => gtk_clipboard,

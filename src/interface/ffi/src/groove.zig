@@ -418,16 +418,14 @@ pub export fn gossamer_groove_send(target_id: u32, msg_ptr: [*:0]const u8) callc
     var header_buf: [768]u8 = undefined;
     const sig = computeHmac(msg_body);
     const header = if (sig) |s|
-        std.fmt.bufPrint(&header_buf,
-            "POST /.well-known/groove/message HTTP/1.0\r\n" ++
+        std.fmt.bufPrint(&header_buf, "POST /.well-known/groove/message HTTP/1.0\r\n" ++
             "Host: localhost\r\n" ++
             "Content-Type: application/json\r\n" ++
             "Content-Length: {d}\r\n" ++
             "X-Groove-Signature: {s}\r\n" ++
             "Connection: close\r\n\r\n", .{ msg_len, s }) catch return 1
     else
-        std.fmt.bufPrint(&header_buf,
-            "POST /.well-known/groove/message HTTP/1.0\r\n" ++
+        std.fmt.bufPrint(&header_buf, "POST /.well-known/groove/message HTTP/1.0\r\n" ++
             "Host: localhost\r\n" ++
             "Content-Type: application/json\r\n" ++
             "Content-Length: {d}\r\n" ++
@@ -599,15 +597,12 @@ pub fn wireConnect(target_id: u32, mode: []const u8, ttl_ms: u64, out: []u8) Wir
     // {"ttl_ms":0} would be rejected with 400 by conforming providers
     // (SPEC §4.6 TTL bounds), so the lease member is omitted entirely.
     const body = if (ttl_ms == 0)
-        std.fmt.bufPrint(&body_buf,
-            "{{\"service_id\":\"gossamer\",\"consumes\":[]}}", .{}) catch {
+        std.fmt.bufPrint(&body_buf, "{{\"service_id\":\"gossamer\",\"consumes\":[]}}", .{}) catch {
             main.setError("Groove connect body exceeds buffer");
             return error.ProtocolError;
         }
     else
-        std.fmt.bufPrint(&body_buf,
-            "{{\"service_id\":\"gossamer\",\"consumes\":[],\"lease\":{{\"mode\":\"{s}\",\"ttl_ms\":{d}}}}}",
-            .{ mode, ttl_ms }) catch {
+        std.fmt.bufPrint(&body_buf, "{{\"service_id\":\"gossamer\",\"consumes\":[],\"lease\":{{\"mode\":\"{s}\",\"ttl_ms\":{d}}}}}", .{ mode, ttl_ms }) catch {
             main.setError("Groove connect body exceeds buffer");
             return error.ProtocolError;
         };
@@ -616,8 +611,7 @@ pub fn wireConnect(target_id: u32, mode: []const u8, ttl_ms: u64, out: []u8) Wir
     var header_buf: [768]u8 = undefined;
     const sig = computeHmac(body);
     const header = if (sig) |s|
-        std.fmt.bufPrint(&header_buf,
-            "POST /.well-known/groove/connect HTTP/1.0\r\n" ++
+        std.fmt.bufPrint(&header_buf, "POST /.well-known/groove/connect HTTP/1.0\r\n" ++
             "Host: localhost\r\n" ++
             "Content-Type: application/json\r\n" ++
             "Content-Length: {d}\r\n" ++
@@ -627,8 +621,7 @@ pub fn wireConnect(target_id: u32, mode: []const u8, ttl_ms: u64, out: []u8) Wir
             return error.ProtocolError;
         }
     else
-        std.fmt.bufPrint(&header_buf,
-            "POST /.well-known/groove/connect HTTP/1.0\r\n" ++
+        std.fmt.bufPrint(&header_buf, "POST /.well-known/groove/connect HTTP/1.0\r\n" ++
             "Host: localhost\r\n" ++
             "Content-Type: application/json\r\n" ++
             "Content-Length: {d}\r\n" ++
@@ -686,8 +679,7 @@ pub fn wireHeartbeat(target_id: u32, handle: []const u8) WireError!void {
     }
 
     var req_buf: [512]u8 = undefined;
-    const request = std.fmt.bufPrint(&req_buf,
-        "GET /.well-known/groove/heartbeat?handle={s} HTTP/1.0\r\n" ++
+    const request = std.fmt.bufPrint(&req_buf, "GET /.well-known/groove/heartbeat?handle={s} HTTP/1.0\r\n" ++
         "Host: localhost\r\n" ++
         "Connection: close\r\n\r\n", .{handle}) catch {
         main.setError("Groove heartbeat request exceeds buffer");
@@ -729,8 +721,7 @@ pub fn wireDisconnect(target_id: u32, handle: []const u8) WireError!void {
     var header_buf: [768]u8 = undefined;
     const sig = computeHmac(body);
     const header = if (sig) |s|
-        std.fmt.bufPrint(&header_buf,
-            "POST /.well-known/groove/disconnect HTTP/1.0\r\n" ++
+        std.fmt.bufPrint(&header_buf, "POST /.well-known/groove/disconnect HTTP/1.0\r\n" ++
             "Host: localhost\r\n" ++
             "Content-Type: application/json\r\n" ++
             "Content-Length: {d}\r\n" ++
@@ -740,8 +731,7 @@ pub fn wireDisconnect(target_id: u32, handle: []const u8) WireError!void {
             return error.ProtocolError;
         }
     else
-        std.fmt.bufPrint(&header_buf,
-            "POST /.well-known/groove/disconnect HTTP/1.0\r\n" ++
+        std.fmt.bufPrint(&header_buf, "POST /.well-known/groove/disconnect HTTP/1.0\r\n" ++
             "Host: localhost\r\n" ++
             "Content-Type: application/json\r\n" ++
             "Content-Length: {d}\r\n" ++
@@ -805,16 +795,18 @@ fn initGrooveSecurity() void {
     hmac_initialized = true;
 
     // Check for HMAC signing key
-    if (std.posix.getenv("GOSSAMER_GROOVE_SECRET")) |secret| {
+    if (std.process.getEnvVarOwned(std.heap.c_allocator, "GOSSAMER_GROOVE_SECRET")) |secret| {
+        defer std.heap.c_allocator.free(secret);
         const len = @min(secret.len, MAX_KEY_LEN);
         @memcpy(hmac_key[0..len], secret[0..len]);
         hmac_key_len = len;
-    }
+    } else |_| {}
 
     // Check for TLS mode (fail-closed — see refuseTlsPlaintext)
-    if (std.posix.getenv("GOSSAMER_GROOVE_TLS")) |tls_val| {
+    if (std.process.getEnvVarOwned(std.heap.c_allocator, "GOSSAMER_GROOVE_TLS")) |tls_val| {
+        defer std.heap.c_allocator.free(tls_val);
         groove_tls_enabled = tls_val.len > 0 and tls_val[0] == '1';
-    }
+    } else |_| {}
 }
 
 /// Refuse plaintext traffic when TLS was requested but is not implemented.

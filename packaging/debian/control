@@ -6,7 +6,7 @@ Version: 0.3.0
 Section: libs
 Priority: optional
 Architecture: amd64
-Depends: libwebkit2gtk-4.1-0 (>= 2.40), libgtk-3-0 (>= 3.22)
+Depends: libwebkit2gtk-4.1-0 (>= 2.40), libgtk-3-0 (>= 3.22), libc6
 Maintainer: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 Homepage: https://github.com/metadatastician/gossamer
 Description: Linearly-typed webview shell framework with provable resource safety

@@ -144,8 +144,7 @@ pub fn create(
     const init_frame_sel = c.sel_registerName("initWithFrame:") orelse return PlatformError.WindowCreateFailed;
     const init_func: *const fn (?*anyopaque, c.SEL, f64, f64, f64, f64) callconv(.c) ?*anyopaque =
         @ptrCast(&objc_msgSend);
-    const window = init_func(window_raw, init_frame_sel, 0, 0, screen_w, screen_h)
-        orelse return PlatformError.WindowCreateFailed;
+    const window = init_func(window_raw, init_frame_sel, 0, 0, screen_w, screen_h) orelse return PlatformError.WindowCreateFailed;
 
     // Create WKWebViewConfiguration
     const config_cls = c.objc_getClass("WKWebViewConfiguration") orelse return PlatformError.WebviewCreateFailed;
@@ -398,10 +397,11 @@ fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8
     const allocator = std.heap.c_allocator;
     const escaped = escapeForJS(allocator, response) catch return;
     defer allocator.free(escaped);
-    const js = std.fmt.allocPrintZ(
+    const js = std.fmt.allocPrintSentinel(
         allocator,
         "if (window.__gossamer_callbacks[\"{s}\"]) {{ window.__gossamer_callbacks[\"{s}\"].resolve(JSON.parse(\"{s}\")); delete window.__gossamer_callbacks[\"{s}\"]; }}",
         .{ id, id, escaped, id },
+        0,
     ) catch return;
     defer allocator.free(js);
     eval(&handle.webview, js) catch {};
@@ -409,10 +409,11 @@ fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8
 
 fn sendIPCError(handle: *GossamerHandle, id: []const u8, msg_text: []const u8) void {
     const allocator = std.heap.c_allocator;
-    const js = std.fmt.allocPrintZ(
+    const js = std.fmt.allocPrintSentinel(
         allocator,
         "if (window.__gossamer_callbacks[\"{s}\"]) {{ window.__gossamer_callbacks[\"{s}\"].reject(new Error(\"{s}\")); delete window.__gossamer_callbacks[\"{s}\"]; }}",
         .{ id, id, msg_text, id },
+        0,
     ) catch return;
     defer allocator.free(js);
     eval(&handle.webview, js) catch {};
