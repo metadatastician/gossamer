@@ -29,7 +29,7 @@ The primary platform. Uses WebKitGTK for rendering.
 **Requirements:**
 - GTK 3.x development headers
 - WebKit2GTK 4.1 development headers
-- Zig 0.15+
+- Zig 0.15.2 (exact)
 
 **Build:**
 ```bash

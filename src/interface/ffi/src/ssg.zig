@@ -36,7 +36,7 @@ pub export fn gossamer_ssg_read_file(path: [*:0]const u8) ?[*:0]u8 {
     defer file.close();
 
     const stat = file.stat() catch return null;
-    const size = stat.size;
+    const size = std.math.cast(usize, stat.size) orelse return null;
 
     // Guard against reading unreasonably large files (64 MiB limit).
     if (size > 64 * 1024 * 1024) return null;

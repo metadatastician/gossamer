@@ -22,16 +22,14 @@ BuildRequires:  webkit2gtk4-devel >= 2.40
 BuildRequires:  gtk3-devel >= 3.22
 BuildRequires:  just
 BuildRequires:  pkg-config
-# wasmtime C API >= v44.0.1 — packaged out-of-tree for now; install
-# from https://github.com/bytecodealliance/wasmtime/releases under
-# /usr/local before building (see cli/launcher/build.zig).
+# wasmtime C API >= v44.0.1 — install its C-API bundle under /usr/local
+# before building. The launcher links its static archive, so the resulting
+# package has no undeclared libwasmtime.so runtime dependency.
 # ephapax — compiles cli/src/Main.eph → cli.wasm during the launcher
 # build. Set EPHAPAX=/path/to/ephapax if not on PATH.
 
 Requires:       webkit2gtk4 >= 2.40
 Requires:       gtk3 >= 3.22
-# wasmtime is dlopened by the launcher binary; same out-of-tree note
-# applies — /usr/local/lib/libwasmtime.so must be present at runtime.
 
 %description
 Gossamer is a webview shell framework that uses linear types to guarantee

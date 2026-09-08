@@ -88,9 +88,14 @@ the OS.
 
 # Quick Start
 
+Gossamer's native source currently requires exactly Zig 0.15.2. Other Zig
+versions are rejected rather than allowed to produce an unproved native
+artifact.
+
 ```bash
 # Dependencies (Fedora)
-sudo dnf install gtk3-devel webkit2gtk4.1-devel zig
+sudo dnf install gtk3-devel webkit2gtk4.1-devel
+# Install Zig 0.15.2 from https://ziglang.org/download/
 
 # Build the native library
 cd src/interface/ffi && zig build

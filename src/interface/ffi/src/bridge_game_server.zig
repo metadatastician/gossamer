@@ -489,7 +489,7 @@ fn autoInferSchema(allocator: std.mem.Allocator, pairs_json: []const u8) i64 {
     // Simple pass-through with type inference based on value patterns.
     // "True"/"False" -> bool, digits -> int, digits with '.' -> float, else string.
     _ = allocator;
-    // TODO: implement generic type inference
+    // TODO(#163): implement generic type inference
     return @intCast(@intFromPtr(pairs_json.ptr));
 }
 

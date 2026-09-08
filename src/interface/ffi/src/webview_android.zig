@@ -5,7 +5,7 @@
 //
 // Platform-specific webview operations for Android, driven over JNI against
 // android.webkit.WebView. Compiled when targeting *-linux-android via the NDK
-// (selected in main.zig by `builtin.abi == .android`).
+// (selected in main.zig for both `.android` and `.androideabi`).
 //
 // This file was rewritten to call REAL JNI. The previous version declared
 // `extern fn jni_FindClass(...)` and friends — symbols defined nowhere, so the

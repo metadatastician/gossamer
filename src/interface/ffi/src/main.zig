@@ -165,7 +165,7 @@ const BUILD_INFO = "Gossamer " ++ VERSION ++ " built with Zig " ++ @import("buil
 /// never load on a phone. The `abi == .android` guard routes it to the JNI
 /// WebView backend instead. The comptime `if` means the android import is not
 /// evaluated on non-android targets, so the desktop paths are unchanged.
-const platform = if (builtin.abi == .android)
+const platform = if (builtin.abi == .android or builtin.abi == .androideabi)
     @import("webview_android.zig")
 else switch (builtin.os.tag) {
     .linux, .freebsd, .openbsd, .netbsd => @import("webview_gtk.zig"),

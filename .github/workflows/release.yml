@@ -1,4 +1,3 @@
-# This workflow is managed by gh actions-lock.
 # SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
@@ -96,7 +95,7 @@ jobs:
       #     name: release-artifacts
       #     path: artifacts/
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3.0.2
+        uses: softprops/action-gh-release@v3.0.3
         with:
           body: ${{ needs.changelog.outputs.changelog }}
           draft: false

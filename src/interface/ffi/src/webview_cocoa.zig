@@ -138,7 +138,10 @@ pub fn create(
     const init_func: *const fn (
         ?*anyopaque,
         c.SEL,
-        f64, f64, f64, f64, // CGRect as 4 doubles
+        f64,
+        f64,
+        f64,
+        f64, // CGRect as 4 doubles
         c_ulong, // style
         c_ulong, // backing
         c.BOOL, // defer
@@ -146,7 +149,10 @@ pub fn create(
     const window = init_func(
         window_raw,
         init_sel,
-        0, 0, @floatFromInt(width), @floatFromInt(height),
+        0,
+        0,
+        @floatFromInt(width),
+        @floatFromInt(height),
         style_mask,
         2, // NSBackingStoreBuffered
         0, // NO
@@ -193,13 +199,19 @@ pub fn create(
     const wk_init_func: *const fn (
         ?*anyopaque,
         c.SEL,
-        f64, f64, f64, f64, // CGRect
+        f64,
+        f64,
+        f64,
+        f64, // CGRect
         ?*anyopaque, // configuration
     ) callconv(.c) ?*anyopaque = @ptrCast(&objc_msgSend);
     const webview = wk_init_func(
         wk_raw,
         wk_init_sel,
-        0, 0, @floatFromInt(width), @floatFromInt(height),
+        0,
+        0,
+        @floatFromInt(width),
+        @floatFromInt(height),
         config,
     ) orelse return PlatformError.WebviewCreateFailed;
 
@@ -377,20 +389,20 @@ pub fn moveTo(state: *WebviewState, x: i32, y: i32) PlatformError!void {
     }
 }
 
-/// Dock a groove panel. TODO: implement with NSSplitView on macOS.
+/// Dock a groove panel. TODO(#163): implement with NSSplitView on macOS.
 pub fn dock(_: *WebviewState, _: [*:0]const u8, _: u32) PlatformError!void {}
 /// Undock.
 pub fn undock(_: *WebviewState) void {}
 
 /// Query screen dimensions. Falls back to 1920x1080.
 pub fn getScreenSize(_: *WebviewState) [2]u32 {
-    // TODO: Use NSScreen.mainScreen.visibleFrame on macOS
+    // TODO(#163): Use NSScreen.mainScreen.visibleFrame on macOS
     return .{ 1920, 1080 };
 }
 
 /// Register a persistent user script (re-injected on every page load).
 pub fn addUserScript(_: *WebviewState, _: [*:0]const u8) PlatformError!void {
-    // TODO: Use WKUserContentController.addUserScript on macOS
+    // TODO(#163): Use WKUserContentController.addUserScript on macOS
 }
 
 /// Request that the window close.
@@ -548,10 +560,11 @@ fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8
     const allocator = std.heap.c_allocator;
     const escaped = escapeForJS(allocator, response) catch return;
     defer allocator.free(escaped);
-    const js = std.fmt.allocPrintZ(
+    const js = std.fmt.allocPrintSentinel(
         allocator,
         "if (window.__gossamer_callbacks[\"{s}\"]) {{ window.__gossamer_callbacks[\"{s}\"].resolve(JSON.parse(\"{s}\")); delete window.__gossamer_callbacks[\"{s}\"]; }}",
         .{ id, id, escaped, id },
+        0,
     ) catch return;
     defer allocator.free(js);
     eval(&handle.webview, js) catch {};
@@ -559,10 +572,11 @@ fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8
 
 fn sendIPCError(handle: *GossamerHandle, id: []const u8, msg_text: []const u8) void {
     const allocator = std.heap.c_allocator;
-    const js = std.fmt.allocPrintZ(
+    const js = std.fmt.allocPrintSentinel(
         allocator,
         "if (window.__gossamer_callbacks[\"{s}\"]) {{ window.__gossamer_callbacks[\"{s}\"].reject(new Error(\"{s}\")); delete window.__gossamer_callbacks[\"{s}\"]; }}",
         .{ id, id, msg_text, id },
+        0,
     ) catch return;
     defer allocator.free(js);
     eval(&handle.webview, js) catch {};

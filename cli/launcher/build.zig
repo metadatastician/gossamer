@@ -43,7 +43,13 @@ pub fn build(b: *std.Build) void {
     // non-default install prefixes still work.
     exe_module.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
     exe_module.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
-    exe_module.linkSystemLibrary("wasmtime", .{});
+    // Embed Wasmtime in the launcher. The C-API bundle provides both shared
+    // and static libraries; choosing the archive makes the .deb/.rpm usable
+    // without an undeclared out-of-tree libwasmtime.so installation.
+    exe_module.linkSystemLibrary("wasmtime", .{
+        .preferred_link_mode = .static,
+        .search_strategy = .no_fallback,
+    });
 
     // libgossamer — built from ../../src/interface/ffi by `zig build` in
     // that directory. The bridges in src/bridges.zig declare the

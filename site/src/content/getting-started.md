@@ -13,10 +13,10 @@ date: 2026-03-29
 
 | Platform | Dependencies |
 |----------|-------------|
-| Fedora/RHEL | `sudo dnf install gtk3-devel webkit2gtk4.1-devel zig` |
-| Ubuntu/Debian | `sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev` + [Zig 0.15+](https://ziglang.org/download/) |
-| macOS | Xcode command line tools (WKWebView built-in) + Zig |
-| Windows | WebView2 Runtime (bundled with Edge) + Zig |
+| Fedora/RHEL | `sudo dnf install gtk3-devel webkit2gtk4.1-devel` + [Zig 0.15.2](https://ziglang.org/download/) |
+| Ubuntu/Debian | `sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev` + [Zig 0.15.2](https://ziglang.org/download/) |
+| macOS | Xcode command line tools (WKWebView built-in) + Zig 0.15.2 |
+| Windows | WebView2 Runtime (bundled with Edge) + Zig 0.15.2 |
 
 ## Build
 

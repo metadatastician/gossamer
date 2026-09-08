@@ -317,7 +317,8 @@ const stub_csp = struct {
     fn setCsp(handle_ptr: u64, csp: [*:0]const u8) main.Result {
         _ = csp;
         if (guard(handle_ptr)) |err| return err;
-        return .ok;
+        main.setError("CSP injection is not available on this platform");
+        return .@"error";
     }
 
     fn emit(
@@ -328,7 +329,8 @@ const stub_csp = struct {
         _ = event_name;
         _ = payload_json;
         if (guard(handle_ptr)) |err| return err;
-        return .ok;
+        main.setError("Streaming IPC is not available on this platform");
+        return .@"error";
     }
 
     fn emitBinary(
@@ -341,12 +343,18 @@ const stub_csp = struct {
         _ = data;
         _ = data_len;
         if (guard(handle_ptr)) |err| return err;
-        return .ok;
+        main.setError("Binary streaming IPC is not available on this platform");
+        return .@"error";
     }
 };
 
-/// Compile-time platform dispatch for the CSP / streaming-IPC backend.
-const backend = if (builtin.abi == .android) stub_csp else gtk_csp;
+/// Compile-time platform dispatch for the CSP / streaming-IPC backend. The
+/// implemented marshalling path depends on GLib and is therefore restricted to
+/// GTK desktop targets. Unsupported targets fail explicitly through stub_csp.
+const backend = switch (builtin.os.tag) {
+    .linux, .freebsd, .openbsd, .netbsd => if (builtin.abi == .android or builtin.abi == .androideabi) stub_csp else gtk_csp,
+    else => stub_csp,
+};
 
 //==============================================================================
 // CSP Enforcement

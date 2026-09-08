@@ -31,18 +31,31 @@ data IPCValue : Type where
   VBool : Bool -> IPCValue
   VNull : IPCValue
 
+mutual
+  ipcValueEq : IPCValue -> IPCValue -> Bool
+  ipcValueEq (VStr a)  (VStr b)  = a == b
+  ipcValueEq (VInt a)  (VInt b)  = a == b
+  ipcValueEq (VBool a) (VBool b) = a == b
+  ipcValueEq VNull     VNull     = True
+  ipcValueEq (VList xs) (VList ys) = ipcValueListEq xs ys
+  ipcValueEq (VObj xs)  (VObj ys)  = ipcFieldListEq xs ys
+  ipcValueEq _ _ = False
+
+  ipcValueListEq : List IPCValue -> List IPCValue -> Bool
+  ipcValueListEq [] [] = True
+  ipcValueListEq (x :: xs) (y :: ys) =
+    ipcValueEq x y && ipcValueListEq xs ys
+  ipcValueListEq _ _ = False
+
+  ipcFieldListEq : List (String, IPCValue) -> List (String, IPCValue) -> Bool
+  ipcFieldListEq [] [] = True
+  ipcFieldListEq ((kx, vx) :: xs) ((ky, vy) :: ys) =
+    kx == ky && ipcValueEq vx vy && ipcFieldListEq xs ys
+  ipcFieldListEq _ _ = False
+
 public export
 Eq IPCValue where
-  VStr  a == VStr  b = a == b
-  VInt  a == VInt  b = a == b
-  VBool a == VBool b = a == b
-  VNull   == VNull   = True
-  -- Deep equality for compound values (length+pairwise)
-  VList xs == VList ys = assert_total (length xs == length ys
-                                       && all id (zipWith (==) xs ys))
-  VObj xs  == VObj  ys = assert_total (length xs == length ys
-                                       && all id (zipWith (==) xs ys))
-  _ == _ = False
+  (==) = ipcValueEq
 
 public export
 Show IPCValue where

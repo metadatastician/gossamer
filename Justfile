@@ -10,8 +10,9 @@ set positional-arguments := true
 
 import? "contractile.just"
 
-# Ephapax compiler location (must be built first)
-ephapax := "~/Documents/hyperpolymath-repos/ephapax/target/debug/ephapax"
+# Ephapax compiler location (must be built first). CI and non-standard
+# checkouts override EPHAPAX; interactive use falls back to PATH.
+ephapax := env_var_or_default("EPHAPAX", "ephapax")
 
 # Show all recipes
 default:
@@ -524,11 +525,11 @@ tour:
 
 # Build .deb package for Debian/Ubuntu
 package-deb: build-ffi-release build-launcher-release
-    dpkg-buildpackage -b --no-sign --build-dir=packaging/debian
+    bash scripts/package-deb.sh
 
 # Build .rpm package for Fedora/RHEL
 package-rpm: build-ffi-release build-launcher-release
-    rpmbuild -bb packaging/rpm/gossamer.spec
+    bash scripts/package-rpm.sh
 
 # Build Flatpak bundle
 package-flatpak:

@@ -628,20 +628,20 @@ pub fn restore(state: *WebviewState) PlatformError!void {
     _ = ShowWindow(hwnd, SW_RESTORE);
 }
 
-/// Dock a groove panel. TODO: implement with Win32 child windows.
+/// Dock a groove panel. TODO(#163): implement with Win32 child windows.
 pub fn dock(_: *WebviewState, _: [*:0]const u8, _: u32) PlatformError!void {}
 /// Undock.
 pub fn undock(_: *WebviewState) void {}
 
 /// Query screen dimensions via GetSystemMetrics. Falls back to 1920x1080.
 pub fn getScreenSize(_: *WebviewState) [2]u32 {
-    // TODO: Use GetSystemMetrics(SM_CXSCREEN / SM_CYSCREEN) or MonitorFromWindow
+    // TODO(#163): Use GetSystemMetrics(SM_CXSCREEN / SM_CYSCREEN) or MonitorFromWindow
     return .{ 1920, 1080 };
 }
 
 /// Register a persistent user script (re-injected on every page load).
 pub fn addUserScript(_: *WebviewState, _: [*:0]const u8) PlatformError!void {
-    // TODO: Use ICoreWebView2.AddScriptToExecuteOnDocumentCreated on Windows
+    // TODO(#163): Use ICoreWebView2.AddScriptToExecuteOnDocumentCreated on Windows
 }
 
 /// Raise the window to the front of the z-order.
@@ -1038,10 +1038,11 @@ fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8
     const allocator = std.heap.c_allocator;
     const escaped = escapeForJS(allocator, response) catch return;
     defer allocator.free(escaped);
-    const js = std.fmt.allocPrintZ(
+    const js = std.fmt.allocPrintSentinel(
         allocator,
         "if (window.__gossamer_callbacks[\"{s}\"]) {{ window.__gossamer_callbacks[\"{s}\"].resolve(JSON.parse(\"{s}\")); delete window.__gossamer_callbacks[\"{s}\"]; }}",
         .{ id, id, escaped, id },
+        0,
     ) catch return;
     defer allocator.free(js);
     eval(&handle.webview, js) catch {};
@@ -1050,10 +1051,11 @@ fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8
 /// Send an error response back to the JavaScript IPC bridge.
 fn sendIPCError(handle: *GossamerHandle, id: []const u8, msg_text: []const u8) void {
     const allocator = std.heap.c_allocator;
-    const js = std.fmt.allocPrintZ(
+    const js = std.fmt.allocPrintSentinel(
         allocator,
         "if (window.__gossamer_callbacks[\"{s}\"]) {{ window.__gossamer_callbacks[\"{s}\"].reject(new Error(\"{s}\")); delete window.__gossamer_callbacks[\"{s}\"]; }}",
         .{ id, id, msg_text, id },
+        0,
     ) catch return;
     defer allocator.free(js);
     eval(&handle.webview, js) catch {};
