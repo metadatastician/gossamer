@@ -3,7 +3,7 @@
 // Gossamer Core Operations Benchmarks
 //
 // Ported 1:1 from tests/bench/gossamer_bench.ts. Zig has no built-in bench
-// harness comparable to Deno.bench, so each bench is implemented as a
+// JavaScript benchmark harness, so each bench is implemented as a
 // `zig test` block that times its body under std.time.Timer and prints
 // per-op latency / throughput. The assertion is just `true` so the test
 // runner doesn't flag a failure; the value is in the printed numbers.

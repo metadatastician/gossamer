@@ -51,7 +51,7 @@ Brief description of gossamer and its architecture.
 | Build artifacts       | Internal       | CI pipeline  | Binaries, WASM bundles                     |
 | Container images      | Internal       | CI pipeline  | Chainguard-based, signed via image signing tool |
 | SBOM / provenance     | Public         | CI pipeline  | SLSA attestations                          |
-| Dependencies          | Public         | Lockfile     | Cargo.lock, deno.lock, gleam.toml          |
+| Dependencies          | Public         | Lockfile     | Cargo.lock, bun.lock                        |
 | Infrastructure config | Confidential   | Maintainers | Containerfiles, compose files, orchestration config |
 
 ## Trust Boundaries

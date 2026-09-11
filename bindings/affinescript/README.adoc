@@ -24,9 +24,9 @@ boundary.
 * `src/Gossamer.affine` — *type-checks clean* against the AffineScript compiler
   (`affinescript check`). Faithful 1:1 port of the (now-retired) ReScript
   binding.
-* `@gossamer/api` (MPL-2.0) publishes the AffineScript Deno-ESM output:
-  `deno task build` runs `affinescript compile --deno-esm` to (re)generate
-  `src/Gossamer.deno.js`, the package's `exports` entry (built at publish,
+* `@gossamer/api` (MPL-2.0) publishes native AffineScript Bun-ESM output:
+  `bun run build` runs `affinescript compile --bun-esm` to (re)generate
+  `src/Gossamer.bun.js`, the package's `exports` entry (built at publish,
   mirroring the former `.res.js` flow).
 * The former `../rescript/` binding is retired as of this cutover (standards#252).
 
@@ -45,7 +45,7 @@ boundary.
 == Async + effects
 
 Every signature that crosses the bridge carries the effect row `/ { IO, Async }`
-(IPC is `IO`; the host round-trip is `Async`). The Deno-ESM backend
+(IPC is `IO`; the host round-trip is `Async`). The Bun-ESM host profile
 (`codegen_deno.ml`) lowers each `extern fn` to a `window.__gossamer_invoke(...)`
 round-trip and compiles `Async`-effect callers to native `async`/`await` — the
 same shape stdlib `Http.http_request` uses over `globalThis.fetch`. A

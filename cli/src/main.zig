@@ -581,8 +581,9 @@ fn cmdInit() !void {
             \\  "build": {
             \\    "frontendDist": "../public",
             \\    "devUrl": "http://localhost:4040/",
-            \\    "beforeDevCommand": "deno task dev",
-            \\    "beforeBuildCommand": "deno task build",
+            \\    "beforeDevCommand": "bun run dev",
+            \\    "beforeBuildCommand": "bun run build",
+            \\    "runner": "bun",
             \\    "watch": {
             \\      "paths": ["public/", "src/"],
             \\      "extensions": [".html", ".js", ".css", ".res.js"],

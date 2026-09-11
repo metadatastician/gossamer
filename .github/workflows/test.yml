@@ -101,7 +101,6 @@ jobs:
 
       - name: Type-check ABI proofs
         run: |
-          cd src/interface/abi
           idris2 --typecheck gossamer-abi.ipkg
           idris2 --typecheck gossamer-groove.ipkg
 

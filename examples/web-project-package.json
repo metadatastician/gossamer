@@ -1,0 +1,14 @@
+{
+  "name": "gossamer-affinescript-web-project",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "affinescript check src/App.affine",
+    "build": "affinescript compile --bun-esm -o public/App.bun.js src/App.affine",
+    "dev": "bun --watch run build",
+    "test": "bun test"
+  },
+  "engines": {
+    "bun": ">=1.3.0"
+  }
+}

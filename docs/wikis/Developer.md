@@ -94,7 +94,7 @@ Two bindings ship in-tree; both call the same `libgossamer` C ABI. Do **not** re
 | Binding | Path | Ships as |
 |---|---|---|
 | Rust | `bindings/rust/` | in-tree crate |
-| AffineScript | `bindings/affinescript/` | `@gossamer/api` (Deno ESM) |
+| AffineScript | `bindings/affinescript/` | `@gossamer/api` (Bun-native ESM) |
 
 (ReScript/Gleam/Elixir/Julia bindings referenced in older notes are stale — Rust and AffineScript are the current two.)
 

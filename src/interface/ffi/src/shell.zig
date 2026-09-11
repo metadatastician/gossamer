@@ -11,7 +11,7 @@
 //   • gossamer_shell_spawn  — start a process in the background, return
 //     an opaque child handle. Stdin/stdout/stderr inherit from the
 //     caller. Used by `gossamer dev` to launch the user's frontend dev
-//     server (e.g. `deno task dev`) and keep it running alongside the
+//     server (e.g. `bun run dev`) and keep it running alongside the
 //     webview.
 //   • gossamer_shell_kill   — send SIGTERM (or platform equivalent) to
 //     a previously-spawned child, then wait for it. Idempotent on null.

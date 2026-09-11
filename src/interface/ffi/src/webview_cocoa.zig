@@ -51,13 +51,13 @@ fn msgSendVoid1(target: ?*anyopaque, sel: c.SEL, arg: ?*anyopaque) void {
 /// Helper: send a message with a BOOL arg.
 fn msgSendBool(target: ?*anyopaque, sel: c.SEL, val: bool) void {
     const func: *const fn (?*anyopaque, c.SEL, c.BOOL) callconv(.c) void = @ptrCast(&objc_msgSend);
-    func(target, sel, if (val) @as(c.BOOL, 1) else @as(c.BOOL, 0));
+    func(target, sel, val);
 }
 
 /// Helper: send a message returning a BOOL.
 fn msgSendBoolRet(target: ?*anyopaque, sel: c.SEL) bool {
     const func: *const fn (?*anyopaque, c.SEL) callconv(.c) c.BOOL = @ptrCast(&objc_msgSend);
-    return func(target, sel) != 0;
+    return func(target, sel);
 }
 
 /// Create an NSString from a C string.
@@ -155,7 +155,7 @@ pub fn create(
         @floatFromInt(height),
         style_mask,
         2, // NSBackingStoreBuffered
-        0, // NO
+        false,
     ) orelse return PlatformError.WindowCreateFailed;
 
     // Set title
@@ -549,7 +549,7 @@ fn onIPCMessage(
     const payload_z = allocator.dupeZ(u8, payload) catch return;
     defer allocator.free(payload_z);
 
-    const response_ptr = callback(payload_z);
+    const response_ptr = callback.callback(payload_z, callback.user_data);
     const response = std.mem.span(response_ptr);
     sendIPCResponse(handle, id, response);
 }
