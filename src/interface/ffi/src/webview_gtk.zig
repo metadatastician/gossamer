@@ -130,16 +130,6 @@ pub fn create(
     // Add webview to window
     c.gtk_container_add(@ptrCast(window), webview);
 
-    // Connect the "destroy" signal to quit the GTK main loop
-    _ = c.g_signal_connect_data(
-        @ptrCast(window),
-        "destroy",
-        @ptrCast(&onWindowDestroy),
-        null,
-        null,
-        0,
-    );
-
     // Show everything unless the window should start hidden.
     if (visible) {
         c.gtk_widget_show_all(window);
@@ -374,7 +364,20 @@ pub fn destroy(state: *WebviewState) void {
 }
 
 // Signal handler: called when the GTK window is destroyed.
-fn onWindowDestroy(_: ?*c.GtkWidget, _: ?*anyopaque) callconv(.c) void {
+pub fn attachLifecycle(handle: *GossamerHandle) void {
+    _ = c.g_signal_connect_data(@ptrCast(handle.webview.window), "destroy", @ptrCast(&onWindowDestroy), handle, null, 0);
+}
+
+fn onWindowDestroy(_: ?*c.GtkWidget, user_data: ?*anyopaque) callconv(.c) void {
+    // Native window-manager close already destroyed the GTK widget. Record
+    // that fact before cleanup(), avoiding a second destroy of freed storage.
+    if (user_data) |ptr| {
+        const handle: *GossamerHandle = @ptrCast(@alignCast(ptr));
+        handle.webview.gtk_initialized = false;
+        handle.closed = true;
+        handle.visible = false;
+        if (handle.voice_host) |host| host.requestStop();
+    }
     if (c.gtk_main_level() > 0) {
         c.gtk_main_quit();
     }
@@ -402,18 +405,18 @@ fn onDeleteEvent(_: ?*c.GtkWidget, _: ?*anyopaque, user_data: ?*anyopaque) callc
 
     const notify_js = switch (handle.guard) {
         .locked =>
-            \\(function(){
-            \\  window.__gossamer_emit&&window.__gossamer_emit('guard_blocked',{action:'close',mode:'locked'});
-            \\  var el=document.getElementById('guard-indicator');
-            \\  if(el){el.style.animation='none';el.offsetHeight;el.style.animation='flash 0.3s ease 3';}
-            \\})();
+        \\(function(){
+        \\  window.__gossamer_emit&&window.__gossamer_emit('guard_blocked',{action:'close',mode:'locked'});
+        \\  var el=document.getElementById('guard-indicator');
+        \\  if(el){el.style.animation='none';el.offsetHeight;el.style.animation='flash 0.3s ease 3';}
+        \\})();
         ,
         .read_only =>
-            \\(function(){
-            \\  window.__gossamer_emit&&window.__gossamer_emit('guard_blocked',{action:'close',mode:'read_only'});
-            \\  var el=document.getElementById('guard-indicator');
-            \\  if(el){el.style.animation='none';el.offsetHeight;el.style.animation='flash 0.3s ease 3';}
-            \\})();
+        \\(function(){
+        \\  window.__gossamer_emit&&window.__gossamer_emit('guard_blocked',{action:'close',mode:'read_only'});
+        \\  var el=document.getElementById('guard-indicator');
+        \\  if(el){el.style.animation='none';el.offsetHeight;el.style.animation='flash 0.3s ease 3';}
+        \\})();
         ,
         .free => unreachable,
     };

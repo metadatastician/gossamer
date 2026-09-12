@@ -255,6 +255,8 @@ pub const GossamerHandle = struct {
     window_id: u32 = 0,
     /// Group ID this window belongs to (0 = ungrouped)
     group_id: u32 = 0,
+    /// Owned background signaling worker; never retains a pointer back to GTK.
+    voice_host: ?*voice_host.Host = null,
 };
 
 /// IPC callback function type (C ABI).
@@ -504,6 +506,8 @@ fn createHandle(
         .allocator = allocator,
         .bindings = std.StringHashMap(BindingEntry).init(allocator),
     };
+
+    if (@hasDecl(platform, "attachLifecycle")) platform.attachLifecycle(handle);
 
     clearError();
     return handle;
@@ -861,6 +865,8 @@ pub export fn gossamer_request_close(handle_ptr: u64) Result {
         setError("Failed to close window");
         return .@"error";
     };
+
+    if (handle.voice_host) |host| host.requestStop();
 
     handle.visible = false;
     gossamer_tray_clear_window();
@@ -1584,7 +1590,8 @@ pub export fn gossamer_transmute(handle_ptr: u64, mode: c_int) Result {
     }
 
     if (!validTransition(old_mode, new_mode)) {
-        const msg = std.fmt.bufPrint(&transmute_err_buf,
+        const msg = std.fmt.bufPrint(
+            &transmute_err_buf,
             "Illegal transmute transition: {s} -> {s}",
             .{ @tagName(old_mode), @tagName(new_mode) },
         ) catch "Illegal transmute transition";
@@ -1712,8 +1719,10 @@ pub export fn gossamer_transmute(handle_ptr: u64, mode: c_int) Result {
             // that never happened (B2).
             var msg_buf: [256]u8 = undefined;
             const wid = handle.window_id;
-            const msg = std.fmt.bufPrint(&msg_buf,
-                "{{\"action\":\"attach\",\"window_id\":{d},\"source\":\"gossamer\"}}", .{wid},
+            const msg = std.fmt.bufPrint(
+                &msg_buf,
+                "{{\"action\":\"attach\",\"window_id\":{d},\"source\":\"gossamer\"}}",
+                .{wid},
             ) catch {
                 setError("Transmute: PanLL attach message formatting failed");
                 return .@"error";
@@ -1740,8 +1749,10 @@ pub export fn gossamer_transmute(handle_ptr: u64, mode: c_int) Result {
             // proof). The mode is recorded regardless.
             var msg_buf: [256]u8 = undefined;
             const wid = handle.window_id;
-            const msg = std.fmt.bufPrint(&msg_buf,
-                "{{\"action\":\"detach\",\"window_id\":{d},\"source\":\"gossamer\"}}", .{wid},
+            const msg = std.fmt.bufPrint(
+                &msg_buf,
+                "{{\"action\":\"detach\",\"window_id\":{d},\"source\":\"gossamer\"}}",
+                .{wid},
             ) catch "";
             if (msg.len > 0) {
                 msg_buf[msg.len] = 0;
@@ -2027,8 +2038,8 @@ pub const GrooveType = enum(c_int) {
 /// window handle or capability token at the FFI boundary. Encoding: bits
 /// 0..7 hold slot+1, bits 8..63 hold the slot generation at connect time.
 ///
-/// TRUE exactly-once linearity is enforced at the Idris2/Ephapax layer
-/// (GrooveLinearity.idr / Groove.eph); this Zig layer provides type
+/// The Idris2/Ephapax models express exactly-once linearity; this exported
+/// C ABI is not a proof-carrying or extracted implementation. It provides type
 /// distinctness plus a runtime once-guard: consuming a handle bumps the
 /// slot's generation, so a second disconnect with the same handle returns
 /// .already_consumed instead of silently double-freeing a reused slot.
@@ -2036,6 +2047,10 @@ pub const GrooveHandle = enum(u64) {
     invalid = 0,
     _,
 };
+
+const groove_voice = @import("groove_voice.zig");
+const voice_host = @import("voice_host.zig");
+var groove_session_mutex: std.Thread.Mutex = .{};
 
 const GrooveConnection = struct {
     target_id: u32,
@@ -2056,6 +2071,7 @@ const GrooveConnection = struct {
     /// deprecated typed API and holds no remote lease.
     wire_handle: [groove.MAX_WIRE_HANDLE]u8 = [_]u8{0} ** groove.MAX_WIRE_HANDLE,
     wire_handle_len: usize = 0,
+    voice: ?groove_voice.Scope = null,
 };
 
 const MAX_GROOVE_CONNECTIONS: usize = 32;
@@ -2123,14 +2139,14 @@ fn auditRecord(slot: usize, parent_slot: ?u8) void {
 /// Lists the retained releases oldest-first. Returns the number of bytes
 /// written (0 when buf cannot hold even the header line).
 pub export fn gossamer_groove_audit_summary(buf: [*]u8, len: usize) callconv(.c) usize {
+    groove_session_mutex.lock();
+    defer groove_session_mutex.unlock();
     const cap: u32 = @intCast(AUDIT_RING_SIZE);
     const out = buf[0..len];
     var pos: usize = 0;
 
     const shown: u32 = if (audit_total < cap) audit_total else cap;
-    const header = std.fmt.bufPrint(out[pos..],
-        "groove teardown audit: {d} release(s) total, showing last {d} (ring capacity {d})\n",
-        .{ audit_total, shown, cap }) catch return 0;
+    const header = std.fmt.bufPrint(out[pos..], "groove teardown audit: {d} release(s) total, showing last {d} (ring capacity {d})\n", .{ audit_total, shown, cap }) catch return 0;
     pos += header.len;
 
     var i: u32 = audit_total - shown;
@@ -2172,9 +2188,16 @@ fn hasLiveChildIn(in_subtree: *const [MAX_GROOVE_CONNECTIONS]bool, slot: usize) 
 fn releaseGrooveSlot(slot: usize) void {
     const gc = &groove_connections[slot];
     if (gc.wire_handle_len > 0) {
-        groove.wireDisconnect(gc.target_id, gc.wire_handle[0..gc.wire_handle_len]) catch {};
+        if (gc.voice) |*scope| {
+            _ = groove.wireVoice(gc.target_id, .disconnect, scope.token[0..scope.token_len], gc.wire_handle[0..gc.wire_handle_len], scope.peer[0..scope.peer_len], "", &.{}) catch 0;
+        } else {
+            groove.wireDisconnect(gc.target_id, gc.wire_handle[0..gc.wire_handle_len]) catch {};
+        }
     }
     auditRecord(slot, gc.parent_slot);
+
+    if (gc.voice) |*scope| std.crypto.secureZero(u8, std.mem.asBytes(scope));
+    gc.voice = null;
 
     const next_gen = gc.generation +% 1;
     if (gc.groove_type == .soft) {
@@ -2185,6 +2208,7 @@ fn releaseGrooveSlot(slot: usize) void {
         // auto-reconnect (GrooveResidue.idr hardDisconnectRetainsPeer).
         gc.active = false;
         gc.parent_slot = null;
+        @memset(&gc.wire_handle, 0);
         gc.wire_handle_len = 0;
         gc.generation = next_gen;
     }
@@ -2257,6 +2281,8 @@ fn disconnectDescent(root_slot: usize) void {
 /// (ForeignGen.idr) register grooves for targets that are not
 /// network-reachable at registration time.
 pub export fn gossamer_groove_connect_typed(target_id: u32, groove_type: c_int, ttl: u32) Result {
+    groove_session_mutex.lock();
+    defer groove_session_mutex.unlock();
     clearError();
     const gt = std.meta.intToEnum(GrooveType, groove_type) catch {
         setError("Invalid groove type (0=hard, 1=soft)");
@@ -2286,6 +2312,8 @@ pub export fn gossamer_groove_connect_typed(target_id: u32, groove_type: c_int, 
 /// target_id-addressed semantics for existing ABI consumers (ForeignGen.idr)
 /// and routes through the same descent.
 pub export fn gossamer_groove_disconnect_typed(target_id: u32) Result {
+    groove_session_mutex.lock();
+    defer groove_session_mutex.unlock();
     clearError();
     for (&groove_connections, 0..) |*gc, i| {
         if (gc.active and gc.target_id == target_id) {
@@ -2305,6 +2333,8 @@ pub export fn gossamer_groove_disconnect_typed(target_id: u32) Result {
 ///
 /// Returns GrooveHandle.invalid on failure; check gossamer_last_error().
 pub export fn gossamer_groove_connect_session(target_index: u32, groove_type: c_int, ttl_seconds: u32) callconv(.c) GrooveHandle {
+    groove_session_mutex.lock();
+    defer groove_session_mutex.unlock();
     clearError();
     const gt = std.meta.intToEnum(GrooveType, groove_type) catch {
         setError("Invalid groove type (0=hard, 1=soft)");
@@ -2345,6 +2375,8 @@ pub export fn gossamer_groove_connect_session(target_index: u32, groove_type: c_
 /// After a successful disconnect the slot generation changes, so a second
 /// call with the same handle returns .already_consumed (once-guard).
 pub export fn gossamer_groove_disconnect_session(h: GrooveHandle) callconv(.c) Result {
+    groove_session_mutex.lock();
+    defer groove_session_mutex.unlock();
     clearError();
     if (h == .invalid) {
         setError("Invalid groove handle");
@@ -2364,6 +2396,12 @@ pub export fn gossamer_groove_disconnect_session(h: GrooveHandle) callconv(.c) R
 /// allowed to expire (SPEC §4.6): providers refuse its refresh (409), so
 /// expect an error result for soft sessions.
 pub export fn gossamer_groove_heartbeat(h: GrooveHandle) callconv(.c) Result {
+    groove_session_mutex.lock();
+    defer groove_session_mutex.unlock();
+    return grooveHeartbeat(h);
+}
+
+fn grooveHeartbeat(h: GrooveHandle) Result {
     clearError();
     if (h == .invalid) {
         setError("Invalid groove handle");
@@ -2374,6 +2412,19 @@ pub export fn gossamer_groove_heartbeat(h: GrooveHandle) callconv(.c) Result {
         return .already_consumed;
     };
     const gc = &groove_connections[slot];
+    if (gc.voice) |*scope| {
+        if (!voiceLive(slot)) return .already_consumed;
+        if (gc.groove_type == .soft) return .@"error";
+        const started = std.time.Timer.start() catch return .@"error";
+        _ = groove.wireVoice(gc.target_id, .heartbeat, scope.token[0..scope.token_len], gc.wire_handle[0..gc.wire_handle_len], scope.peer[0..scope.peer_len], "", &.{}) catch {
+            setError("Scoped voice renewal rejected or transport unavailable");
+            return .@"error";
+        };
+        // Starting before I/O is conservative: response latency never extends
+        // the local deadline beyond the provider's renewed deadline.
+        scope.timer = started;
+        return if (voiceLive(slot)) .ok else .already_consumed;
+    }
     if (gc.wire_handle_len == 0) {
         setError("Groove connection holds no wire lease (registered via deprecated typed API)");
         return .@"error";
@@ -2386,11 +2437,175 @@ pub export fn gossamer_groove_heartbeat(h: GrooveHandle) callconv(.c) Result {
     return .ok;
 }
 
+/// First scoped native voice adapter. The caller supplies an EXISTING Burble
+/// JWT and identity. This API neither creates an identity nor joins a room.
+/// Calls are serialized internally; synchronous network operations can block.
+pub export fn gossamer_groove_voice_connect(target: u32, mode: c_int, ttl: u32, token: [*]const u8, token_len: usize, room: [*]const u8, room_len: usize, subject: [*]const u8, subject_len: usize, peer: [*]const u8, peer_len: usize) callconv(.c) GrooveHandle {
+    groove_session_mutex.lock();
+    defer groove_session_mutex.unlock();
+    clearError();
+    if (token_len > 4096 or room_len > 128 or subject_len > 128 or peer_len > 128 or ttl == 0 or ttl > 3600) return .invalid;
+    const gt = std.meta.intToEnum(GrooveType, mode) catch return .invalid;
+    var scope = groove_voice.Scope.init(token[0..token_len], room[0..room_len], subject[0..subject_len], peer[0..peer_len]) catch return .invalid;
+    defer std.crypto.secureZero(u8, std.mem.asBytes(&scope));
+    const slot = allocGrooveSlot() orelse return .invalid;
+    var body_buf: [512]u8 = undefined;
+    const mode_name = if (gt == .soft) "soft" else "hard";
+    const body = std.fmt.bufPrint(&body_buf, "{{\"room_id\":\"{s}\",\"peer_id\":\"{s}\",\"lease\":{{\"mode\":\"{s}\",\"ttl_ms\":{d}}}}}", .{ room[0..room_len], peer[0..peer_len], mode_name, @as(u64, ttl) * 1000 }) catch return .invalid;
+    var response: [1024]u8 = undefined;
+    defer std.crypto.secureZero(u8, &response);
+    const len = groove.wireVoice(target, .connect, token[0..token_len], "", peer[0..peer_len], body, &response) catch {
+        setError("Scoped voice connect rejected or transport unavailable");
+        return .invalid;
+    };
+    var handle: [groove.MAX_WIRE_HANDLE]u8 = undefined;
+    defer std.crypto.secureZero(u8, &handle);
+    const hlen = groove.parseConnectBody(response[0..len], mode_name, @as(u64, ttl) * 1000, &handle) catch return .invalid;
+    const gen = groove_connections[slot].generation;
+    groove_connections[slot] = .{ .target_id = target, .groove_type = gt, .ttl_seconds = ttl, .active = true, .generation = gen, .voice = scope };
+    @memcpy(groove_connections[slot].wire_handle[0..hlen], handle[0..hlen]);
+    groove_connections[slot].wire_handle_len = hlen;
+    if (!voiceLive(slot)) return .invalid;
+    return encodeGrooveHandle(slot, gen);
+}
+
+fn voiceLive(slot: usize) bool {
+    const gc = &groove_connections[slot];
+    if (gc.voice) |*scope| {
+        const windows: u64 = if (gc.groove_type == .hard) 3 else 1;
+        if (scope.timer.read() < @as(u64, gc.ttl_seconds) * std.time.ns_per_s * windows) return true;
+        disconnectDescent(slot);
+    }
+    return false;
+}
+
+pub export fn gossamer_groove_voice_send(h: GrooveHandle, bytes: [*]const u8, len: usize) callconv(.c) Result {
+    groove_session_mutex.lock();
+    defer groove_session_mutex.unlock();
+    clearError();
+    const slot = decodeGrooveHandle(h) orelse return .already_consumed;
+    if (!voiceLive(slot)) return .already_consumed;
+    const gc = &groove_connections[slot];
+    const scope = &gc.voice.?;
+    if (len > 16384 or !scope.accepts(bytes[0..len], false)) return .invalid_param;
+    _ = groove.wireVoice(gc.target_id, .send, scope.token[0..scope.token_len], gc.wire_handle[0..gc.wire_handle_len], scope.peer[0..scope.peer_len], bytes[0..len], &.{}) catch {
+        setError("Scoped voice send rejected or transport unavailable");
+        return .@"error";
+    };
+    return .ok;
+}
+
+/// Returns a complete, scope-validated Bebop VoiceSignal length, 0 if empty,
+/// or -1 on failure. Malformed/rejected bytes are zeroed before returning.
+pub export fn gossamer_groove_voice_recv(h: GrooveHandle, out: [*]u8, capacity: usize) callconv(.c) i32 {
+    const result = receiveVoiceForHost(h, out, capacity);
+    return if (result < 0) -1 else result;
+}
+
+/// Internal worker detail: -2 is observed LOCAL lease expiry; -1 is an
+/// invalid handle, rejected frame, or transport/provider failure. The public
+/// synchronous ABI intentionally retains its existing -1 failure contract.
+pub fn receiveVoiceForHost(h: GrooveHandle, out: [*]u8, capacity: usize) i32 {
+    groove_session_mutex.lock();
+    defer groove_session_mutex.unlock();
+    clearError();
+    const slot = decodeGrooveHandle(h) orelse return -1;
+    if (capacity == 0) return -1;
+    if (!voiceLive(slot)) return -2;
+    const gc = &groove_connections[slot];
+    const scope = &gc.voice.?;
+    const dest = out[0..@min(capacity, 16384)];
+    const len = groove.wireVoice(gc.target_id, .recv, scope.token[0..scope.token_len], gc.wire_handle[0..gc.wire_handle_len], scope.peer[0..scope.peer_len], "", dest) catch {
+        setError("Scoped voice receive rejected or transport unavailable");
+        return -1;
+    };
+    if (len > 0) {
+        if (!voiceLive(slot)) {
+            std.crypto.secureZero(u8, dest[0..len]);
+            return -2;
+        }
+        if (!scope.accepts(dest[0..len], true)) {
+            std.crypto.secureZero(u8, dest[0..len]);
+            return -1;
+        }
+    }
+    return @intCast(len);
+}
+
+/// Host-loop maintenance hook: call on the same serialized thread at least
+/// twice per shortest TTL. This is NOT a background thread or scheduler.
+/// Operations also enforce expiry, even when the host stops ticking.
+pub export fn gossamer_groove_voice_tick() callconv(.c) void {
+    groove_session_mutex.lock();
+    defer groove_session_mutex.unlock();
+    for (&groove_connections, 0..) |*gc, slot| {
+        if (!gc.active or gc.voice == null or !voiceLive(slot)) continue;
+        if (gc.groove_type == .hard and gc.voice.?.timer.read() >= @as(u64, gc.ttl_seconds) * std.time.ns_per_s / 2) {
+            _ = grooveHeartbeat(encodeGrooveHandle(slot, gc.generation));
+        }
+    }
+}
+
+/// Main-thread window APIs: enqueue/poll only, never perform network I/O.
+/// The native worker owns its private session and is joined by cleanup().
+pub export fn gossamer_window_voice_start(window: u64, mode: c_int, ttl: u32, token: [*]const u8, token_len: usize, room: [*]const u8, room_len: usize, subject: [*]const u8, subject_len: usize, peer: [*]const u8, peer_len: usize) callconv(.c) Result {
+    clearError();
+    const handle = ptrFromU64(window) orelse return .null_pointer;
+    if (requireOpen(handle)) |err| return err;
+    if (handle.voice_host != null or token_len > 4096 or room_len > 128 or subject_len > 128 or peer_len > 128) return .invalid_param;
+    var scope = groove_voice.Scope.init(token[0..token_len], room[0..room_len], subject[0..subject_len], peer[0..peer_len]) catch return .invalid_param;
+    defer std.crypto.secureZero(u8, std.mem.asBytes(&scope));
+    handle.voice_host = voice_host.Host.start(scope, mode, ttl) catch {
+        setError("Unable to start window voice worker");
+        return .@"error";
+    };
+    return .ok;
+}
+
+pub export fn gossamer_window_voice_status(window: u64) callconv(.c) c_int {
+    const handle = ptrFromU64(window) orelse return -1;
+    const host = handle.voice_host orelse return -1;
+    return host.status.load(.acquire);
+}
+
+pub export fn gossamer_window_voice_sent(window: u64) callconv(.c) u64 {
+    const handle = ptrFromU64(window) orelse return 0;
+    const host = handle.voice_host orelse return 0;
+    return host.sent.load(.acquire);
+}
+
+pub export fn gossamer_window_voice_send(window: u64, bytes: [*]const u8, len: usize) callconv(.c) Result {
+    const handle = ptrFromU64(window) orelse return .null_pointer;
+    if (requireOpen(handle)) |err| return err;
+    const host = handle.voice_host orelse return .invalid_param;
+    if (len > 16384 or !host.enqueue(bytes[0..len])) return .invalid_param;
+    return .ok; // queued; sent counter advances only after provider acceptance
+}
+
+pub export fn gossamer_window_voice_recv(window: u64, out: [*]u8, capacity: usize) callconv(.c) i32 {
+    const handle = ptrFromU64(window) orelse return -1;
+    if (requireOpen(handle) != null) return -1;
+    const host = handle.voice_host orelse return -1;
+    return host.receive(out[0..@min(capacity, 16384)]);
+}
+
+pub export fn gossamer_window_voice_stop(window: u64) callconv(.c) Result {
+    const handle = ptrFromU64(window) orelse return .null_pointer;
+    if (handle.voice_host) |host| host.requestStop();
+    return .ok;
+}
+
+pub export fn gossamer_voice_worker_count() callconv(.c) u32 {
+    return voice_host.live_workers.load(.acquire);
+}
+
 /// Declare ownership: `child`'s slot becomes owned by `parent`'s slot, so
 /// disconnecting the parent tears the child down first (ordered descent).
 /// Rejects self-adoption and ownership cycles, which would starve the
 /// postorder walk.
 pub export fn gossamer_groove_session_adopt(parent: GrooveHandle, child: GrooveHandle) callconv(.c) Result {
+    groove_session_mutex.lock();
+    defer groove_session_mutex.unlock();
     clearError();
     const parent_slot = decodeGrooveHandle(parent) orelse {
         setError("Groove parent handle invalid, consumed, or stale");
@@ -2427,6 +2642,8 @@ pub export fn gossamer_groove_session_adopt(parent: GrooveHandle, child: GrooveH
 /// Query groove type for a connected target.
 /// Returns: 0=hard, 1=soft, -1=not connected
 pub export fn gossamer_groove_query_type(target_id: u32) c_int {
+    groove_session_mutex.lock();
+    defer groove_session_mutex.unlock();
     for (groove_connections) |gc| {
         if (gc.active and gc.target_id == target_id) {
             return @intFromEnum(gc.groove_type);
@@ -2620,8 +2837,7 @@ pub export fn gossamer_channel_open(handle_ptr: u64) u64 {
         \\    };
         \\  }
         \\});
-    ++ "window.__gossamer_platform=" ++ PLATFORM_JSON ++ ";"
-    ;
+    ++ "window.__gossamer_platform=" ++ PLATFORM_JSON ++ ";";
 
     // Register as a persistent user script so the bridge survives page
     // navigation and load_html() calls. Unlike eval(), user scripts are
@@ -3201,6 +3417,11 @@ fn cleanup(handle: *GossamerHandle) void {
     // Destroy platform webview
     platform.destroy(&handle.webview);
 
+    // The UI loop has ended (or this is explicit teardown). Cancellation
+    // interrupts owned I/O; join before freeing the window's worker storage.
+    if (handle.voice_host) |host| host.shutdown();
+    handle.voice_host = null;
+
     // Clean up bindings map
     handle.bindings.deinit();
 
@@ -3598,6 +3819,29 @@ test "groove session handle is consumed exactly once (slot reuse guard)" {
     // The live handle for the reused slot still works.
     const h2 = encodeGrooveHandle(slot, gen2);
     try std.testing.expectEqual(Result.ok, gossamer_groove_disconnect_session(h2));
+}
+
+test "voice release wipes credential storage with a planted secret control" {
+    const slot = allocGrooveSlot() orelse return error.TestUnexpectedResult;
+    const gen = groove_connections[slot].generation;
+    groove_connections[slot] = .{ .target_id = 0, .groove_type = .hard, .active = true, .generation = gen, .voice = try groove_voice.Scope.init("planted.test.credential", "room", "alice", "bob") };
+    try std.testing.expect(std.mem.indexOf(u8, std.mem.asBytes(&groove_connections[slot].voice), "planted.test.credential") != null);
+    const handle = encodeGrooveHandle(slot, gen);
+    releaseGrooveSlot(slot);
+    try std.testing.expect(std.mem.indexOf(u8, std.mem.asBytes(&groove_connections[slot].voice), "planted.test.credential") == null);
+    try std.testing.expect(decodeGrooveHandle(handle) == null);
+}
+
+test "hard release erases retained bearer bytes as well as their length" {
+    const slot = allocGrooveSlot().?;
+    const generation = groove_connections[slot].generation;
+    groove_connections[slot] = .{ .target_id = 7, .groove_type = .hard, .active = true, .generation = generation };
+    // Model residual bytes from a no-longer-held lease (no remote call).
+    @memset(&groove_connections[slot].wire_handle, 42);
+    releaseGrooveSlot(slot);
+    try std.testing.expect(!groove_connections[slot].active);
+    try std.testing.expectEqual(@as(u32, 7), groove_connections[slot].target_id);
+    for (groove_connections[slot].wire_handle) |byte| try std.testing.expectEqual(@as(u8, 0), byte);
 }
 
 test "groove session heartbeat and disconnect reject the invalid handle" {
