@@ -13,22 +13,29 @@ case_dir=""
 output=""
 status=0
 
+# Start a fresh test case: bump the counter and create an empty scratch
+# directory under $WORK for this case's workflow/lockfile fixtures.
 new_case() {
   tests=$((tests + 1))
   case_dir="$WORK/case-$tests"
   mkdir -p "$case_dir"
 }
 
+# Write a workflow YAML fixture named "$1" (remaining args are its lines,
+# one per printf argument) into the current case directory.
 write_workflow() {
   local name="$1"
   shift
   printf '%s\n' "$@" > "$case_dir/$name"
 }
 
+# Write the current case's actions.lock fixture, one line per argument.
 write_lock() {
   printf '%s\n' "$@" > "$case_dir/actions.lock"
 }
 
+# Run $CHECKER against the current case directory, capturing its combined
+# stdout/stderr into $output and its exit status into $status.
 run_checker() {
   if output="$("$CHECKER" "$case_dir" 2>&1)"; then
     status=0
@@ -37,6 +44,8 @@ run_checker() {
   fi
 }
 
+# Record a failed assertion for test "$1": bump the failure count and print
+# the reason "$2" plus the checker's captured output, indented, to stderr.
 report_failure() {
   local name="$1"
   local reason="$2"
@@ -45,6 +54,8 @@ report_failure() {
   printf '%s\n' "$output" | sed 's/^/      /' >&2
 }
 
+# Assert that running the checker on the current case exits 0 and that its
+# output contains every one of the given expected substrings.
 expect_pass() {
   local name="$1"
   shift
@@ -63,6 +74,8 @@ expect_pass() {
   printf 'PASS: %s\n' "$name"
 }
 
+# Assert that running the checker on the current case exits non-zero and
+# that its output contains every one of the given expected substrings.
 expect_fail() {
   local name="$1"
   shift

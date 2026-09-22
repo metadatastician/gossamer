@@ -72,11 +72,12 @@ if [ ! -f "$LOCK" ]; then
 fi
 
 shopt -s nullglob
-mapfile -t WORKFLOWS < <(printf '%s\n' "$WF_DIR"/*.yml "$WF_DIR"/*.yaml | sort -u)
-if [ "${#WORKFLOWS[@]}" -eq 0 ]; then
+_wf_glob=("$WF_DIR"/*.yml "$WF_DIR"/*.yaml)
+if [ "${#_wf_glob[@]}" -eq 0 ]; then
   echo "check-lock-sync: FATAL: no workflow files under $WF_DIR" >&2
   exit 1
 fi
+mapfile -t WORKFLOWS < <(printf '%s\n' "${_wf_glob[@]}" | sort -u)
 
 read -r -d '' PROG <<'AWK' || true
 # Normalize a nonlocal action or reusable-workflow reference to owner/repo@ref.
