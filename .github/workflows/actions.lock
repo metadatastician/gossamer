@@ -51,6 +51,7 @@ workflows:
         - 'oven-sh/setup-bun@v2.2.0'
     '.github/workflows/label-triage.yml': []
     '.github/workflows/labels.yml': []
+    '.github/workflows/lock-sync-gate.yml': []
     '.github/workflows/main-estate-audit.yml':
         - 'actions/checkout@v7.0.1'
         - 'hyperpolymath/cicd-suite@main'
