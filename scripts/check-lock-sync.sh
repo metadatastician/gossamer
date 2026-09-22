@@ -157,6 +157,7 @@ FNR == 1 { wf = FILENAME }
     raw = m[1]
     gsub(/^["']|["']$/, "", raw)
     gsub(/[[:space:]]+$/, "", raw)
+    if (raw ~ /^\$\//) dollar[wf] = dollar[wf] " " raw
     n = norm(raw)
     if (n != "") {
       uses[wf, ck(n)] = 1
