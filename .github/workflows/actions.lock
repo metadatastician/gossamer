@@ -7,7 +7,7 @@ workflows:
         - 'actions/checkout@v7.0.1'
     '.github/workflows/android-ndk.yml':
         - 'actions/checkout@v7.0.1'
-        - 'actions/setup-java@v6.0.0'
+        - 'actions/setup-java@v6.0.1'
         - 'actions/upload-artifact@v7.0.1'
         - 'android-actions/setup-android@v4.0.1'
         - 'goto-bus-stop/setup-zig@v2.2.1'
@@ -25,13 +25,12 @@ workflows:
         - 'softprops/action-gh-release@v3.0.3'
     '.github/workflows/codeql.yml':
         - 'actions/checkout@v7.0.1'
-        - 'github/codeql-action@v4.37.9'
+        - 'github/codeql-action@v4.38.0'
     '.github/workflows/dependency-audit.yml':
         - 'actions/checkout@v7.0.1'
         - 'dtolnay/rust-toolchain@v1'
     '.github/workflows/dogfood-gate.yml':
         - 'actions/checkout@v7.0.1'
-        - 'hyperpolymath/a2ml-ecosystem@main'
         - 'hyperpolymath/k9-ecosystem@main'
     '.github/workflows/e2e.yml':
         - 'actions/checkout@v7.0.1'
@@ -51,6 +50,7 @@ workflows:
         - 'oven-sh/setup-bun@v2.2.0'
     '.github/workflows/label-triage.yml': []
     '.github/workflows/labels.yml': []
+    '.github/workflows/lock-sync-gate.yml': []
     '.github/workflows/main-estate-audit.yml':
         - 'actions/checkout@v7.0.1'
         - 'hyperpolymath/cicd-suite@main'
@@ -63,10 +63,11 @@ workflows:
         - 'actions/deploy-pages@v5.0.1'
         - 'actions/upload-pages-artifact@v5.0.0'
     '.github/workflows/push-email-notify.yml':
-        - 'hyperpolymath/smtp-notify-action@v0.2.0'
+        - 'hyperpolymath/smtp-notify-action@v0.3.0'
     '.github/workflows/release.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/upload-artifact@v7.0.1'
+        - 'slsa-framework/slsa-github-generator@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a'
         - 'softprops/action-gh-release@v3.0.3'
     '.github/workflows/rhodibot.yml':
         - 'actions/checkout@v7.0.1'
@@ -122,14 +123,19 @@ dependencies:
         commit: 'sha1-3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c'
         owner_id: 44036562
         repo_id: 192626254
-    'actions/setup-java@v6.0.0':
-        ref: 'v6.0.0'
-        commit: 'sha1-dd06d9cba3e5552c54d9f8ea23572deb30010f7c'
+    'actions/setup-java@v6.0.1':
+        ref: 'v6.0.1'
+        commit: 'sha1-de7274f081f381c8f8158605e0321c36c376e2e6'
         owner_id: 44036562
         repo_id: 196057608
     'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a':
         ref: 'v7.0.1'
         commit: 'sha1-043fb46d1a93c77aae656e7c1c64a875d1fc6a0a'
+        owner_id: 44036562
+        repo_id: 192625955
+    'actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08':
+        ref: '65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08'
+        commit: 'sha1-65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08'
         owner_id: 44036562
         repo_id: 192625955
     'actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f':
@@ -194,9 +200,9 @@ dependencies:
         commit: 'sha1-cdf488f595d80d6e07e03d4674febd5ab45fa938'
         owner_id: 9919
         repo_id: 259445878
-    'github/codeql-action@v4.37.9':
-        ref: 'v4.37.9'
-        commit: 'sha1-cdf488f595d80d6e07e03d4674febd5ab45fa938'
+    'github/codeql-action@v4.38.0':
+        ref: 'v4.38.0'
+        commit: 'sha1-b96794f015dfd88f77b49b1c93e0fa7110f94c63'
         owner_id: 9919
         repo_id: 259445878
     'gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e':
@@ -224,9 +230,9 @@ dependencies:
         commit: 'sha1-cfc9bfa56f352680608a4a54adde445587db24a2'
         owner_id: 6759885
         repo_id: 1275650185
-    'hyperpolymath/smtp-notify-action@v0.2.0':
-        ref: 'v0.2.0'
-        commit: 'sha1-ede1191ef6ff3ac02c4f4d9efdf837ee517e11d7'
+    'hyperpolymath/smtp-notify-action@v0.3.0':
+        ref: 'v0.3.0'
+        commit: 'sha1-22e7bdb322c430c1d0dac6b3bb307f4bb139d0be'
         owner_id: 6759885
         repo_id: 1352485172
     'hyperpolymath/standards@d135b05bfc647d0c0fbfedc7e80f37ea50f49236':
@@ -289,6 +295,25 @@ dependencies:
         commit: 'sha1-a421e43855164a8197daf9d8d40fe71c6996bb0d'
         owner_id: 51352484
         repo_id: 219782401
+    'slsa-framework/slsa-github-generator@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a':
+        ref: 'f7dd8c54c2067bafc12ca7a55595d5ee9b75204a'
+        commit: 'sha1-f7dd8c54c2067bafc12ca7a55595d5ee9b75204a'
+        owner_id: 80431187
+        repo_id: 475074978
+        uses:
+            - 'actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08'
+            - 'slsa-framework/slsa-github-generator@v2.1.0'
+            - 'softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda'
+    'slsa-framework/slsa-github-generator@v2.1.0':
+        ref: 'v2.1.0'
+        commit: 'sha1-f7dd8c54c2067bafc12ca7a55595d5ee9b75204a'
+        owner_id: 80431187
+        repo_id: 475074978
+    'softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda':
+        ref: 'c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda'
+        commit: 'sha1-c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda'
+        owner_id: 2242
+        repo_id: 204253808
     'softprops/action-gh-release@v3.0.3':
         ref: 'v3.0.3'
         commit: 'sha1-efb35369e0ad2afab669f228072c1b0d510eae64'
