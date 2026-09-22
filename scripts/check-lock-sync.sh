@@ -79,8 +79,9 @@ if [ "${#WORKFLOWS[@]}" -eq 0 ]; then
 fi
 
 read -r -d '' PROG <<'AWK' || true
-# Normalize an external action or reusable-workflow reference to owner/repo@ref.
-# Subpaths are discarded; local and malformed references return an empty string.
+# Normalize a nonlocal action or reusable-workflow reference to owner/repo@ref.
+# Subpaths are discarded. Return an empty string for local references, missing
+# path or ref components, and paths without a repository separator.
 function norm(r,   at, path, ref, n, parts) {
   at = 0
   for (n = length(r); n > 0; n--) { if (substr(r, n, 1) == "@") { at = n; break } }
