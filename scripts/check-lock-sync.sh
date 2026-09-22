@@ -2,12 +2,14 @@
 # SPDX-License-Identifier: MPL-2.0
 #
 # check-lock-sync.sh — verify .github/workflows/actions.lock is in sync with the
-# workflow YAML, in BOTH directions (including job-level reusable-workflow refs),
+# workflow YAML, in BOTH directions (step-level `uses:`; job-level reusable-workflow
+# refs are reported, not required -- GitHub does not enforce them at startup),
 # AND that the lockfile is TRANSITIVELY CLOSED.
 #
 # Three clauses, each of which alone is insufficient:
 #
-#   1. every `uses:` in a workflow is locked under THAT workflow's own path;
+#   1. every STEP-LEVEL `uses:` in a workflow is locked under THAT workflow's
+#      own path (job-level reusable refs are reported as a note, never required);
 #   2. every lockfile entry is still referenced by its workflow (no orphans);
 #   3. every ref NAMED anywhere in the lockfile resolves to a top-level
 #      `dependencies:` record — the lockfile has no dangling edges.
@@ -325,7 +327,7 @@ END {
     exit 1
   }
   printf "actions.lock is in sync and transitively closed:\n"
-  printf "  * every uses: is locked under its own workflow path (job-level reusable refs included)\n"
+  printf "  * every step-level uses: is locked under its own workflow path\n"
   printf "  * every lockfile entry is still referenced\n"
   printf "  * every ref named in the lockfile resolves to a dependencies: record (0 dangling edges)\n"
   printf "  * every workflow file has a lockfile key (zero-uses: workflows included)\n"
