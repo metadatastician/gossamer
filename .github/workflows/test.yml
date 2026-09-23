@@ -93,7 +93,9 @@ jobs:
       - name: Build and install Idris2 (pinned v0.8.0)
         run: |
           set -euo pipefail
+          idris2_commit='REPLACE_WITH_FULL_V0_8_0_COMMIT_SHA'
           git clone --depth 1 --branch v0.8.0 https://github.com/idris-lang/Idris2.git "$RUNNER_TEMP/Idris2"
+          git -C "$RUNNER_TEMP/Idris2" checkout --detach "$idris2_commit"
           cd "$RUNNER_TEMP/Idris2"
           make bootstrap SCHEME=chezscheme
           make install
