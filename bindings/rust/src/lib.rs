@@ -205,8 +205,10 @@ struct CommandContext {
 
 /// The C-ABI trampoline called by Gossamer's IPC dispatcher.
 /// Receives the JSON payload string and the user_data pointer (a *CommandContext).
-/// Returns a heap-allocated JSON response string that Zig will read and then
-/// the caller is responsible for (Zig copies it before returning).
+/// Returns a heap-allocated, null-terminated JSON response that Zig copies.
+/// The allocation is intentionally leaked because the callback ABI has no
+/// response-free hook. Invalid payloads and serialization failures fall back to
+/// an empty JSON object; handler errors become JSON error objects.
 extern "C" fn command_trampoline(payload: *const c_char, user_data: *mut c_void) -> *const c_char {
     // SAFETY: user_data is a Box<CommandContext> that we leaked in App::command().
     // We borrow it here (not consume) — the pointer remains valid.

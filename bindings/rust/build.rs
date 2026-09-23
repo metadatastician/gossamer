@@ -8,7 +8,16 @@ use std::process::Command;
 
 const SUPPORTED_ZIG: &str = "0.15.2";
 
-/// Configures the native Gossamer build and emits Cargo linker directives.
+/// Selects or builds the native Gossamer library and emits Cargo linker directives.
+///
+/// `GOSSAMER_LIB_DIR` selects a prebuilt target library. Without it, native
+/// Linux builds compile the library from source, using `GOSSAMER_ZIG` when set.
+///
+/// # Panics
+///
+/// Panics when Cargo's target metadata is unavailable, a requested prebuilt
+/// library is missing, cross-compilation has no prebuilt library, or native
+/// compilation and platform dependency discovery fail.
 fn main() {
     println!("cargo:rerun-if-env-changed=GOSSAMER_LIB_DIR");
     println!("cargo:rerun-if-env-changed=GOSSAMER_ZIG");
@@ -33,7 +42,7 @@ fn main() {
     link_platform_dependencies(&target);
 }
 
-/// Returns the platform-specific filename for the Gossamer static library.
+/// Returns `gossamer.lib` for Windows targets and `libgossamer.a` otherwise.
 fn static_library_name(target: &str) -> &'static str {
     if target.contains("windows") {
         "gossamer.lib"
@@ -42,7 +51,11 @@ fn static_library_name(target: &str) -> &'static str {
     }
 }
 
-/// Verifies that a prebuilt directory contains the target's static library.
+/// Returns `library_dir` after confirming that it contains the target library.
+///
+/// # Panics
+///
+/// Panics when the expected static library is not a regular file.
 fn validate_prebuilt(library_dir: PathBuf, target: &str) -> PathBuf {
     let library = library_dir.join(static_library_name(target));
     if !library.is_file() {
@@ -55,7 +68,15 @@ fn validate_prebuilt(library_dir: PathBuf, target: &str) -> PathBuf {
     library_dir
 }
 
-/// Builds the native Gossamer library from source for a supported host target.
+/// Builds Gossamer from source into Cargo's output directory for native Linux.
+///
+/// The build uses Zig plus GTK and WebKitGTK flags from `pkg-config`, then
+/// returns the directory containing the verified static library.
+///
+/// # Panics
+///
+/// Panics for non-Linux or Android targets, missing Cargo metadata or source,
+/// output-directory creation failures, and any Zig or `pkg-config` failure.
 fn build_from_source(target: &str) -> PathBuf {
     if !target.contains("linux") || target.contains("android") {
         panic!(
@@ -95,7 +116,12 @@ fn build_from_source(target: &str) -> PathBuf {
     validate_prebuilt(library_dir, target)
 }
 
-/// Ensures the configured Zig executable has the exact supported version.
+/// Ensures the configured Zig executable reports the exact supported version.
+///
+/// # Panics
+///
+/// Panics when Zig cannot be executed, its version probe fails, or its trimmed
+/// version output differs from [`SUPPORTED_ZIG`].
 fn verify_zig_version(zig: &OsStr) {
     let version = Command::new(zig)
         .arg("version")
@@ -118,7 +144,15 @@ fn verify_zig_version(zig: &OsStr) {
     }
 }
 
-/// Compiles the Gossamer Zig sources into a static library for Rust linking.
+/// Compiles the Gossamer Zig sources into `library_dir` for Rust linking.
+///
+/// GTK and WebKitGTK compiler flags come from `pkg-config`; Zig writes its
+/// local and global caches under `library_dir` as part of the build.
+///
+/// # Panics
+///
+/// Panics when dependency flags cannot be resolved, Zig cannot be started, or
+/// the Zig build exits unsuccessfully.
 fn compile_native_library(zig: &OsString, source_dir: &Path, library_dir: &Path, target: &str) {
     let library = library_dir.join(static_library_name(target));
     let local_cache = library_dir.join("zig-cache");
@@ -162,6 +196,14 @@ fn compile_native_library(zig: &OsString, source_dir: &Path, library_dir: &Path,
 }
 
 /// Emits the native linker directives required by the Cargo target platform.
+///
+/// Linux uses GTK, WebKitGTK, and `dl`; macOS uses Cocoa and WebKit; Windows
+/// uses `ole32`, `user32`, and `kernel32`.
+///
+/// # Panics
+///
+/// Panics when a Linux dependency cannot be resolved or the target is not a
+/// supported native Linux, macOS, or Windows target.
 fn link_platform_dependencies(target: &str) {
     if target.contains("linux") && !target.contains("android") {
         link_pkg_config(&["gtk+-3.0", "webkit2gtk-4.1"]);
@@ -181,7 +223,14 @@ fn link_platform_dependencies(target: &str) {
     }
 }
 
-/// Translates pkg-config linker flags into Cargo linker directives.
+/// Emits Cargo linker directives translated from `pkg-config --libs` output.
+///
+/// `-L` and `-l` flags become search-path and dynamic-library directives;
+/// other flags are forwarded as linker arguments.
+///
+/// # Panics
+///
+/// Panics when `pkg-config` cannot resolve `packages`.
 fn link_pkg_config(packages: &[&str]) {
     let output = pkg_config_output("--libs", packages);
     for flag in output.split_whitespace() {
@@ -195,7 +244,12 @@ fn link_pkg_config(packages: &[&str]) {
     }
 }
 
-/// Runs pkg-config in the requested mode and returns its UTF-8 output.
+/// Runs `pkg-config` with `mode` and `packages`, returning its UTF-8 standard output.
+///
+/// # Panics
+///
+/// Panics when `pkg-config` cannot be executed, exits unsuccessfully, or emits
+/// non-UTF-8 standard output.
 fn pkg_config_output(mode: &str, packages: &[&str]) -> String {
     let output = Command::new("pkg-config")
         .arg(mode)
