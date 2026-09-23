@@ -18,7 +18,11 @@ libc_file=""
 trap 'rm -f "${libc_file:-}"' EXIT
 for tgt in "${!ABI[@]}"; do
   echo "==> $tgt (${ABI[$tgt]})"
-  sysroot="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+  ndk_host="linux-x86_64"
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    ndk_host="darwin-x86_64"
+  fi
+  sysroot="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$ndk_host/sysroot"
   crt_dir="$sysroot/usr/lib/$tgt/26"
   libc_file="$(mktemp)"
   printf '%s\n' \
