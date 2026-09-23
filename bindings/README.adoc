@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: CC-BY-SA-4.0
 = Bindings
 Language-specific client bindings that wrap the gossamer C ABI for use from higher-level languages.
-Current targets are `affinescript/` (AffineScript/Deno ESM) and `rust/`
+Current targets are `affinescript/` (AffineScript/Bun ESM) and `rust/`
 (Rust crate); each subdirectory is a self-contained build unit. The Rust
 binding's native-library delivery and verification contract is documented in
 `rust/README.adoc`.

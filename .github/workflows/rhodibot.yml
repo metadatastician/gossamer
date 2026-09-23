@@ -22,7 +22,7 @@ on:
     types: [completed]
 permissions:
   actions: read
-  contents: write
+  contents: read
   pull-requests: write
 jobs:
   rhodibot:

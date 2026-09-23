@@ -1,0 +1,21 @@
+{
+  "name": "@gossamer/api",
+  "version": "0.2.0",
+  "license": "MPL-2.0",
+  "description": "AffineScript bindings for the Gossamer webview shell",
+  "type": "module",
+  "exports": "./src/Gossamer.bun.js",
+  "scripts": {
+    "build": "affinescript compile --bun-esm -o src/Gossamer.bun.js src/Gossamer.affine",
+    "check": "affinescript check src/Gossamer.affine",
+    "prepack": "bun run check && bun run build"
+  },
+  "files": [
+    "src/**/*.affine",
+    "src/**/*.bun.js",
+    "README.adoc"
+  ],
+  "engines": {
+    "bun": ">=1.3.0"
+  }
+}

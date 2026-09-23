@@ -30,8 +30,9 @@
 const std = @import("std");
 const launcher = @import("main.zig");
 
-// One import namespace: distinct @cImport instances produce distinct opaque
-// Wasmtime types, even when both include the exact same header.
+// Reuse the launcher's C import. Opaque C types are nominal in Zig, so a
+// second @cImport would create distinct wasm_trap_t/wasmtime_caller_t types
+// whose callback signatures cannot populate launcher.ImportSpec.
 const c = launcher.c;
 
 //==============================================================================

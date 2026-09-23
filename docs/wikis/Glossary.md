@@ -12,7 +12,7 @@ Application Binary Interface — the typed contract for the native library. Goss
 A binding used **at most once**. In [Ephapax](#ephapax), `let x = …` is affine — the value may simply be dropped without being consumed, so implicit cleanup is fine. Everything that isn't a scarce resource is affine. Contrast [linear type](#linear-type).
 
 ### AffineScript
-The estate frontend language; it compiles to [typed-wasm](#typed-wasm) and is one of Gossamer's **two** supported bindings, shipped as `@gossamer/api` (Deno ESM). Frontends can equally be plain HTML/CSS/JS. Repo: [affinescript](https://github.com/hyperpolymath/affinescript).
+The estate frontend language; it compiles to [typed-wasm](#typed-wasm) and is one of Gossamer's **two** supported bindings, shipped as `@gossamer/api` (Bun-native ESM). Frontends can equally be plain HTML/CSS/JS. Repo: [affinescript](https://github.com/hyperpolymath/affinescript).
 
 ### capability registry
 Gossamer's compile-time-enforced permission model. A **256-slot** registry (FIFO eviction, clear overflow diagnostics) holds *capabilities* — unforgeable tokens that authorize one class of resource access. The Idris2 `Cap` constructor is not exported, so a capability cannot be forged externally. Permissions are checked by the compiler, not a JSON file. Backend surface: [`src/core/Capabilities.eph`](https://github.com/metadatastician/gossamer/blob/main/src/core/Capabilities.eph). See [linear type](#linear-type).

@@ -7,7 +7,7 @@
 //
 // The JavaScript bridge is injected by libgossamer when a channel opens,
 // exposing `window.__gossamer_invoke(name, payload)` and `window.__gossamer_on`.
-// Each `extern fn` below is lowered by the Deno-ESM backend (codegen_deno.ml)
+// Each `extern fn` below is lowered by the native Bun-ESM host profile
 // to a `window.__gossamer_invoke("<command>", {args})` round-trip — the same
 // async-extern shape as stdlib `Http.http_request` over `globalThis.fetch`.
 // The host round-trip is `Async`; IPC is an `IO` effect, so every signature

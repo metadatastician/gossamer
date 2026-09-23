@@ -173,5 +173,5 @@ Full-featured framework ready for production use.
 
 * Garbage collection — regions + linear types only
 * Runtime type information — all types erased at compile time
-* Node.js/npm dependency — Deno or nothing
+* Node.js/npm dependency — Bun is the single JavaScript runtime and task runner
 * Electron compatibility layer — clean break, not a shim

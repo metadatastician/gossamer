@@ -82,11 +82,11 @@ which code and data cross the Gossamer boundary.
 | Android WebView + native components | outbound | JNI via the `jni.zig` vtable model
 | https://github.com/hyperpolymath/panll[PanLL] | inbound | IPC channels (sync + async + streaming `gossamer_emit`)
 | `gossamer.conf.json` | inbound | JSON configuration (CSP, build paths) — see the https://github.com/metadatastician/gossamer/blob/main/docs/gossamer-conf-reference.adoc[conf reference]
-| `@gossamer/api` (AffineScript) | inbound | Deno ESM binding shipped from `bindings/affinescript/`
+| `@gossamer/api` (AffineScript) | inbound | Native Bun ESM binding shipped from `bindings/affinescript/`
 |===
 
 The only two supported bindings are *Rust* (`bindings/rust/`) and *AffineScript*
-(`bindings/affinescript/`, the Deno-ESM `@gossamer/api`). Earlier ReScript / Gleam /
+(`bindings/affinescript/`, the Bun-ESM `@gossamer/api`). Earlier ReScript / Gleam /
 Elixir / Julia bindings have been retired and are not part of the supported surface.
 
 === Downstream consumers

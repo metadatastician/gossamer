@@ -229,7 +229,7 @@ project/
 * TypeScript/JavaScript (use ReScript)
 * CUE (use Guile/Nickel)
 * `Dockerfile` (use `Containerfile`)
-* npm, Bun, pnpm, yarn (use Deno)
+* Deno, npm, pnpm, yarn (use Bun)
 * Go (use Rust)
 
 == STATE.a2ml
