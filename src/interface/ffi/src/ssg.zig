@@ -26,7 +26,9 @@ const ByteList = std.ArrayList(u8);
 //==============================================================================
 
 /// Read an entire file into a null-terminated C string.
-/// Returns null on failure (file not found, read error, OOM).
+/// Returns null when the file is larger than 64 MiB, its size does not fit in
+/// `usize`, or opening, inspecting, reading, or allocating for it fails.
+/// The caller owns the successful `c_allocator` allocation.
 ///
 /// FFI for: gossamer_ssg_read_file(path: String): String
 pub export fn gossamer_ssg_read_file(path: [*:0]const u8) ?[*:0]u8 {

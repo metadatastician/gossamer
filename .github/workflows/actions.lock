@@ -9,7 +9,7 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'actions/setup-java@v6.0.1'
         - 'actions/upload-artifact@v7.0.1'
-        - 'android-actions/setup-android@v4.0.1'
+        - 'android-actions/setup-android@v4.0.4'
         - 'goto-bus-stop/setup-zig@v2.2.1'
         - 'reactivecircus/android-emulator-runner@v2.38.0'
     '.github/workflows/android.yml':
@@ -25,7 +25,7 @@ workflows:
         - 'softprops/action-gh-release@v3.0.3'
     '.github/workflows/codeql.yml':
         - 'actions/checkout@v7.0.1'
-        - 'github/codeql-action@v4.38.0'
+        - 'github/codeql-action@v4.38.1'
     '.github/workflows/dependency-audit.yml':
         - 'actions/checkout@v7.0.1'
         - 'dtolnay/rust-toolchain@v1'
@@ -155,9 +155,9 @@ dependencies:
         repo_id: 496012378
         uses:
             - 'actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f'
-    'android-actions/setup-android@v4.0.1':
-        ref: 'v4.0.1'
-        commit: 'sha1-40fd30fb8d7440372e1316f5d1809ec01dcd3699'
+    'android-actions/setup-android@v4.0.4':
+        ref: 'v4.0.4'
+        commit: 'sha1-be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd'
         owner_id: 69522701
         repo_id: 286780795
     'denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282':
@@ -200,9 +200,9 @@ dependencies:
         commit: 'sha1-cdf488f595d80d6e07e03d4674febd5ab45fa938'
         owner_id: 9919
         repo_id: 259445878
-    'github/codeql-action@v4.38.0':
-        ref: 'v4.38.0'
-        commit: 'sha1-b96794f015dfd88f77b49b1c93e0fa7110f94c63'
+    'github/codeql-action@v4.38.1':
+        ref: 'v4.38.1'
+        commit: 'sha1-1c5b675653bb5c22dbe9b12b556ec555138e09fd'
         owner_id: 9919
         repo_id: 259445878
     'gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e':

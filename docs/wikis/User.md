@@ -31,7 +31,9 @@ On Fedora that's one line:
 sudo dnf install gtk3-devel webkit2gtk4.1-devel zig
 ```
 
-You also need the **Ephapax compiler** (your backend language) and **Deno** (Gossamer's frontend build runner — npm is not supported). `git` 2.40+ and `just` round out the toolchain.
+You also need the **Ephapax compiler** (your backend language) and **Bun**
+(Gossamer's frontend build runner). `git` 2.40+ and `just` round out the
+toolchain. Deno-era configuration and lockfiles are not supported.
 
 ## 60-second quick start
 
@@ -107,7 +109,7 @@ The bridge (`window.__gossamer`) is auto-injected when `app.ipc.bridgeInjection`
 | **Async** request/response | long work you don't want blocking the UI thread | `gossamer_channel_bind_async` (256-slot inflight tracker; replies marshalled back to the UI thread) |
 | **Streaming** events | backend pushes to the frontend (progress, live data) | `gossamer_emit` / `gossamer_emit_binary`, with subscribe/unsubscribe on the frontend |
 
-Wire format is set by `app.ipc.protocol` — `json` (default), `msgpack`, or `cbor`. Client helpers ship in the **Rust** binding and the **AffineScript** binding (published as `@gossamer/api`, a Deno ESM module).
+Wire format is set by `app.ipc.protocol` — `json` (default), `msgpack`, or `cbor`. Client helpers ship in the **Rust** binding and the **AffineScript** binding (published as `@gossamer/api`, a Bun-native ESM module).
 
 ## Packaging your app
 

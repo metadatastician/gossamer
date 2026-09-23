@@ -107,7 +107,7 @@ re-typechecked in CI; the ABI is decoupled via the stable C symbol surface.
 evolve independently and can break native glue.
 | Medium | Medium
 | Per-platform Zig FFI behind one C ABI, dispatch routed by target; 192
-integration tests plus Zig and Deno suites exercise the handler paths.
+integration tests plus Zig, Idris2, and Bun suites exercise the handler paths.
 | **Supply-chain / ABI drift** — a hand-edited binding could diverge from native
 exports, or a poisoned dependency/action could enter the build.
 | Medium | High

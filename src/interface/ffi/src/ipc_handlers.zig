@@ -58,7 +58,7 @@ extern fn gossamer_groove_undock(handle: u64) c_int;
 //==============================================================================
 
 /// Execute a shell command and return stdout as a JSON-escaped string.
-/// The payload is a JSON object: {"cmd":"list"} or {"cmd":"install","tool":"deno","version":"2.6.10"}
+/// The payload is a JSON object: {"cmd":"list"} or {"cmd":"install","tool":"bun","version":"1.3.0"}
 fn shellExecHandler(payload: [*:0]const u8, _: ?*anyopaque) callconv(.c) [*:0]const u8 {
     const allocator = std.heap.c_allocator;
     const payload_slice = std.mem.span(payload);
