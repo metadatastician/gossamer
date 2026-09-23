@@ -182,5 +182,93 @@
     "type": "GS007",
     "file": ".",
     "note": "GS007 delete_remote_branches flags accumulated stale remote branches (merged feature/fix branches awaiting cleanup). This is ambient repository hygiene, not a defect in any given change, and its finding count fluctuates per-PR as branches come and go — so it must never hard-block an unrelated PR. Kept advisory (visible, non-blocking); estate policy demotes the whole git_state rule_module to advisory-by-default in the standards governance stack."
+  } ,
+  {
+    "severity": "warn",
+    "severity_override": "advisory",
+    "rule_module": "research_extensions",
+    "type": "RE001",
+    "file": ".github/workflows/push-email-notify.yml",
+    "note": "ESTATE DECISION PENDING (hypatia triage 2026-09-22): adopt step-security/harden-runner or record a principled WONTFIX; the estate uses it nowhere today. This job references secrets.* (read-only GITHUB_TOKEN, or an SMTP/dispatch secret scoped to the job) without an egress-monitoring step. Kept advisory (visible, non-blocking)."
+  },
+  {
+    "severity": "warn",
+    "severity_override": "advisory",
+    "rule_module": "research_extensions",
+    "type": "RE001",
+    "file": ".github/workflows/release.yml",
+    "note": "ESTATE DECISION PENDING (hypatia triage 2026-09-22): adopt step-security/harden-runner or record a principled WONTFIX; the estate uses it nowhere today. This job references secrets.* (read-only GITHUB_TOKEN, or an SMTP/dispatch secret scoped to the job) without an egress-monitoring step. Kept advisory (visible, non-blocking)."
+  },
+  {
+    "severity": "warn",
+    "severity_override": "advisory",
+    "rule_module": "research_extensions",
+    "type": "RE001",
+    "file": ".github/workflows/label-triage.yml",
+    "note": "ESTATE DECISION PENDING (hypatia triage 2026-09-22): adopt step-security/harden-runner or record a principled WONTFIX; the estate uses it nowhere today. This job references secrets.* (read-only GITHUB_TOKEN, or an SMTP/dispatch secret scoped to the job) without an egress-monitoring step. Kept advisory (visible, non-blocking)."
+  },
+  {
+    "severity": "warn",
+    "severity_override": "advisory",
+    "rule_module": "research_extensions",
+    "type": "RE001",
+    "file": ".github/workflows/labels.yml",
+    "note": "ESTATE DECISION PENDING (hypatia triage 2026-09-22): adopt step-security/harden-runner or record a principled WONTFIX; the estate uses it nowhere today. This job references secrets.* (read-only GITHUB_TOKEN, or an SMTP/dispatch secret scoped to the job) without an egress-monitoring step. Kept advisory (visible, non-blocking)."
+  },
+  {
+    "severity": "warn",
+    "severity_override": "advisory",
+    "rule_module": "research_extensions",
+    "type": "RE001",
+    "file": ".github/workflows/instant-sync.yml",
+    "note": "ESTATE DECISION PENDING (hypatia triage 2026-09-22): adopt step-security/harden-runner or record a principled WONTFIX; the estate uses it nowhere today. This job references secrets.* (read-only GITHUB_TOKEN, or an SMTP/dispatch secret scoped to the job) without an egress-monitoring step. Kept advisory (visible, non-blocking)."
+  },
+  {
+    "severity": "warn",
+    "severity_override": "advisory",
+    "rule_module": "research_extensions",
+    "type": "RE001",
+    "file": ".github/workflows/rhodibot.yml",
+    "note": "ESTATE DECISION PENDING (hypatia triage 2026-09-22): adopt step-security/harden-runner or record a principled WONTFIX; the estate uses it nowhere today. This job references secrets.* (read-only GITHUB_TOKEN, or an SMTP/dispatch secret scoped to the job) without an egress-monitoring step. Kept advisory (visible, non-blocking)."
+  },
+  {
+    "severity": "warn",
+    "severity_override": "advisory",
+    "rule_module": "research_extensions",
+    "type": "RE005",
+    "file": ".github/workflows/static-analysis-gate.yml",
+    "note": "REVIEWED (hypatia triage 2026-09-23): the `|| true` guards only the jq that renders GitHub annotations for findings the preceding steps have already collected — it makes no gate decision, and it is flagged only because the step name contains \"check\". The gate is the separate fail-closed `Fail on critical findings` / `Fail on critical security findings` step in the same job. Failing the run because annotation rendering hiccuped would mask a green scan as red. Kept advisory (visible, non-blocking)."
+  },
+  {
+    "severity": "warn",
+    "severity_override": "advisory",
+    "rule_module": "workflow_hardening",
+    "type": "WH008",
+    "file": ".github/workflows/mirror.yml",
+    "note": "ACCEPTED ESTATE CONVENTION (hypatia triage 2026-09-22): reusable-workflow callers use `secrets: inherit` by design. Kept advisory (visible, non-blocking)."
+  },
+  {
+    "severity": "warn",
+    "severity_override": "advisory",
+    "rule_module": "workflow_hardening",
+    "type": "WH008",
+    "file": ".github/workflows/hypatia-scan.yml",
+    "note": "ACCEPTED ESTATE CONVENTION (hypatia triage 2026-09-22): reusable-workflow callers use `secrets: inherit` by design. Kept advisory (visible, non-blocking)."
+  },
+  {
+    "severity": "warn",
+    "severity_override": "advisory",
+    "rule_module": "workflow_hardening",
+    "type": "WH008",
+    "file": ".github/workflows/secret-scanner.yml",
+    "note": "ACCEPTED ESTATE CONVENTION (hypatia triage 2026-09-22): reusable-workflow callers use `secrets: inherit` by design. Kept advisory (visible, non-blocking)."
+  },
+  {
+    "severity": "medium",
+    "severity_override": "advisory",
+    "rule_module": "content_patterns",
+    "type": "npx_in_workflow",
+    "file": ".github/copilot/coding-agent.yml",
+    "note": "TRACKED DEBT (hypatia triage 2026-09-22): rule text is stale (recommends retired Deno); agent config, not live estate CI. This is the GitHub Copilot coding-agent MCP server block, where `npx` is the only published bootstrap for @hyperpolymath/boj-server. Kept advisory (visible, non-blocking)."
   }
 ]

@@ -33,8 +33,15 @@ jobs:
       - name: Idris2 ABI Purity Gate
         uses: hyperpolymath/cicd-suite/actions/idris2-abi-check@main
         
-      - name: Zig Hexadeca API Gate
-        uses: hyperpolymath/cicd-suite/actions/zig-hexadeca-check@main
+      # Renamed upstream: cicd-suite b25f613 (2026-09-21) deleted
+      # actions/zig-hexadeca-check and shipped the identical check under
+      # actions/zig-unified-api-adapter-check. The old path only still resolved
+      # from GitHub's negative-resolution cache, so this caller was one cache
+      # expiry away from "Can't find action.yml" (the failure mode of
+      # hyperpolymath/cicd-suite run 35548451498). Rule body is unchanged:
+      # `git grep -E 'std\.fs|std\.io' -- '*.zig'` -> ::error:: + exit 1.
+      - name: Zig Unified API Adapter Gate
+        uses: hyperpolymath/cicd-suite/actions/zig-unified-api-adapter-check@main
         
       - name: Contractile Validation Gate
         uses: hyperpolymath/cicd-suite/actions/contractile-validation-check@main
