@@ -38,9 +38,9 @@ workflows:
     '.github/workflows/eph-linearity.yml':
         - 'actions/checkout@v7.0.1'
     '.github/workflows/governance.yml':
-        - 'hyperpolymath/standards@fcb566cfb8a86cea2d3666bf65a4f177a49b1313'
+        - 'hyperpolymath/standards@7b05a32346a40789271f401afbbb7fb3310b281f'
     '.github/workflows/hypatia-scan.yml':
-        - 'hyperpolymath/standards@fcb566cfb8a86cea2d3666bf65a4f177a49b1313'
+        - 'hyperpolymath/standards@7b05a32346a40789271f401afbbb7fb3310b281f'
     '.github/workflows/instant-sync.yml':
         - 'peter-evans/repository-dispatch@v4.0.1'
     '.github/workflows/joinery-native.yml':
@@ -175,6 +175,11 @@ dependencies:
         commit: 'sha1-6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772'
         owner_id: 1940490
         repo_id: 260749683
+    'editorconfig-checker/action-editorconfig-checker@51f63319f592f97930c73d9c46184d20bd206393':
+        ref: 'v3.0.0'
+        commit: 'sha1-51f63319f592f97930c73d9c46184d20bd206393'
+        owner_id: 26415196
+        repo_id: 297874902
     'editorconfig-checker/action-editorconfig-checker@840e866d93b8e032123c23bac69dece044d4d84c':
         ref: 'v2.2.0'
         commit: 'sha1-840e866d93b8e032123c23bac69dece044d4d84c'
@@ -195,6 +200,11 @@ dependencies:
         commit: 'sha1-54075bcc5e249e4758d363f27d099f55d843f124'
         owner_id: 47606891
         repo_id: 331103973
+    'github/codeql-action@1c5b675653bb5c22dbe9b12b556ec555138e09fd':
+        ref: 'v4.38.1'
+        commit: 'sha1-1c5b675653bb5c22dbe9b12b556ec555138e09fd'
+        owner_id: 9919
+        repo_id: 259445878
     'github/codeql-action@cdf488f595d80d6e07e03d4674febd5ab45fa938':
         ref: 'v4.37.9'
         commit: 'sha1-cdf488f595d80d6e07e03d4674febd5ab45fa938'
@@ -235,6 +245,18 @@ dependencies:
         commit: 'sha1-22e7bdb322c430c1d0dac6b3bb307f4bb139d0be'
         owner_id: 6759885
         repo_id: 1352485172
+    'hyperpolymath/standards@7b05a32346a40789271f401afbbb7fb3310b281f':
+        ref: '7b05a32346a40789271f401afbbb7fb3310b281f'
+        commit: 'sha1-7b05a32346a40789271f401afbbb7fb3310b281f'
+        owner_id: 6759885
+        repo_id: 1116521501
+        uses:
+            - 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
+            - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
+            - 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a'
+            - 'editorconfig-checker/action-editorconfig-checker@51f63319f592f97930c73d9c46184d20bd206393'
+            - 'erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124'
+            - 'github/codeql-action@1c5b675653bb5c22dbe9b12b556ec555138e09fd'
     'hyperpolymath/standards@d135b05bfc647d0c0fbfedc7e80f37ea50f49236':
         ref: 'd135b05bfc647d0c0fbfedc7e80f37ea50f49236'
         commit: 'sha1-d135b05bfc647d0c0fbfedc7e80f37ea50f49236'
