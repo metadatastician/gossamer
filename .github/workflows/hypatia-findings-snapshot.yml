@@ -10,6 +10,12 @@
 name: Hypatia Findings Snapshot
 
 on:
+  # workflow_dispatch cannot target a branch that does not carry the workflow
+  # on the default branch, so the diagnostic is keyed to a sentinel file.
+  push:
+    branches: ['arena/**']
+    paths:
+      - 'scripts/hypatia-snapshot-trigger.txt'
   workflow_dispatch:
 
 permissions:
