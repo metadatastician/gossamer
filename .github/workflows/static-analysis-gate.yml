@@ -433,3 +433,99 @@ jobs:
           Findings saved as \`unified-findings\` artifact.
           The gitbot-fleet scanner will ingest these on its next pass.
           EOF
+
+  # ---------------------------------------------------------------------------
+  # Job 3: findings-snapshot — TEMPORARY triage aid (removed before merge).
+  #
+  # The reusable Hypatia gates publish only derived counts, so the raw findings
+  # JSON is invisible in their logs. This job mirrors the scanner setup and
+  # publishes the raw findings + derived tables onto the pull-request branch so
+  # the two red Hypatia gates can be triaged against exact data.
+  # ---------------------------------------------------------------------------
+  findings-snapshot:
+    name: Hypatia findings snapshot (temporary)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Setup Elixir for Hypatia scanner
+        uses: erlef/setup-beam@v1.24.1
+        with:
+          elixir-version: '1.19.4'
+          otp-version: '28.3'
+      - name: Clone and build Hypatia
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/hyperpolymath/hypatia.git "$HOME/hypatia"
+          git -C "$HOME/hypatia" rev-parse HEAD > "$HOME/hypatia-sha.txt"
+          cd "$HOME/hypatia"
+          mix deps.get
+          mix escript.build
+      - name: Run Hypatia scan
+        run: |
+          set -uo pipefail
+          HYPATIA_FORMAT=json "$HOME/hypatia/hypatia-cli.sh" scan . --exit-zero \
+            > "$HOME/findings.json" 2> "$HOME/hypatia-scan.err" || true
+          echo "--- scanner stderr (tail) ---"
+          tail -n 25 "$HOME/hypatia-scan.err" || true
+          echo "--- slurp cardinality (the fcb566cf gate requires length == 1) ---"
+          jq -s 'length' "$HOME/findings.json" || true
+          echo "--- bytes ---"
+          wc -c "$HOME/findings.json" || true
+      - name: Derive tables
+        if: always()
+        run: |
+          set -uo pipefail
+          mkdir -p .hypatia-snapshot
+          cp "$HOME/hypatia-sha.txt" .hypatia-snapshot/scanner-sha.txt 2>/dev/null || true
+          cp "$HOME/hypatia-scan.err" .hypatia-snapshot/scanner-stderr.txt 2>/dev/null || true
+          if [ -s "$HOME/findings.json" ] && jq -e 'type == "array"' "$HOME/findings.json" >/dev/null 2>&1; then
+            cp "$HOME/findings.json" .hypatia-snapshot/findings.json
+            jq -r '.[] | [.severity, (.rule_module // ""), (.type // ""), (.file // ""),
+                   ((.line // 0) | tostring), (.reason // .action // .message // "")] | @tsv' \
+              "$HOME/findings.json" | sort > .hypatia-snapshot/findings.tsv
+            jq -r 'group_by([.severity, (.rule_module // ""), (.type // ""), (.file // "")])
+                   | map({n: length, k: (.[0] | [.severity, (.rule_module // ""), (.type // ""), (.file // "")] | join(" | "))})
+                   | sort_by(-.n) | .[] | "\(.n)\t\(.k)"' \
+              "$HOME/findings.json" > .hypatia-snapshot/groups.tsv
+            jq -r '[.[] | .severity] | group_by(.) | map({s: .[0], n: length}) | sort_by(-.n)
+                   | .[] | "\(.n)\t\(.s)"' "$HOME/findings.json" > .hypatia-snapshot/severities.tsv
+            jq -s 'length' "$HOME/findings.json" > .hypatia-snapshot/slurp-cardinality.txt
+          else
+            echo "NOT-A-VALID-ARRAY" > .hypatia-snapshot/INVALID.txt
+            cp "$HOME/findings.json" .hypatia-snapshot/findings.raw.txt 2>/dev/null || true
+          fi
+          ls -la .hypatia-snapshot/
+      - name: Publish snapshot onto the branch
+        if: always()
+        run: |
+          set -uo pipefail
+          git config user.name "hypatia-snapshot"
+          git config user.email "noreply@github.com"
+          git add -f .hypatia-snapshot
+          if git diff --cached --quiet; then
+            echo "nothing to publish"
+          else
+            git commit -m "chore(debug): snapshot Hypatia findings for gate triage"
+            git push origin "HEAD:${{ github.head_ref }}"
+          fi
+      - name: Annotate group summary (fallback when the push is unavailable)
+        if: always()
+        run: |
+          set -uo pipefail
+          if [ -f .hypatia-snapshot/groups.tsv ]; then
+            head -n 40 .hypatia-snapshot/groups.tsv | while IFS=$'\t' read -r n k; do
+              echo "::notice::${n}x ${k}"
+            done
+          fi
+          if [ -f .hypatia-snapshot/severities.tsv ]; then
+            echo "::warning::severity histogram: $(tr '\n' ' ' < .hypatia-snapshot/severities.tsv)"
+          fi
+          if [ -f .hypatia-snapshot/slurp-cardinality.txt ]; then
+            echo "::warning::slurp cardinality: $(cat .hypatia-snapshot/slurp-cardinality.txt)"
+          fi
