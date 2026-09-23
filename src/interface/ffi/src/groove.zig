@@ -553,34 +553,106 @@ pub const WireError = error{
 /// Maximum lease-handle length accepted from a groove service.
 pub const MAX_WIRE_HANDLE: usize = 128;
 
+// Set only on an owned worker thread. Synchronous callers retain the default
+// budget. Cancellation closes the worker's current socket via defer, without
+// touching another caller's descriptor or disabling transport safety checks.
+pub threadlocal var wire_cancel: ?*const std.atomic.Value(bool) = null;
+pub threadlocal var wire_budget_ms: u32 = 5000;
+
 /// Send one plaintext HTTP request to localhost:port and read the full
 /// response into `buf`. Returns the response slice (status line + headers +
 /// body), or null on any I/O failure (connection refused, write error).
 fn httpExchange(port: u16, head: []const u8, body: []const u8, buf: []u8) ?[]const u8 {
+    // One monotonic budget for connect, writes and the entire response;
+    // a peer dripping bytes must not reset the deadline on each read.
+    var timer = std.time.Timer.start() catch return null;
     const addr = std.net.Address.initIp4(.{ 127, 0, 0, 1 }, port);
-    const stream = std.net.tcpConnectToAddress(addr) catch return null;
+    const flags = std.posix.SOCK.STREAM | std.posix.SOCK.NONBLOCK |
+        (if (@import("builtin").os.tag == .windows) @as(u32, 0) else std.posix.SOCK.CLOEXEC);
+    const sock = std.posix.socket(addr.any.family, flags, std.posix.IPPROTO.TCP) catch return null;
+    const stream: std.net.Stream = .{ .handle = sock };
     defer stream.close();
+    std.posix.connect(sock, &addr.any, addr.getOsSockLen()) catch |err| switch (err) {
+        error.WouldBlock => if (!waitSocket(stream, std.posix.POLL.OUT, &timer)) return null,
+        else => return null,
+    };
 
-    stream.writeAll(head) catch return null;
-    if (body.len > 0) {
-        stream.writeAll(body) catch return null;
+    for ([_][]const u8{ head, body }) |part| {
+        var sent: usize = 0;
+        while (sent < part.len) {
+            if (!waitSocket(stream, std.posix.POLL.OUT, &timer)) return null;
+            const n = stream.write(part[sent..]) catch |err| switch (err) {
+                error.WouldBlock => continue,
+                else => return null,
+            };
+            if (n == 0) return null;
+            sent += n;
+        }
     }
 
     var total: usize = 0;
     while (total < buf.len) {
-        const n = stream.read(buf[total..]) catch break;
+        if (!waitSocket(stream, std.posix.POLL.IN, &timer)) return null;
+        const n = stream.read(buf[total..]) catch |err| switch (err) {
+            error.WouldBlock => continue,
+            else => return null,
+        };
         if (n == 0) break;
         total += n;
     }
-    if (total == 0) return null;
+    if (total == 0 or total == buf.len) return null;
+    _ = responseBody(buf[0..total]) orelse return null;
     return buf[0..total];
+}
+
+fn waitSocket(stream: std.net.Stream, events: i16, timer: *std.time.Timer) bool {
+    while (true) {
+        if (wire_cancel) |cancel| if (cancel.load(.acquire)) return false;
+        const elapsed_ms = timer.read() / std.time.ns_per_ms;
+        if (elapsed_ms >= wire_budget_ms) return false;
+        var fds = [_]std.posix.pollfd{.{ .fd = stream.handle, .events = events, .revents = 0 }};
+        const remaining = wire_budget_ms - elapsed_ms;
+        const wait_ms = if (wire_cancel != null) @min(remaining, 20) else remaining;
+        const ready = std.posix.poll(&fds, @intCast(wait_ms)) catch return false;
+        if ((fds[0].revents & (std.posix.POLL.ERR | std.posix.POLL.NVAL)) != 0) return false;
+        if (ready > 0) return (fds[0].revents & (events | std.posix.POLL.HUP)) != 0;
+    }
+}
+
+// Minimal HTTP/1 response subset: exact framing, no ambiguous CL/TE. The
+// client asks for Connection: close and reads to EOF within its total budget.
+fn responseBody(response: []const u8) ?[]const u8 {
+    const code = parseStatusCode(response) orelse return null;
+    const sep = std.mem.indexOf(u8, response, "\r\n\r\n") orelse return null;
+    if (sep > 2048) return null;
+    var lines = std.mem.splitSequence(u8, response[0..sep], "\r\n");
+    _ = lines.next();
+    var length: ?usize = null;
+    while (lines.next()) |line| {
+        const colon = std.mem.indexOfScalar(u8, line, ':') orelse return null;
+        const name = line[0..colon];
+        if (name.len == 0) return null;
+        for (name) |c| if (!std.ascii.isAlphanumeric(c) and c != '-') return null;
+        const value = std.mem.trim(u8, line[colon + 1 ..], " \t");
+        if (std.ascii.eqlIgnoreCase(name, "transfer-encoding")) return null;
+        if (std.ascii.eqlIgnoreCase(name, "content-length")) {
+            if (length != null or value.len == 0) return null;
+            for (value) |c| if (!std.ascii.isDigit(c)) return null;
+            length = std.fmt.parseInt(usize, value, 10) catch return null;
+        }
+    }
+    const body = response[sep + 4 ..];
+    if (length) |n| if (body.len != n) return null;
+    if (code == 204 and body.len != 0) return null;
+    return body;
 }
 
 /// Parse the status code out of a raw HTTP response ("HTTP/1.x NNN ...").
 fn parseStatusCode(response: []const u8) ?u32 {
-    const sp = std.mem.indexOfScalar(u8, response, ' ') orelse return null;
-    if (sp + 4 > response.len) return null;
-    return std.fmt.parseInt(u32, response[sp + 1 .. sp + 4], 10) catch null;
+    if (response.len < 13 or (!std.mem.startsWith(u8, response, "HTTP/1.0 ") and
+        !std.mem.startsWith(u8, response, "HTTP/1.1 ")) or response[12] != ' ') return null;
+    for (response[9..12]) |c| if (!std.ascii.isDigit(c)) return null;
+    return std.fmt.parseInt(u32, response[9..12], 10) catch null;
 }
 
 /// POST /.well-known/groove/connect — acquire a lease from a target.
@@ -592,17 +664,17 @@ pub fn wireConnect(target_id: u32, mode: []const u8, ttl_ms: u64, out: []u8) Wir
         return error.ConnectFailed;
     }
 
-    var body_buf: [192]u8 = undefined;
+    var body_buf: [320]u8 = undefined;
     // ttl_ms == 0 means "no lease": legacy SPEC §4.3 semantics. A literal
     // {"ttl_ms":0} would be rejected with 400 by conforming providers
     // (SPEC §4.6 TTL bounds), so the lease member is omitted entirely.
     const body = if (ttl_ms == 0)
-        std.fmt.bufPrint(&body_buf, "{{\"service_id\":\"gossamer\",\"consumes\":[]}}", .{}) catch {
+        std.fmt.bufPrint(&body_buf, "{{\"groove_version\":\"1\",\"service_id\":\"gossamer\",\"service_version\":\"0.3.0\",\"mode\":\"active\",\"capabilities\":{{}},\"consumes\":[]}}", .{}) catch {
             main.setError("Groove connect body exceeds buffer");
             return error.ProtocolError;
         }
     else
-        std.fmt.bufPrint(&body_buf, "{{\"service_id\":\"gossamer\",\"consumes\":[],\"lease\":{{\"mode\":\"{s}\",\"ttl_ms\":{d}}}}}", .{ mode, ttl_ms }) catch {
+        std.fmt.bufPrint(&body_buf, "{{\"groove_version\":\"1\",\"service_id\":\"gossamer\",\"service_version\":\"0.3.0\",\"mode\":\"active\",\"capabilities\":{{}},\"consumes\":[],\"lease\":{{\"mode\":\"{s}\",\"ttl_ms\":{d}}}}}", .{ mode, ttl_ms }) catch {
             main.setError("Groove connect body exceeds buffer");
             return error.ProtocolError;
         };
@@ -651,27 +723,66 @@ pub fn wireConnect(target_id: u32, mode: []const u8, ttl_ms: u64, out: []u8) Wir
     };
     const resp_body = response[sep + 4 ..];
 
-    // Extract the "handle" string from the lease response.
-    var pos: usize = 0;
-    while (pos < resp_body.len) : (pos += 1) {
-        if (matchJsonKey(resp_body, pos, "handle")) |val_start| {
-            if (extractJsonString(resp_body, val_start)) |handle| {
-                if (handle.len > out.len) {
-                    main.setError("Groove lease handle exceeds buffer");
-                    return error.ProtocolError;
-                }
-                @memcpy(out[0..handle.len], handle);
-                return handle.len;
-            }
-        }
+    return parseConnectBody(resp_body, mode, ttl_ms, out) catch {
+        main.setError("Groove connect: invalid handle or mismatched lease echo");
+        return error.ProtocolError;
+    };
+}
+
+fn validWireHandle(handle: []const u8) bool {
+    if (handle.len == 0 or handle.len > MAX_WIRE_HANDLE) return false;
+    for (handle) |c| if (!std.ascii.isAlphanumeric(c) and c != '-' and c != '_') return false;
+    return true;
+}
+
+pub fn parseConnectBody(body: []const u8, mode: []const u8, ttl_ms: u64, out: []u8) WireError!usize {
+    const parsed = std.json.parseFromSlice(std.json.Value, std.heap.page_allocator, body, .{}) catch return error.ProtocolError;
+    defer parsed.deinit();
+    if (parsed.value != .object) return error.ProtocolError;
+    const object = parsed.value.object;
+    const handle = object.get("handle") orelse return error.ProtocolError;
+    if (handle != .string or !validWireHandle(handle.string) or handle.string.len > out.len) return error.ProtocolError;
+    if (object.get("session_id")) |legacy| {
+        if (legacy != .string or !std.mem.eql(u8, legacy.string, handle.string)) return error.ProtocolError;
     }
-    main.setError("Groove connect: response missing lease handle");
-    return error.ProtocolError;
+    if (ttl_ms > 0) {
+        const lease = object.get("lease") orelse return error.ProtocolError;
+        if (lease != .object) return error.ProtocolError;
+        const echo_mode = lease.object.get("mode") orelse return error.ProtocolError;
+        const echo_ttl = lease.object.get("ttl_ms") orelse return error.ProtocolError;
+        if (echo_mode != .string or !std.mem.eql(u8, echo_mode.string, mode) or
+            echo_ttl != .integer or echo_ttl.integer <= 0 or echo_ttl.integer != ttl_ms) return error.ProtocolError;
+    }
+    @memcpy(out[0..handle.string.len], handle.string);
+    return handle.string.len;
+}
+
+/// Authenticated voice transport. Credentials stay in headers, never URLs or
+/// error messages. Uses the same bounded/deadline-enforced session exchange.
+pub fn wireVoice(target_id: u32, action: enum { connect, send, recv, heartbeat, disconnect }, token: []const u8, handle: []const u8, peer: []const u8, body: []const u8, out: []u8) WireError!usize {
+    if (refuseTlsPlaintext()) return error.TlsRefused;
+    if (target_id >= TARGET_COUNT or token.len == 0 or token.len > 4096 or peer.len == 0 or peer.len > 128 or body.len > 16384) return error.ProtocolError;
+    for (token) |c| if (!std.ascii.isAlphanumeric(c) and c != '-' and c != '_' and c != '.') return error.ProtocolError;
+    for (peer) |c| if (!std.ascii.isAlphanumeric(c) and c != '-' and c != '_' and c != '.') return error.ProtocolError;
+    if (action != .connect and !validWireHandle(handle)) return error.ProtocolError;
+    var header_buf: [5120]u8 = undefined;
+    defer std.crypto.secureZero(u8, &header_buf);
+    const header = std.fmt.bufPrint(&header_buf, "{s} /.well-known/groove/voice/{s} HTTP/1.0\r\nHost: localhost\r\nAuthorization: Bearer {s}\r\nX-Groove-Handle: {s}\r\nX-Groove-Peer: {s}\r\nContent-Type: {s}\r\nContent-Length: {d}\r\nConnection: close\r\n\r\n", .{ if (action == .recv or action == .heartbeat) "GET" else "POST", @tagName(action), token, handle, peer, if (action == .connect) "application/json" else "application/octet-stream", body.len }) catch return error.ProtocolError;
+    var response_buf: [MAX_RESPONSE]u8 = undefined;
+    defer std.crypto.secureZero(u8, &response_buf);
+    const response = httpExchange(targets[target_id].port, header, body, &response_buf) orelse return error.ConnectFailed;
+    const code = parseStatusCode(response) orelse return error.ProtocolError;
+    const bytes = responseBody(response) orelse return error.ProtocolError;
+    if (code == 204 and action != .connect) return 0;
+    if (code != 200 or (action != .connect and action != .recv) or bytes.len > out.len) return error.ProtocolError;
+    @memcpy(out[0..bytes.len], bytes);
+    return bytes.len;
 }
 
 /// GET /.well-known/groove/heartbeat?handle=H — refresh a lease.
 /// The SPEC answers 204 on success; any 2xx is accepted.
 pub fn wireHeartbeat(target_id: u32, handle: []const u8) WireError!void {
+    if (!validWireHandle(handle)) return error.ProtocolError;
     if (refuseTlsPlaintext()) return error.TlsRefused;
     if (target_id >= TARGET_COUNT) {
         main.setError("Invalid groove target index");
@@ -706,6 +817,7 @@ pub fn wireHeartbeat(target_id: u32, handle: []const u8) WireError!void {
 /// Body is {"handle":"..."} per SPEC v0.3 (there is no older wire
 /// disconnect to stay compatible with — prior code never released remotely).
 pub fn wireDisconnect(target_id: u32, handle: []const u8) WireError!void {
+    if (!validWireHandle(handle)) return error.ProtocolError;
     if (refuseTlsPlaintext()) return error.TlsRefused;
     if (target_id >= TARGET_COUNT) {
         main.setError("Invalid groove target index");
@@ -891,6 +1003,70 @@ test "computeHmac returns non-null when key is set" {
 
 test "groove target count is 10" {
     try std.testing.expectEqual(@as(usize, 10), TARGET_COUNT);
+}
+
+test "wire connect requires a valid opaque handle and exact lease echo" {
+    var out: [MAX_WIRE_HANDLE]u8 = undefined;
+    try std.testing.expectEqual(@as(usize, 7), try parseConnectBody("{\"handle\":\"grv-123\",\"lease\":{\"mode\":\"hard\",\"ttl_ms\":1000}}", "hard", 1000, &out));
+    for ([_][]const u8{
+        "{\"handle\":\"\",\"lease\":{\"mode\":\"hard\",\"ttl_ms\":1000}}",
+        "{\"handle\":\"a?injected=1\"}",
+        "{\"nested\":{\"handle\":\"fake\"}}",
+        "{\"handle\":\"a\",\"handle\":\"b\"}",
+        "{\"handle\":\"a\",\"session_id\":\"b\"}",
+        "{\"handle\":\"a\"}",
+        "{\"handle\":\"a\",\"lease\":{\"mode\":\"soft\",\"ttl_ms\":1000}}",
+        "{\"handle\":\"a\",\"lease\":{\"mode\":\"hard\",\"ttl_ms\":999}}",
+        "{\"handle\":\"a\",\"lease\":{\"mode\":\"hard\",\"ttl_ms\":1000}}trailing",
+    }) |bad| try std.testing.expectError(error.ProtocolError, parseConnectBody(bad, "hard", 1000, &out));
+}
+
+test "wire response framing rejects truncation ambiguity and invalid status" {
+    try std.testing.expectEqualStrings("{}", responseBody("HTTP/1.0 200 OK\r\nContent-Length: 2\r\n\r\n{}").?);
+    try std.testing.expectEqualStrings("", responseBody("HTTP/1.1 204 No Content\r\n\r\n").?);
+    for ([_][]const u8{
+        "FAKE 200 OK\r\n\r\n{}",
+        "HTTP/1.0 200 OK\r\nContent-Length: 3\r\n\r\n{}",
+        "HTTP/1.0 200 OK\r\nContent-Length: 1\r\n\r\n{}",
+        "HTTP/1.0 200 OK\r\nContent-Length: 2\r\nContent-Length: 2\r\n\r\n{}",
+        "HTTP/1.0 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n",
+        "HTTP/1.0 200 OK\r\nContent-Length: +2\r\n\r\n{}",
+        "HTTP/1.0 204 No Content\r\n\r\n{}",
+    }) |bad| try std.testing.expect(responseBody(bad) == null);
+}
+
+fn serveWireTest(server: *std.net.Server, stall: bool) void {
+    const connection = server.accept() catch return;
+    defer connection.stream.close();
+    var request: [1024]u8 = undefined;
+    _ = connection.stream.read(&request) catch return;
+    if (stall) {
+        // Deliberately leave the body incomplete with the socket open.
+        connection.stream.writeAll("HTTP/1.0 200 OK\r\nContent-Length: 2\r\n\r\n{") catch return;
+        std.Thread.sleep(5200 * std.time.ns_per_ms);
+    } else {
+        connection.stream.writeAll("HTTP/1.0 200 OK\r\nContent-Length: 2\r\n\r\n{}") catch return;
+    }
+}
+
+test "wire deadline has a real socket positive and stalled-body negative control" {
+    const address = std.net.Address.initIp4(.{ 127, 0, 0, 1 }, 0);
+    for ([_]bool{ false, true }) |stall| {
+        var server = try address.listen(.{});
+        defer server.deinit();
+        const worker = try std.Thread.spawn(.{}, serveWireTest, .{ &server, stall });
+        defer worker.join();
+        var timer = try std.time.Timer.start();
+        var response: [1024]u8 = undefined;
+        const result = httpExchange(server.listen_address.getPort(), "GET / HTTP/1.0\r\nHost: localhost\r\n\r\n", "", &response);
+        if (stall) {
+            try std.testing.expect(result == null);
+            const elapsed_ms = timer.read() / std.time.ns_per_ms;
+            try std.testing.expect(elapsed_ms >= 4900 and elapsed_ms < 6000);
+        } else {
+            try std.testing.expectEqualStrings("{}", responseBody(result.?).?);
+        }
+    }
 }
 
 test "groove status defaults to not_found" {

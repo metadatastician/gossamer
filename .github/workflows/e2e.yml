@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
+# This workflow is managed by gh actions-lock.
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
 # Gossamer — E2E + Safety + Symbol Verification
@@ -9,13 +10,10 @@
 
 name: E2E + Safety
 on:
+  merge_group:
+    types: [checks_requested]
   push:
     branches: [main, master, develop]
-    paths:
-      - 'src/**'
-      - 'cli/**'
-      - 'tests/**'
-      - '.github/workflows/e2e.yml'
   pull_request:
     branches: [main, master]
   workflow_dispatch:
@@ -37,14 +35,17 @@ jobs:
 
       - name: Detect E2E relevance
         id: changes
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+          if [[ "$EVENT_NAME" != "pull_request" ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          git fetch origin "${{ github.base_ref }}" --depth=1
-          if git diff --name-only "origin/${{ github.base_ref }}" HEAD | grep -qE '^(src/|cli/|tests/|\.github/workflows/e2e\.yml$)'; then
+          git fetch origin "$BASE_REF" --depth=1
+          if git diff --name-only "origin/$BASE_REF" HEAD | grep -qE '^(src/|cli/|tests/|\.github/workflows/e2e\.yml$)'; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
@@ -74,17 +75,11 @@ jobs:
           arch="$(uname -m)"
           case "$arch" in
             x86_64)  bundle="wasmtime-${WASMTIME_VERSION}-x86_64-linux-c-api.tar.xz" ;;
-            aarch64) bundle="wasmtime-${WASMTIME_VERSION}-aarch64-linux-c-api.tar.xz" ;;
             *) echo "unsupported arch: $arch" >&2; exit 1 ;;
           esac
           url="https://github.com/bytecodealliance/wasmtime/releases/download/${WASMTIME_VERSION}/${bundle}"
           curl -fsSL --retry 3 -o /tmp/wasmtime.tar.xz "$url"
-          # Only enforce the checksum for the canonical x86_64 bundle —
-          # aarch64 runners are rare in this CI and the pin can be
-          # extended to that arch in a follow-up.
-          if [ "$arch" = "x86_64" ]; then
-            echo "${WASMTIME_SHA256}  /tmp/wasmtime.tar.xz" | sha256sum -c -
-          fi
+          echo "${WASMTIME_SHA256}  /tmp/wasmtime.tar.xz" | sha256sum -c -
           mkdir -p /tmp/wasmtime
           tar -xJf /tmp/wasmtime.tar.xz -C /tmp/wasmtime --strip-components=1
           sudo cp -r /tmp/wasmtime/include/. /usr/local/include/

@@ -17,7 +17,7 @@ inventory (`~/Desktop/CRG-STATE-INVENTORY.md`).
 - Criteria boilerplate: `rsr-template-repo/docs/governance/CRG-CRITERIA.adoc`
 - Audit template: `rsr-template-repo/docs/governance/CRG-AUDIT-TEMPLATE.adoc`
 - Self-declared grade (prior art):
-  * `.machine_readable/6a2/STATE.a2ml` `[crg] grade = "C"`, achieved 2026-04-04.
+  * `.machine_readable/descriptiles/STATE.a2ml` `[crg] grade = "C"`, achieved 2026-04-04.
   * Notes field: "106 Deno tests + 27 native Zig tests. Binary IPC support added. Approaching B (needs multi-platform CI)."
 - Audit date: 2026-04-18
 - Auditor: Jonathan D.A. Jewell
@@ -58,7 +58,7 @@ Publication requires B+. Long alpha is discipline, not shame.
 | PRESENT (22 workflows)
 | `.github/workflows/`
 
-| `.machine_readable/6a2/` canonical A2ML
+| `.machine_readable/descriptiles/` canonical A2ML
 | PRESENT (STATE, META, ECOSYSTEM, AGENTIC, NEUROSYM, PLAYBOOK)
 | Layout matches CLAUDE.md invariant
 
@@ -273,7 +273,7 @@ Self-declared grade: *C*. Audited grade: *D*. This is an overclaim of one
 grade, consistent with the estate-wide "honesty delta" the Phase 1 inventory
 projected — but gossamer is genuinely near-C and the gaps are tractable.
 
-Recommended action: update `.machine_readable/6a2/STATE.a2ml` `[crg]` to
+Recommended action: update `.machine_readable/descriptiles/STATE.a2ml` `[crg]` to
 `grade = "D"` with `grade-previous = "C"` and a `notes` entry citing this
 audit. Retain `next-target = "C"` (rather than the current `"B"`) to reflect
 reality — the C bar is what's proximate.
@@ -335,7 +335,7 @@ What blocks promotion to B (after C):
 
 == Related Files
 
-- `.machine_readable/6a2/STATE.a2ml` `[crg]` — authoritative self-declared
+- `.machine_readable/descriptiles/STATE.a2ml` `[crg]` — authoritative self-declared
   state; recommend demote C→D with notes citing this audit.
 - `docs/governance/CRG-CRITERIA.adoc` — boilerplate criteria doc (present).
 - `docs/governance/CRG-LIFT-PLAN-2026-04-18.adoc` — *to be written* as the

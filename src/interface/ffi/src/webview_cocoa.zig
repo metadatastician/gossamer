@@ -51,13 +51,19 @@ fn msgSendVoid1(target: ?*anyopaque, sel: c.SEL, arg: ?*anyopaque) void {
 /// Helper: send a message with a BOOL arg.
 fn msgSendBool(target: ?*anyopaque, sel: c.SEL, val: bool) void {
     const func: *const fn (?*anyopaque, c.SEL, c.BOOL) callconv(.c) void = @ptrCast(&objc_msgSend);
-    func(target, sel, if (val) @as(c.BOOL, 1) else @as(c.BOOL, 0));
+    func(target, sel, objcBool(val));
+}
+
+// Apple's BOOL is bool on arm64 and signed char on older Intel ABIs.
+fn objcBool(value: bool) c.BOOL {
+    return if (c.BOOL == bool) value else @intFromBool(value);
 }
 
 /// Helper: send a message returning a BOOL.
 fn msgSendBoolRet(target: ?*anyopaque, sel: c.SEL) bool {
     const func: *const fn (?*anyopaque, c.SEL) callconv(.c) c.BOOL = @ptrCast(&objc_msgSend);
-    return func(target, sel) != 0;
+    const value = func(target, sel);
+    return if (c.BOOL == bool) value else value != 0;
 }
 
 /// Create an NSString from a C string.
@@ -155,7 +161,7 @@ pub fn create(
         @floatFromInt(height),
         style_mask,
         2, // NSBackingStoreBuffered
-        0, // NO
+        objcBool(false), // NO
     ) orelse return PlatformError.WindowCreateFailed;
 
     // Set title
@@ -541,15 +547,25 @@ fn onIPCMessage(
     if (name.len == 0) return;
     const payload = parsed.value.payload;
 
-    const callback = handle.bindings.get(name) orelse {
+    const entry = handle.bindings.get(name) orelse {
         sendIPCError(handle, id, "No handler bound for command");
         return;
     };
+    if (!@import("plugin.zig").isPluginLoaded(entry.plugin_id)) {
+        sendIPCError(handle, id, "Plugin unloaded — handler no longer available");
+        return;
+    }
+    // Cocoa does not yet have the GTK asynchronous completion dispatcher.
+    // Refuse that mode explicitly rather than execute blocking work on the UI.
+    if (entry.run_async) {
+        sendIPCError(handle, id, "Asynchronous bindings are not implemented on Cocoa");
+        return;
+    }
 
     const payload_z = allocator.dupeZ(u8, payload) catch return;
     defer allocator.free(payload_z);
 
-    const response_ptr = callback(payload_z);
+    const response_ptr = entry.callback(payload_z, entry.user_data);
     const response = std.mem.span(response_ptr);
     sendIPCResponse(handle, id, response);
 }

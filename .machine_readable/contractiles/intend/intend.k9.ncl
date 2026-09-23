@@ -126,7 +126,7 @@ let base    = import "../_base.ncl" in
       },
       {
         kind        = 'drift_log,
-        path        = ".machine_readable/6a2/DRIFT.a2ml",
+        path        = ".machine_readable/descriptiles/DRIFT.a2ml",
         append_only = true,
       },
     ],
@@ -218,7 +218,7 @@ let base    = import "../_base.ncl" in
             # the AI is the holder of the line against enthusiasm drift.
           },
         ],
-        signed_record_destination = ".machine_readable/6a2/ratification-<session-id>.a2ml",
+        signed_record_destination = ".machine_readable/descriptiles/ratification-<session-id>.a2ml",
         must_precede_work = true,
       },
 

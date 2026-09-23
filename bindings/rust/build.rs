@@ -92,7 +92,7 @@ fn build_from_source(target: &str) -> PathBuf {
 }
 
 fn verify_zig_version(zig: &OsStr) {
-    let version = Command::new(&zig)
+    let version = Command::new(zig)
         .arg("version")
         .output()
         .unwrap_or_else(|error| {
@@ -121,9 +121,9 @@ fn compile_native_library(zig: &OsString, source_dir: &Path, library_dir: &Path,
     // Compile only Gossamer objects into the archive. Using the ordinary Zig
     // install step for its static target also archives GTK/WebKit shared
     // objects, which an external Rust linker cannot consume.
-    let mut command = Command::new(&zig);
+    let mut command = Command::new(zig);
     command
-        .current_dir(&source_dir)
+        .current_dir(source_dir)
         .args([
             "build-lib",
             "src/main.zig",

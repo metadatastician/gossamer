@@ -30,10 +30,9 @@
 const std = @import("std");
 const launcher = @import("main.zig");
 
-const c = @cImport({
-    @cInclude("wasm.h");
-    @cInclude("wasmtime.h");
-});
+// One import namespace: distinct @cImport instances produce distinct opaque
+// Wasmtime types, even when both include the exact same header.
+const c = launcher.c;
 
 //==============================================================================
 // libgossamer extern declarations
