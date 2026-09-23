@@ -34,6 +34,15 @@ pub const theme = @import("theme.zig");
 pub const accessibility = @import("accessibility.zig");
 pub const bundler = @import("bundler.zig");
 pub const updater = @import("updater.zig");
+// Shell execution FFI (gossamer_shell_spawn / gossamer_shell_kill). This module
+// was missing from every import list, so its `export fn`s were never analyzed
+// and never reached libgossamer — the launcher, which declares both as
+// `extern fn` in cli/launcher/src/bridges.zig, then failed to link with
+// "undefined symbol: gossamer_shell_spawn" (CI/CD Pipeline job 107349432913,
+// step 8 "Build packages"). Zig emits an `export fn` only if its module is
+// referenced; verified with zig 0.15.2 that this line puts both symbols in the
+// dynamic symbol table.
+pub const shell = @import("shell.zig");
 
 extern fn gossamer_tray_clear_window() void;
 
