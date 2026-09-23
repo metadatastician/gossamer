@@ -8,6 +8,7 @@ use std::process::Command;
 
 const SUPPORTED_ZIG: &str = "0.15.2";
 
+/// Configures the native Gossamer build and emits Cargo linker directives.
 fn main() {
     println!("cargo:rerun-if-env-changed=GOSSAMER_LIB_DIR");
     println!("cargo:rerun-if-env-changed=GOSSAMER_ZIG");
@@ -32,6 +33,7 @@ fn main() {
     link_platform_dependencies(&target);
 }
 
+/// Returns the platform-specific filename for the Gossamer static library.
 fn static_library_name(target: &str) -> &'static str {
     if target.contains("windows") {
         "gossamer.lib"
@@ -40,6 +42,7 @@ fn static_library_name(target: &str) -> &'static str {
     }
 }
 
+/// Verifies that a prebuilt directory contains the target's static library.
 fn validate_prebuilt(library_dir: PathBuf, target: &str) -> PathBuf {
     let library = library_dir.join(static_library_name(target));
     if !library.is_file() {
@@ -52,6 +55,7 @@ fn validate_prebuilt(library_dir: PathBuf, target: &str) -> PathBuf {
     library_dir
 }
 
+/// Builds the native Gossamer library from source for a supported host target.
 fn build_from_source(target: &str) -> PathBuf {
     if !target.contains("linux") || target.contains("android") {
         panic!(
@@ -91,6 +95,7 @@ fn build_from_source(target: &str) -> PathBuf {
     validate_prebuilt(library_dir, target)
 }
 
+/// Ensures the configured Zig executable has the exact supported version.
 fn verify_zig_version(zig: &OsStr) {
     let version = Command::new(zig)
         .arg("version")
@@ -113,6 +118,7 @@ fn verify_zig_version(zig: &OsStr) {
     }
 }
 
+/// Compiles the Gossamer Zig sources into a static library for Rust linking.
 fn compile_native_library(zig: &OsString, source_dir: &Path, library_dir: &Path, target: &str) {
     let library = library_dir.join(static_library_name(target));
     let local_cache = library_dir.join("zig-cache");
@@ -155,6 +161,7 @@ fn compile_native_library(zig: &OsString, source_dir: &Path, library_dir: &Path,
     }
 }
 
+/// Emits the native linker directives required by the Cargo target platform.
 fn link_platform_dependencies(target: &str) {
     if target.contains("linux") && !target.contains("android") {
         link_pkg_config(&["gtk+-3.0", "webkit2gtk-4.1"]);
@@ -174,6 +181,7 @@ fn link_platform_dependencies(target: &str) {
     }
 }
 
+/// Translates pkg-config linker flags into Cargo linker directives.
 fn link_pkg_config(packages: &[&str]) {
     let output = pkg_config_output("--libs", packages);
     for flag in output.split_whitespace() {
@@ -187,6 +195,7 @@ fn link_pkg_config(packages: &[&str]) {
     }
 }
 
+/// Runs pkg-config in the requested mode and returns its UTF-8 output.
 fn pkg_config_output(mode: &str, packages: &[&str]) -> String {
     let output = Command::new("pkg-config")
         .arg(mode)
