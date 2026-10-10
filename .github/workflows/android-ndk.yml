@@ -66,7 +66,7 @@ jobs:
         run: bash scripts/android-apk.sh
 
       - name: Upload APK
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: gossamer-smoke-apk
           path: build/android/gossamer-smoke.apk
@@ -102,7 +102,7 @@ jobs:
 
       - name: Upload jniLibs
         if: success()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: gossamer-jnilibs
           path: android/gossamer-android-services/src/main/jniLibs/**/*.so
