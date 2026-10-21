@@ -284,7 +284,6 @@ transmit : {spec : TransportSpec} -> {a : spec.artifact} -> {c : spec.claim} ->
            View spec b.to a AsReceipt c
 transmit _ _ = ViewReceipt
 
-||| Expose a boolean result as a proof of False (Left) or True (Right).
 decideBool : (b : Bool) -> Either (b = False) (b = True)
 decideBool False = Left Refl
 decideBool True  = Right Refl

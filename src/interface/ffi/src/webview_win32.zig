@@ -1028,6 +1028,8 @@ const WebMessageHandler = extern struct {
         const payload_z = allocator.dupeZ(u8, payload) catch return S_OK;
         defer allocator.free(payload_z);
 
+        if (!callback.beginCall()) return S_OK;
+        defer callback.endCall();
         const response_ptr = callback.callback(payload_z, callback.user_data);
         if (@intFromPtr(response_ptr) == 0) {
             sendIPCError(handle, id, "Sync callback returned null");

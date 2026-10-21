@@ -501,6 +501,7 @@ const AsyncIPCContext = struct {
     callback: @import("main.zig").BindingCallback,
     /// User data to pass to the callback
     user_data: ?*anyopaque,
+    channel: ?*@import("main.zig").ChannelHandle,
     /// Inflight slot index for cleanup after completion
     inflight_slot: usize,
     /// Heap-copied response from the callback (allocated by worker, freed by idle callback)
@@ -639,12 +640,23 @@ fn onIPCMessage(
             .callback = entry.callback,
             .user_data = entry.user_data,
             .inflight_slot = slot,
+            .channel = entry.channel,
         };
+
+        // Reserve channel lifetime before spawning, including queued workers.
+        if (!entry.beginCall()) {
+            allocator.free(payload_duped);
+            allocator.free(id_duped);
+            allocator.destroy(ctx);
+            async_ipc.releaseSlot(slot);
+            return;
+        }
 
         // Spawn worker thread — the callback runs off the GTK main thread.
         // detach() so the OS reclaims the thread stack when the worker exits;
         // we never join (response arrives via g_idle_add instead).
         const t = std.Thread.spawn(.{}, asyncWorkerFn, .{ctx}) catch {
+            entry.endCall();
             allocator.free(payload_duped);
             allocator.free(id_duped);
             allocator.destroy(ctx);
@@ -669,6 +681,8 @@ fn onIPCMessage(
 
     // Invoke the callback with user data.
     // Guard against null returns: std.mem.span on a null sentinel pointer is UB.
+    if (!entry.beginCall()) return;
+    defer entry.endCall();
     const response_ptr = entry.callback(payload_z, entry.user_data);
     if (@intFromPtr(response_ptr) == 0) {
         sendIPCError(handle, id, "Sync callback returned null");
@@ -686,6 +700,9 @@ fn onIPCMessage(
 /// before the worker exits. Null responses and copy-allocation failures are
 /// reported by the idle callback as JavaScript errors.
 fn asyncWorkerFn(ctx: *AsyncIPCContext) void {
+    // Cleanup does not depend on the UI loop delivering the response.
+    const channel = ctx.channel;
+    defer if (channel) |ch| ch.endCall();
     // Invoke the callback — this can block (I/O, HTTP, DB queries, etc.)
     // without affecting the GTK event loop.
     const response_ptr = ctx.callback(ctx.payload_z, ctx.user_data);
