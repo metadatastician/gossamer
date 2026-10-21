@@ -33,6 +33,8 @@ extern fn gossamer_resize(handle: u64, width: u32, height: u32) c_int;
 extern fn gossamer_request_close(handle: u64) c_int;
 extern fn gossamer_set_title(handle: u64, title: [*:0]const u8) c_int;
 extern fn gossamer_guard_set(handle: u64, mode: c_int) c_int;
+extern fn gossamer_cap_check(token: u64) c_int;
+extern fn gossamer_cap_resource_kind(token: u64) u32;
 extern fn gossamer_cap_check(handle: u64, resource: [*:0]const u8, kind: c_int) c_int;
 extern fn gossamer_cap_resource_kind(name: [*:0]const u8) c_int;
 extern fn gossamer_guard_get(handle: u64) c_int;
@@ -99,12 +101,13 @@ fn isAllowedOpsmCommand(cmd: []const u8) bool {
 /// exit_code, normalized to 0 for successful exit and 1 for all other terminations.
 /// The result is borrowed; copy it before the next call on the same thread
 /// or before thread exit.
-fn shellExecHandler(payload: [*:0]const u8, _: ?*anyopaque) callconv(.c) [*:0]const u8 {
+fn shellExecHandler(payload: [*:0]const u8, user_data: ?*anyopaque) callconv(.c) [*:0]const u8 {
     const allocator = std.heap.c_allocator;
     const payload_slice = std.mem.span(payload);
 
-    const cap_kind = gossamer_cap_resource_kind("opsm_runtime");
-    if (gossamer_cap_check(0, "opsm_runtime", cap_kind) != 1) {
+    const token = if (user_data) |ud| @as(u64, @intFromPtr(ud)) else 0;
+    // Result.ok == 0; deny on null token, non-ok check result, or wrong resource kind.
+    if (token == 0 or gossamer_cap_check(token) != 0 or gossamer_cap_resource_kind(token) != 0) {
         return @ptrCast(@constCast("{\"error\":\"capability denied\"}"));
     }
 
