@@ -79,10 +79,12 @@ record HomOver {0 A, A', B : Type} (f : A -> B) (f' : A' -> B) where
   homMap     : A -> A'
   homCommute : (x : A) -> f' (homMap x) = f x
 
+||| Construct the identity morphism over the same target map.
 public export
 idHomOver : {0 A, B : Type} -> (f : A -> B) -> HomOver f f
 idHomOver _ = MkHomOver (\x => x) (\_ => Refl)
 
+||| Compose slice morphisms, applying `h` before `k` and preserving the target map.
 public export
 compHomOver :
      {0 A, A', A'', B : Type}
@@ -94,6 +96,7 @@ compHomOver k h = MkHomOver
   (\x => k.homMap (h.homMap x))
   (\x => trans (k.homCommute (h.homMap x)) (h.homCommute x))
 
+||| Transport a preimage and its equality witness along a slice morphism, keeping the fiber target.
 public export
 echoMap :
      {0 A, A', B : Type}
@@ -104,6 +107,7 @@ echoMap :
   -> Echo f' y
 echoMap h (MkEcho x p) = MkEcho (h.homMap x) (trans (h.homCommute x) p)
 
+||| Prove that transport along the identity slice morphism preserves the entire fiber witness.
 public export
 echoMapId :
      {0 A, B : Type}
@@ -113,6 +117,7 @@ echoMapId :
   -> echoMap (idHomOver f) e = e
 echoMapId (MkEcho _ _) = Refl
 
+||| Prove that transport along a composite agrees with successive fiber transports.
 public export
 echoMapCompose :
      {0 A, A', A'', B : Type}
@@ -147,6 +152,7 @@ record EchoR {0 b : Type} (c : Type) (certRel : c -> b -> Type) (y : b) where
   residue : c
   cert    : certRel residue y
 
+||| Replace a fiber preimage with its `kappa` residue and a `sound` certificate for the same target.
 public export
 echoToResidue :
      {0 a, b : Type} -> {0 c : Type} -> {0 certRel : c -> b -> Type}
@@ -228,10 +234,10 @@ applyRevoke True  False tok st =
 applyRevoke True  True  _   st = st
 applyRevoke False _     _   st = st
 
-||| Safe capability revocation: only appends `tok` to `revokedRing` if `tok`
-||| was genuinely active (and not already revoked). If `tok` is unknown or
-||| already revoked, the operation is a strict CNO — preventing an attacker
-||| from flooding the 1024-slot ring buffer with bogus revocations.
+||| Safe capability revocation: only prepends `tok` to `revokedRing` if `tok`
+||| was genuinely active (and not already revoked), removing it from `activeTokens`.
+||| If `tok` is unknown or already revoked, both lists are unchanged.
+||| This model does not impose a capacity limit on `revokedRing`.
 public export
 safeRevokeCap : Bits64 -> CapRevocationState -> CapRevocationState
 safeRevokeCap tok st =
@@ -302,14 +308,17 @@ public export
 isOND : {obsTy : Type} -> (Exec -> obsTy) -> Op -> Type
 isOND obs o = (s1, s2, pub : Nat) -> obs (runOp o s1 pub) = obs (runOp o s2 pub)
 
+||| Observe only the output, ignoring the execution time.
 public export
 obsOut : Exec -> Nat
 obsOut e = e.out
 
+||| Observe only the timing/step count, ignoring the output.
 public export
 obsTime : Exec -> Nat
 obsTime e = e.time
 
+||| Observe the output and timing/step count together.
 public export
 obsAll : Exec -> (Nat, Nat)
 obsAll e = (e.out, e.time)
@@ -362,6 +371,7 @@ public export
 ctCapCheckIsNull : isNullOp NullOps.ctCapCheck
 ctCapCheckIsNull _ _ _ = Refl
 
+||| Prove that varying the secret leaves both output and timing of `ctCapCheck` unchanged.
 public export
 ctCapCheckIsOND : isOND NullOps.obsAll NullOps.ctCapCheck
 ctCapCheckIsOND _ _ _ = Refl

@@ -286,8 +286,10 @@ fn scanAllPaths(state: *WatcherState) void {
     state.overflow_digest = state.scan_overflow_digest;
 }
 
-/// Scan all watched paths and return true if any file has changed (new,
-/// modified, or deleted).
+/// Scan watched paths recursively and update modification times and the overflow digest.
+/// Returns true for newly tracked files, changed tracked mtimes, or a changed
+/// digest of files beyond capacity. Deletions of individually tracked files
+/// are not detected; scan errors are skipped.
 fn scanForChanges(state: *WatcherState) bool {
     var any_changed = false;
     state.scan_overflow_digest = 0;
@@ -307,11 +309,11 @@ fn scanForChanges(state: *WatcherState) bool {
     return any_changed;
 }
 
-/// Scan a single directory (non-recursively) for files matching the watched
-/// extensions. In check mode, compares mtimes against tracked state.
-/// In populate mode (check=false), adds entries without checking.
-///
-/// Returns true if any change was detected (only meaningful when check=true).
+/// Scan a directory and its subdirectories for files matching the watched extensions.
+/// In check mode, update tracked mtimes and return true for new tracked files
+/// or changed mtimes. In populate mode, add entries and return false.
+/// Files beyond capacity contribute to scan_overflow_digest; its comparison
+/// is left to scanForChanges. Directory, iteration, and stat errors are skipped.
 fn scanDirectory(state: *WatcherState, path: []const u8, check: bool) bool {
     var dir = std.fs.cwd().openDir(path, .{ .iterate = true }) catch return false;
     defer dir.close();

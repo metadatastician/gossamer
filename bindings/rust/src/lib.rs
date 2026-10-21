@@ -211,7 +211,9 @@ thread_local! {
 
 /// The C-ABI trampoline called by Gossamer's IPC dispatcher.
 /// Receives the JSON payload string and the user_data pointer (a *CommandContext).
-/// Returns a thread-local, null-terminated JSON response that Zig copies immediately.
+/// Returns a borrowed, thread-local, null-terminated JSON response that Zig copies immediately.
+/// The pointer remains valid until the next call on the same thread or thread exit;
+/// the caller must not free it.
 /// Invalid payloads and serialization failures fall back to an empty JSON object;
 /// handler errors become JSON error objects.
 extern "C" fn command_trampoline(payload: *const c_char, user_data: *mut c_void) -> *const c_char {
@@ -734,7 +736,9 @@ impl App {
     }
 
     /// Run the webview event loop. Blocks until the window is closed.
-    /// Consumes the App — the window is destroyed after this returns.
+    /// Consumes the App — the window is destroyed before this returns and its IPC
+    /// channel is closed. Command contexts are freed only if no async IPC calls
+    /// remain in flight globally; otherwise they are retained for worker safety.
     pub fn run(mut self) {
         // SAFETY: handle is valid, event loop takes ownership and cleans up handle.
         unsafe { gossamer_run(self.handle) };
@@ -745,6 +749,9 @@ impl App {
 }
 
 impl Drop for App {
+    /// Close the IPC channel and destroy any window not already consumed by run().
+    /// Free command contexts only when the global async IPC count is zero;
+    /// otherwise retain them so detached workers can finish using them.
     fn drop(&mut self) {
         // Close IPC channel if still open
         if self.channel != 0 {

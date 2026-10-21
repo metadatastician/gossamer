@@ -152,12 +152,15 @@ cutLocal (Branch q x l k) (ContBranch a b) = Branch q x (cutLocal l a) (cutLocal
 -- 4. Endpoint Projection & Consistency (Choreographic/Projection.agda)
 --------------------------------------------------------------------------------
 
+||| Produce a send or receive for a participant; an outside party keeps the continuation unchanged.
 public export
 projMsg : {s, r : Party} -> Role p s r -> g -> Local g -> Local g
 projMsg {r} (Sender _)     x l = Send r x l
 projMsg {s} (Receiver _ _) x l = Recv s x l
 projMsg     (Outside _ _)  _ l = l
 
+||| Produce a selection or branch for a participant; an outside party takes the left projection.
+||| Equality of the outside projections is enforced separately by `Projectable`.
 public export
 projChoice : {s, r : Party} -> Role p s r -> g -> Local g -> Local g -> Local g
 projChoice {r} (Sender _)     x l k = Select r x l k
@@ -188,6 +191,7 @@ data Projectable : (p : Party) -> Global g -> Type where
             Projectable p l -> Projectable p k -> Merge p (role p s r) l k ->
             Projectable p (Choice s r x l k)
 
+||| Extend a local cut through a participating message; keep it unchanged for an outside party.
 public export
 cutprojMsg : {s, r : Party} -> {x : g} -> {l : Local g} ->
              (rho : Role p s r) -> LCut l -> LCut (projMsg rho x l)
@@ -195,6 +199,7 @@ cutprojMsg (Sender _)     c = ContSend c
 cutprojMsg (Receiver _ _) c = ContRecv c
 cutprojMsg (Outside _ _)  c = c
 
+||| Extend both branch cuts for a participant; use only the left cut for an outside party.
 public export
 cutprojChoice : {s, r : Party} -> {x : g} -> {l, k : Local g} ->
                 (rho : Role p s r) -> LCut l -> LCut k -> LCut (projChoice rho x l k)
@@ -314,16 +319,19 @@ kcutLossFull = gradeProj
 -- 6. K-6: Discharged at Groove's Three Operational Grades + Worked Broker
 --------------------------------------------------------------------------------
 
+||| Specialize K-CUT-LOSS to information-loss grades for a party-consistent frontier.
 public export
 kcutLossLoss : (p : Party) -> (gl : Global LossGrade) -> (c : Cut gl) -> Consistent p c ->
                gradeAt p (cutGlobal gl c) = lgrade (cutLocal (proj p gl) (cutproj p c))
 kcutLossLoss = kcutLoss
 
+||| Specialize K-CUT-LOSS to maximum latency grades for a party-consistent frontier.
 public export
 kcutLossMaxPlus : (p : Party) -> (gl : Global MaxPlusGrade) -> (c : Cut gl) -> Consistent p c ->
                   gradeAt p (cutGlobal gl c) = lgrade (cutLocal (proj p gl) (cutproj p c))
 kcutLossMaxPlus = kcutLoss
 
+||| Specialize K-CUT-LOSS to peak/drift occupancy grades for a party-consistent frontier.
 public export
 kcutLossHWM : (p : Party) -> (gl : Global HWMGrade) -> (c : Cut gl) -> Consistent p c ->
               gradeAt p (cutGlobal gl c) = lgrade (cutLocal (proj p gl) (cutproj p c))
@@ -352,6 +360,7 @@ grooveBrokerConsistent : ResourceAlgebra g => {a, b, c : g} ->
                          Consistent 1 (grooveBrokerCut {a} {b} {c})
 grooveBrokerConsistent = CMsg (CMsg (CChoice CStop CStop Refl))
 
+||| Prove that the broker at party 1 computes the same grade globally and locally at its frontier.
 public export
 grooveBrokerKCut : ResourceAlgebra g => (a, b, c : g) ->
                    gradeAt 1 (cutGlobal (grooveBrokerChoreo a b c) (grooveBrokerCut {a} {b} {c}))

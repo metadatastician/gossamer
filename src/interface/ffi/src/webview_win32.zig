@@ -965,6 +965,9 @@ const WebMessageHandler = extern struct {
     /// Called when JavaScript posts a message via chrome.webview.postMessage().
     /// Extracts the JSON message, parses {id, name, payload}, dispatches to
     /// the registered callback, and sends the response back via ExecuteScript.
+    /// Missing/unloaded handlers and null callback responses become JavaScript
+    /// errors. Malformed messages and payload allocation failures are dropped.
+    /// Returns S_OK even when dispatch fails.
     fn msgInvoke(_: *anyopaque, _: ?*anyopaque, args_raw: ?*anyopaque) callconv(.c) HRESULT {
         const handle = ipc_handle orelse return S_OK;
         const args = args_raw orelse return S_OK;
@@ -1042,6 +1045,8 @@ const WebMessageHandler = extern struct {
 //==============================================================================
 
 /// Send a success response back to the JavaScript IPC bridge.
+/// response must contain JSON text; the bridge parses it, resolves the callback
+/// identified by id, and removes it. Allocation/evaluation errors are ignored.
 fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8) void {
     const allocator = std.heap.c_allocator;
     const escaped_id = escapeForJS(allocator, id) catch return;
@@ -1059,6 +1064,8 @@ fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8
 }
 
 /// Send an error response back to the JavaScript IPC bridge.
+/// Reject the callback identified by id with the supplied message and remove it.
+/// Allocation/evaluation errors are ignored.
 fn sendIPCError(handle: *GossamerHandle, id: []const u8, msg_text: []const u8) void {
     const allocator = std.heap.c_allocator;
     const escaped_id = escapeForJS(allocator, id) catch return;

@@ -1335,6 +1335,9 @@ pub export fn gossamer_lower(handle_ptr: u64) Result {
 // Delivered via __gossamer_emit() in each target webview's JS context.
 
 /// Broadcast an event to all registered windows.
+/// Returns the number of open, initialized windows whose evaluation call succeeded.
+/// Invalid event names/JSON, oversized payloads, allocation failures, and
+/// evaluation errors skip delivery to the affected windows.
 pub export fn gossamer_broadcast(event_name: [*:0]const u8, payload_json: [*:0]const u8) u32 {
     registry_mutex.lock();
     defer registry_mutex.unlock();
@@ -1357,6 +1360,10 @@ pub export fn gossamer_broadcast(event_name: [*:0]const u8, payload_json: [*:0]c
 }
 
 /// Send an event to a specific window by its registry ID.
+/// Returns invalid_param for a missing target or a failed emission (including
+/// invalid/oversized input, allocation failure, or evaluation failure),
+/// error for a closed/uninitialized target, and ok when evaluation succeeds.
+/// Failures set gossamer_last_error; ok does not confirm JavaScript handled the event.
 pub export fn gossamer_send_to(target_id: u32, event_name: [*:0]const u8, payload_json: [*:0]const u8) Result {
     clearError();
     registry_mutex.lock();
@@ -1383,7 +1390,10 @@ pub export fn gossamer_send_to(target_id: u32, event_name: [*:0]const u8, payloa
 /// Helper: inject a __gossamer_emit call into a handle's webview.
 /// Validates `event` and `payload` (must be valid JSON), embeds `payload`
 /// as an escaped JS string literal parsed via `JSON.parse(...)`, and returns
-/// `true` iff the event was delivered.
+/// true when platform evaluation succeeds, without confirming a JavaScript listener ran.
+/// Rejects empty event names or names containing single quotes, backslashes,
+/// newlines, carriage returns, or null bytes. Returns false for invalid JSON,
+/// allocation/evaluation failures, or input exceeding the bounded script buffers.
 fn emitToHandle(handle: *GossamerHandle, event: []const u8, payload: []const u8) bool {
     if (event.len == 0) return false;
     // Reject event names containing JS string-breaking characters.
@@ -3273,6 +3283,9 @@ pub export fn gossamer_free(ptr: ?*anyopaque) void {
 }
 
 /// Revoke a capability token. Consumes it — future checks will fail.
+/// Zero is ignored. Tokens already in the bounded revocation history are not
+/// recorded again; other nonzero tokens, including unknown ones, are recorded.
+/// A full history evicts its oldest entry. Clears the thread-local last error.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__capRevoke
 pub export fn gossamer_cap_revoke(token: u64) void {
@@ -3509,7 +3522,10 @@ fn u64FromPtr(ptr: anytype) u64 {
     return @intCast(@intFromPtr(ptr));
 }
 
-/// Clean up a GossamerHandle and free all resources.
+/// Unregister and destroy an initialized handle, clear its tray association,
+/// shut down its voice host, and free its bindings and handle allocation.
+/// Returns immediately for an uninitialized handle; an initialized handle
+/// must not be used after this call.
 fn cleanup(handle: *GossamerHandle) void {
     if (!handle.initialized) return;
 

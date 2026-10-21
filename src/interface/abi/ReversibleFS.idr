@@ -61,7 +61,8 @@ record ValidPath where
   noNulls     : So (hasNoNullChars (unpack pathStr))
   noTraversal : So (hasNoDotDot (unpack pathStr))
 
-||| Runtime check constructing a `ValidPath` when all three invariants hold.
+||| Return `Just` a validated path when it is non-empty and contains neither null
+||| characters nor any `..` substring; otherwise return `Nothing`. Relative paths are allowed.
 public export
 validatePath : (s : String) -> Maybe ValidPath
 validatePath s with (choose (isNonEmptyChars (unpack s)), choose (hasNoNullChars (unpack s)), choose (hasNoDotDot (unpack s)))
@@ -187,10 +188,12 @@ record ReversiblePair (stType : Type) where
   unwrap  : stType -> stType
   cancels : (st : stType) -> unwrap (wrap st) = st
 
+||| Turn the forward operation of a reversible pair into a step annotated with zero loss.
 public export
 wrapStep : ReversiblePair s -> Step s
 wrapStep p = MkStep p.wrap (Finite 0)
 
+||| Turn the rollback operation of a reversible pair into a step annotated with zero loss.
 public export
 unwrapStep : ReversiblePair s -> Step s
 unwrapStep p = MkStep p.unwrap (Finite 0)
@@ -262,6 +265,7 @@ data ContainedIn : (required : CapabilitySet) -> (declared : CapabilitySet) -> T
                   Elem c declared -> ContainedIn restReq declared ->
                   ContainedIn (c :: restReq) declared
 
+||| Preserve containment when an additional capability is added to the declared set.
 public export
 weakenContained : {x : CapabilityName} -> {cs, xs : CapabilitySet} ->
                   ContainedIn cs xs -> ContainedIn cs (x :: xs)
@@ -273,6 +277,7 @@ containedRefl : (cs : CapabilitySet) -> ContainedIn cs cs
 containedRefl []        = ContainedNil
 containedRefl (x :: xs) = ContainedCons Here (weakenContained (containedRefl xs))
 
+||| Transport a capability membership witness through a containment proof.
 public export
 elemContained : {c : CapabilityName} -> {ys, zs : CapabilitySet} ->
                 Elem c ys -> ContainedIn ys zs -> Elem c zs

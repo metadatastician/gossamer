@@ -34,14 +34,17 @@ fn clearError() void {
 
 /// Announce a message to screen readers via ARIA live region.
 /// Creates or updates an ARIA live region element and sets its text content.
-/// The message will be read aloud by screen readers.
+/// Screen readers may announce the updated text according to their settings.
+/// Politeness is applied only when the region is first created.
+/// Long message/politeness inputs are truncated to fit the escape buffers.
 ///
 /// Parameters:
 ///   handle_ptr - The GossamerHandle pointer (as u64)
 ///   message - The message to announce
 ///   politeness - "polite" or "assertive" (controls interruption behavior)
 ///
-/// Returns Result.ok on success, error code on failure.
+/// Returns null_pointer for a zero handle; otherwise propagates gossamer_eval
+/// results. ok means evaluation was submitted, without confirming an announcement.
 pub export fn gossamer_a11y_announce(handle_ptr: u64, message: [*:0]const u8, politeness: [*:0]const u8) Result {
     if (main.ptrFromU64(handle_ptr) == null) {
         setError("Accessibility announce: null handle");
@@ -185,6 +188,9 @@ pub export fn gossamer_a11y_announce(handle_ptr: u64, message: [*:0]const u8, po
 
 /// Set the ARIA live region politeness mode.
 /// Politeness can be "polite" (waits for user idle) or "assertive" (interrupts immediately).
+/// Updates an existing region only; does not create one or validate the mode.
+/// Long input is truncated. Returns null_pointer for a zero handle and otherwise
+/// propagates gossamer_eval results; ok does not confirm a region was present.
 pub export fn gossamer_a11y_set_politeness(handle_ptr: u64, politeness: [*:0]const u8) Result {
     if (main.ptrFromU64(handle_ptr) == null) {
         setError("Accessibility set politeness: null handle");
@@ -272,6 +278,9 @@ pub export fn gossamer_a11y_set_politeness(handle_ptr: u64, politeness: [*:0]con
 
 /// Set focus to a specific element by CSS selector.
 /// Useful for keyboard navigation and accessibility.
+/// Uses the first matching element; a missing element leaves focus unchanged.
+/// Long selectors are truncated. Returns null_pointer for a zero handle and
+/// otherwise propagates gossamer_eval results; ok does not confirm focus changed.
 pub export fn gossamer_a11y_focus(handle_ptr: u64, selector: [*:0]const u8) Result {
     if (main.ptrFromU64(handle_ptr) == null) {
         setError("Accessibility focus: null handle");
