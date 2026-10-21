@@ -21,7 +21,6 @@ import Data.Nat
 import Data.List
 import Data.List.Elem
 import Data.So
-import Data.String
 import Gossamer.ABI.Types
 import Gossamer.ABI.ResourceAlgebra
 
@@ -31,22 +30,41 @@ import Gossamer.ABI.ResourceAlgebra
 -- 1. Validated Paths & Traversal-Free Bundler IDs (januskey ValidPath)
 --------------------------------------------------------------------------------
 
+||| Structurally recursive check that a character list is non-empty.
+public export
+isNonEmptyChars : List Char -> Bool
+isNonEmptyChars []      = False
+isNonEmptyChars (_ :: _) = True
+
+||| Structurally recursive check that a character list contains no null byte (`'\0'`).
+public export
+hasNoNullChars : List Char -> Bool
+hasNoNullChars []        = True
+hasNoNullChars (c :: cs) = (c /= '\0') && hasNoNullChars cs
+
+||| Structurally recursive check that a character list contains no `".."` substring.
+public export
+hasNoDotDot : List Char -> Bool
+hasNoDotDot []                = True
+hasNoDotDot ('.' :: '.' :: _) = False
+hasNoDotDot (_ :: cs)         = hasNoDotDot cs
+
 ||| A validated filesystem path or bundle identifier:
-||| 1. Non-empty (`length pathStr > 0`)
-||| 2. Free of null bytes (`not (isInfixOf "\0" pathStr)`)
-||| 3. Free of parent-directory traversal (`not (isInfixOf ".." pathStr)`)
+||| 1. Non-empty (`isNonEmptyChars (unpack pathStr)`)
+||| 2. Free of null bytes (`hasNoNullChars (unpack pathStr)`)
+||| 3. Free of parent-directory traversal (`hasNoDotDot (unpack pathStr)`)
 public export
 record ValidPath where
   constructor MkValidPath
   pathStr     : String
-  nonEmpty    : So (length pathStr > 0)
-  noNulls     : So (not (isInfixOf "\0" pathStr))
-  noTraversal : So (not (isInfixOf ".." pathStr))
+  nonEmpty    : So (isNonEmptyChars (unpack pathStr))
+  noNulls     : So (hasNoNullChars (unpack pathStr))
+  noTraversal : So (hasNoDotDot (unpack pathStr))
 
 ||| Runtime check constructing a `ValidPath` when all three invariants hold.
 public export
 validatePath : (s : String) -> Maybe ValidPath
-validatePath s with (choose (length s > 0), choose (not (isInfixOf "\0" s)), choose (not (isInfixOf ".." s)))
+validatePath s with (choose (isNonEmptyChars (unpack s)), choose (hasNoNullChars (unpack s)), choose (hasNoDotDot (unpack s)))
   _ | (Left ne, Left nn, Left nt) = Just (MkValidPath s ne nn nt)
   _ | _                           = Nothing
 

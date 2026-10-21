@@ -291,7 +291,7 @@ pub export fn gossamer_updater_configure(handle_ptr: u64, source_type: u32, para
         return .null_pointer;
     }
 
-    const validated_type: UpdateSource.SourceType = switch (source_type) {
+    const validated_type: UpdateSourceType = switch (source_type) {
         0 => .http_json,
         1 => .github_releases,
         2 => .local_file,

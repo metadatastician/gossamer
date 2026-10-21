@@ -1390,19 +1390,55 @@ fn emitToHandle(handle: *GossamerHandle, event: []const u8, payload: []const u8)
     var escaped_buf: [3584]u8 = undefined;
     var esc_len: usize = 0;
     for (payload) |ch| {
-        const seq: []const u8 = switch (ch) {
-            '\\' => "\\\\",
-            '"' => "\\\"",
-            '\n' => "\\n",
-            '\r' => "\\r",
-            '\t' => "\\t",
-            0x08 => "\\b",
-            0x0C => "\\f",
-            else => if (ch < 0x20) return false else &[_]u8{ch},
-        };
-        if (esc_len + seq.len > escaped_buf.len) return false;
-        @memcpy(escaped_buf[esc_len .. esc_len + seq.len], seq);
-        esc_len += seq.len;
+        switch (ch) {
+            '\\' => {
+                if (esc_len + 2 > escaped_buf.len) return false;
+                escaped_buf[esc_len] = '\\';
+                escaped_buf[esc_len + 1] = '\\';
+                esc_len += 2;
+            },
+            '"' => {
+                if (esc_len + 2 > escaped_buf.len) return false;
+                escaped_buf[esc_len] = '\\';
+                escaped_buf[esc_len + 1] = '"';
+                esc_len += 2;
+            },
+            '\n' => {
+                if (esc_len + 2 > escaped_buf.len) return false;
+                escaped_buf[esc_len] = '\\';
+                escaped_buf[esc_len + 1] = 'n';
+                esc_len += 2;
+            },
+            '\r' => {
+                if (esc_len + 2 > escaped_buf.len) return false;
+                escaped_buf[esc_len] = '\\';
+                escaped_buf[esc_len + 1] = 'r';
+                esc_len += 2;
+            },
+            '\t' => {
+                if (esc_len + 2 > escaped_buf.len) return false;
+                escaped_buf[esc_len] = '\\';
+                escaped_buf[esc_len + 1] = 't';
+                esc_len += 2;
+            },
+            0x08 => {
+                if (esc_len + 2 > escaped_buf.len) return false;
+                escaped_buf[esc_len] = '\\';
+                escaped_buf[esc_len + 1] = 'b';
+                esc_len += 2;
+            },
+            0x0C => {
+                if (esc_len + 2 > escaped_buf.len) return false;
+                escaped_buf[esc_len] = '\\';
+                escaped_buf[esc_len + 1] = 'f';
+                esc_len += 2;
+            },
+            else => {
+                if (ch < 0x20 or esc_len + 1 > escaped_buf.len) return false;
+                escaped_buf[esc_len] = ch;
+                esc_len += 1;
+            },
+        }
     }
     const escaped_payload = escaped_buf[0..esc_len];
     // Build: window.__gossamer_emit&&window.__gossamer_emit('event',JSON.parse("..."));

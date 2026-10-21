@@ -283,6 +283,10 @@ transmit : {spec : TransportSpec} -> {a : spec.Artifact} -> {c : spec.Claim} ->
            View spec b.to a AsReceipt c
 transmit _ _ = ViewReceipt
 
+decideBool : (b : Bool) -> Either (b = False) (b = True)
+decideBool False = Left Refl
+decideBool True  = Right Refl
+
 ||| Verify certifying evidence with a local checker to upgrade `AsData` to `AsProof`.
 public export
 verifyCertifying : {spec : TransportSpec} -> {holder : Standpoint} ->
@@ -291,9 +295,10 @@ verifyCertifying : {spec : TransportSpec} -> {holder : Standpoint} ->
                    (ck : Checker spec holder m a c) ->
                    (ev : Evidence spec m a c) ->
                    Either Gap (View spec holder a AsProof c)
-verifyCertifying cert ck ev with (runChecker ck ev) proof accepted
-  _ | True  = Right (ForgetMode (ViewProofUnder cert ck ev accepted))
-  _ | False = Left InvalidEvidence
+verifyCertifying cert ck ev =
+  case decideBool (runChecker ck ev) of
+    Right ok => Right (ForgetMode (ViewProofUnder cert ck ev ok))
+    Left  _  => Left InvalidEvidence
 
 ||| Verify evidence at `holder`. `ReceiptCheck` always fails with `Left OpaqueGap`.
 public export
@@ -336,8 +341,8 @@ proofHasSuccessfulCheck :
      View spec holder a AsProof c ->
      (m : Mode ** (ck : Checker spec holder m a c ** (ev : Evidence spec m a c **
        runChecker ck ev = True)))
-proofHasSuccessfulCheck (ForgetMode (ViewProofUnder _ ck ev ok)) =
-  (_ ** (ck ** (ev ** ok)))
+proofHasSuccessfulCheck (ForgetMode (ViewProofUnder {m} _ ck ev ok)) =
+  (m ** (ck ** (ev ** ok)))
 
 --------------------------------------------------------------------------------
 -- 3. Read-Consistency & Cache Freshness (epistemic-types ReadConsistency / Epistemic.idr)

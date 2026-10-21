@@ -29,10 +29,12 @@ import Gossamer.ABI.Types
 -- 1. The Parametric Resource Algebra Kernel
 --------------------------------------------------------------------------------
 
+%auto_implicits off
+
 ||| A grade algebra: alternatives form an idempotent commutative monoid
 ||| (`oplus`, `zeroG`); sequence forms a monoid (`otimes`, `oneG`).
 public export
-interface ResourceAlgebra g where
+interface ResourceAlgebra (0 g : Type) where
   ||| Alternatives (⊕).
   oplus    : g -> g -> g
   ||| Sequence (⊗).
@@ -53,13 +55,27 @@ interface ResourceAlgebra g where
 
 ||| Right unit of alternatives (`IsAltMonoid.unitʳ`).
 public export
-altUnitR : ResourceAlgebra g => (a : g) -> oplus a (zeroG {g}) = a
+altUnitR : {0 g : Type} -> ResourceAlgebra g => (a : g) -> oplus a zeroG = a
 altUnitR a = trans (altComm a zeroG) (altUnitL a)
 
 ||| The induced order: `a ≼ b` when `b` absorbs `a` under `oplus`.
 public export
-LeG : ResourceAlgebra g => g -> g -> Type
+LeG : {0 g : Type} -> ResourceAlgebra g => g -> g -> Type
 LeG a b = oplus a b = b
+
+||| `zeroG` is least in the induced order.
+public export
+zeroLeast : {0 g : Type} -> ResourceAlgebra g => (a : g) -> LeG zeroG a
+zeroLeast a = altUnitL a
+
+||| Annihilating resource algebra: `zeroG` absorbs under `otimes`.
+||| Separate from `IsDioid` because `HWMGrade` is a dioid with `zeroG = oneG`.
+public export
+interface ResourceAlgebra g => IsAnnihilating (0 g : Type) where
+  annihilL : (a : g) -> otimes zeroG a = zeroG
+  annihilR : (a : g) -> otimes a zeroG = zeroG
+
+%auto_implicits on
 
 ||| Reflexivity of `LeG`.
 public export
@@ -78,11 +94,6 @@ leTrans {a} {b} {c} p q =
 public export
 leAntisym : ResourceAlgebra g => {a, b : g} -> LeG a b -> LeG b a -> a = b
 leAntisym {a} {b} p q = trans (sym q) (trans (altComm b a) p)
-
-||| `zeroG` is least in the induced order.
-public export
-zeroLeast : ResourceAlgebra g => (a : g) -> LeG (zeroG {g}) a
-zeroLeast a = altUnitL a
 
 ||| Left upper-bound law for `oplus`.
 public export
@@ -145,19 +156,6 @@ dioidMonoL c {a} {b} p = trans (sym (distribL c a b)) (cong (otimes c) p)
 public export
 dioidMonoR : IsDioid g => (c : g) -> {a, b : g} -> LeG a b -> LeG (otimes a c) (otimes b c)
 dioidMonoR c {a} {b} p = trans (sym (distribR a b c)) (cong (\x => otimes x c) p)
-
-||| Every dioid is ordered.
-public export
-[dioidOrdered] IsDioid g => IsOrdered g where
-  otimesMonoL = dioidMonoL
-  otimesMonoR = dioidMonoR
-
-||| Annihilating resource algebra: `zeroG` absorbs under `otimes`.
-||| Separate from `IsDioid` because `HWMGrade` is a dioid with `zeroG = oneG`.
-public export
-interface ResourceAlgebra g => IsAnnihilating g where
-  annihilL : (a : g) -> otimes (zeroG {g}) a = zeroG {g}
-  annihilR : (a : g) -> otimes a (zeroG {g}) = zeroG {g}
 
 --------------------------------------------------------------------------------
 -- 2. Self-Contained Arithmetic & Order Lemmas on Nat
@@ -269,14 +267,23 @@ maxRightUpperBound (S m) Z     = LTEZero
 maxRightUpperBound (S m) (S n) = LTESucc (maxRightUpperBound m n)
 
 public export
+lteSuccR : (n : Nat) -> LTE n (S n)
+lteSuccR Z     = LTEZero
+lteSuccR (S n) = LTESucc (lteSuccR n)
+
+public export
 lteAddRightNat : (m, n : Nat) -> LTE m (m + n)
 lteAddRightNat Z     n = LTEZero
 lteAddRightNat (S m) n = LTESucc (lteAddRightNat m n)
 
 public export
+lteAddLeftNat : (b, c : Nat) -> LTE c (b + c)
+lteAddLeftNat Z     c = lteRefl c
+lteAddLeftNat (S b) c = lteTrans (lteAddLeftNat b c) (lteSuccR (b + c))
+
+public export
 plusLteMonoR : (c, a, b : Nat) -> LTE a b -> LTE (a + c) (b + c)
-plusLteMonoR c Z     b     LTEZero     =
-  rewrite plusComm b c in lteAddRightNat c b
+plusLteMonoR c Z     b     LTEZero     = lteAddLeftNat b c
 plusLteMonoR c (S a) (S b) (LTESucc p) = LTESucc (plusLteMonoR c a b p)
 
 public export
@@ -325,9 +332,9 @@ plusDistribRMax a b c =
 public export
 maxMonoLTE : {a, a', b, b' : Nat} -> LTE a a' -> LTE b b' ->
              LTE (maximum a b) (maximum a' b')
-maxMonoLTE {a' = a'}            LTEZero     q       =
-  lteTrans q (maxRightUpperBound a' _)
-maxMonoLTE {a' = S k} {b' = b'} (LTESucc p) LTEZero =
+maxMonoLTE {a' = a'} {b' = b'}  LTEZero     q          =
+  lteTrans q (maxRightUpperBound a' b')
+maxMonoLTE {a' = S k} {b' = b'} (LTESucc p) LTEZero    =
   lteTrans (LTESucc p) (maxLeftUpperBound (S k) b')
 maxMonoLTE                      (LTESucc p) (LTESucc q) = LTESucc (maxMonoLTE p q)
 
@@ -787,7 +794,7 @@ Show HWMGrade where
 public export
 hwmEq : {p, p', n, n' : Nat} -> {b : LTE n p} -> {b' : LTE n' p'} ->
         p = p' -> n = n' -> MkHWM p n b = MkHWM p' n' b'
-hwmEq {b} {b'} Refl Refl = cong (MkHWM _ _) (lteIrrelevant b b')
+hwmEq {p} {n} {b} {b'} Refl Refl = cong (MkHWM p n) (lteIrrelevant b b')
 
 ||| Sequence: phase `b` starts from phase `a`'s `drift`, not its `peak`.
 public export
@@ -821,8 +828,10 @@ public export
 hwmAltIdem : (a : HWMGrade) -> hwmAlt a a = a
 hwmAltIdem (MkHWM p n _) = hwmEq (maxIdem p) (maxIdem n)
 
+%auto_implicits off
+
 public export
-hwmAltUnitL : (a : HWMGrade) -> hwmAlt ResourceAlgebra.hwmZero a = a
+hwmAltUnitL : (a : HWMGrade) -> hwmAlt hwmZero a = a
 hwmAltUnitL (MkHWM p n _) = hwmEq Refl Refl
 
 public export
@@ -835,14 +844,16 @@ hwmSeqAssoc (MkHWM p1 n1 _) (MkHWM p2 n2 _) (MkHWM p3 n3 _) =
     (plusAssoc n1 n2 n3)
 
 public export
-hwmSeqUnitL : (a : HWMGrade) -> hwmSeq ResourceAlgebra.hwmZero a = a
+hwmSeqUnitL : (a : HWMGrade) -> hwmSeq hwmZero a = a
 hwmSeqUnitL (MkHWM p n _) = hwmEq Refl Refl
 
 public export
-hwmSeqUnitR : (a : HWMGrade) -> hwmSeq a ResourceAlgebra.hwmZero = a
+hwmSeqUnitR : (a : HWMGrade) -> hwmSeq a hwmZero = a
 hwmSeqUnitR (MkHWM p n b) =
   hwmEq (trans (cong (maximum p) (plusZeroR n)) (maxAbsorbLTE b))
         (plusZeroR n)
+
+%auto_implicits on
 
 public export
 ResourceAlgebra HWMGrade where
@@ -890,8 +901,8 @@ IsOrdered HWMGrade where
 
 private
 ltPlusPositive : (m : Nat) -> {n : Nat} -> LT 0 n -> LT m (m + n)
-ltPlusPositive m {n = S k} _ =
-  rewrite sym (plusSuccR m k) in LTESucc (lteAddRightNat m k)
+ltPlusPositive Z     {n = S k} (LTESucc _) = LTESucc LTEZero
+ltPlusPositive (S m) {n = S k} (LTESucc p) = LTESucc (ltPlusPositive m (LTESucc p))
 
 ||| Grade of a multi-phase timeline in any `ResourceAlgebra`.
 public export
@@ -920,13 +931,16 @@ occupancyLeCost : (a, b : HWMGrade) -> LTE (peak (hwmSeq a b)) (peak a + peak b)
 occupancyLeCost (MkHWM p1 n1 b1) (MkHWM p2 n2 b2) =
   maxLub (lteAddRightNat p1 p2) (plusLteMonoR p2 n1 p1 b1)
 
+private
+noReclaimAux : (p, n, p2 : Nat) -> p = n -> maximum p (n + p2) = p + p2
+noReclaimAux p p p2 Refl =
+  trans (maxComm p (p + p2)) (maxAbsorbLTE (lteAddRightNat p p2))
+
 ||| R-4a (`no-reclaim`): When `peak a = drift a`, nothing is reclaimed and occupancy = cost.
 public export
 noReclaim : (a : HWMGrade) -> peak a = drift a -> (c : HWMGrade) ->
             peak (hwmSeq a c) = peak a + peak c
-noReclaim (MkHWM p n b) eq (MkHWM p2 n2 b2) =
-  rewrite sym eq in
-  trans (maxComm p (p + p2)) (maxAbsorbLTE (lteAddRightNat p p2))
+noReclaim (MkHWM p n _) eq (MkHWM p2 _ _) = noReclaimAux p n p2 eq
 
 ||| R-4b (`reclaimed`): When `drift a < peak a` and `0 < peak c`, occupancy is strictly below cost.
 public export
@@ -974,9 +988,11 @@ private
 twoNotThree : Not (the Nat 2 = 3)
 twoNotThree Refl impossible
 
+%auto_implicits off
+
 ||| S-1: Occupancy is not cost (peaks 2 and 3 with 0 drift have peak 3, cost 5).
 public export
-occupancyIsNotCost : Not (peak (hwmSeq ResourceAlgebra.hwmTwo ResourceAlgebra.hwmThree) = 5)
+occupancyIsNotCost : Not (peak (hwmSeq hwmTwo hwmThree) = 5)
 occupancyIsNotCost = threeNotFive
 
 ||| S-2: Loss alternatives pick `min` (2), whereas MaxPlus alternatives pick `max` (3).
@@ -1034,3 +1050,5 @@ midLeHigh = Refl
 public export
 highLeRealtime : LeG (activityBudget High) (activityBudget Realtime)
 highLeRealtime = Refl
+
+%auto_implicits on

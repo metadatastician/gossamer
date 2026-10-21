@@ -155,8 +155,8 @@ echoToResidue :
   -> (sound : (x : A) -> Cert (kappa x) (f x))
   -> {0 y : B}
   -> Echo f y -> EchoR C Cert y
-echoToResidue f kappa sound (MkEcho x pf) =
-  MkEchoR (kappa x) (replace {p = \v => Cert (kappa x) v} pf (sound x))
+echoToResidue f kappa sound (MkEcho x Refl) =
+  MkEchoR (kappa x) (sound x)
 
 --------------------------------------------------------------------------------
 -- 2. Pillar 1 of Absolute Zero: Certified Null Operations (CNO) & Echo Bridge
@@ -220,6 +220,14 @@ record CapRevocationState where
   activeTokens : List Bits64
   revokedRing  : List Bits64
 
+||| Helper dispatching capability revocation on `(isActive, isAlreadyRevoked)`.
+public export
+applyRevoke : Bool -> Bool -> Bits64 -> CapRevocationState -> CapRevocationState
+applyRevoke True  False tok st =
+  MkCapRevState (filter (/= tok) st.activeTokens) (tok :: st.revokedRing)
+applyRevoke True  True  _   st = st
+applyRevoke False _     _   st = st
+
 ||| Safe capability revocation: only appends `tok` to `revokedRing` if `tok`
 ||| was genuinely active (and not already revoked). If `tok` is unknown or
 ||| already revoked, the operation is a strict CNO — preventing an attacker
@@ -227,9 +235,7 @@ record CapRevocationState where
 public export
 safeRevokeCap : Bits64 -> CapRevocationState -> CapRevocationState
 safeRevokeCap tok st =
-  if elem tok st.activeTokens && not (elem tok st.revokedRing)
-    then MkCapRevState (filter (/= tok) st.activeTokens) (tok :: st.revokedRing)
-    else st
+  applyRevoke (elem tok st.activeTokens) (elem tok st.revokedRing) tok st
 
 ||| Theorem: Revoking a token that is not active (`elem tok activeTokens = False`)
 ||| is a Certified Null Operation (`IsCNO`) — the revocation ring buffer is
@@ -239,7 +245,13 @@ revokeInactiveIsCNO : (tok : Bits64) -> (st : CapRevocationState) ->
                       elem tok st.activeTokens = False ->
                       safeRevokeCap tok st = st
 revokeInactiveIsCNO tok st notActive =
-  rewrite notActive in Refl
+  cong (\b => applyRevoke b (elem tok st.revokedRing) tok st) notActive
+
+private
+applyRevokeAlready : (active : Bool) -> (tok : Bits64) -> (st : CapRevocationState) ->
+                     applyRevoke active True tok st = st
+applyRevokeAlready True  _ _ = Refl
+applyRevokeAlready False _ _ = Refl
 
 ||| Theorem: Revoking a token that is already recorded in `revokedRing`
 ||| (`elem tok revokedRing = True`) is also a Certified Null Operation (`IsCNO`).
@@ -247,9 +259,9 @@ public export
 revokeAlreadyRevokedIsCNO : (tok : Bits64) -> (st : CapRevocationState) ->
                             elem tok st.revokedRing = True ->
                             safeRevokeCap tok st = st
-revokeAlreadyRevokedIsCNO tok st alreadyRevoked with (elem tok st.activeTokens)
-  _ | False = Refl
-  _ | True  = rewrite alreadyRevoked in Refl
+revokeAlreadyRevokedIsCNO tok st alreadyRevoked =
+  trans (cong (\r => applyRevoke (elem tok st.activeTokens) r tok st) alreadyRevoked)
+        (applyRevokeAlready (elem tok st.activeTokens) tok st)
 
 --------------------------------------------------------------------------------
 -- 4. Pillar 2 of Absolute Zero: Observational Null Disclosure (OND) & OND-3
@@ -324,14 +336,16 @@ public export
 ctCapCheck : Op
 ctCapCheck = MkOp (\_, _, cell => cell) (\_, _ => 1)
 
+%auto_implicits off
+
 ||| OND-2: `skipOp` is OND under ANY observation model.
 public export
-skipIsOND : {0 Obs : Type} -> (obs : Exec -> Obs) -> isOND obs NullOps.skipOp
+skipIsOND : {0 Obs : Type} -> (obs : Exec -> Obs) -> isOND obs skipOp
 skipIsOND _ _ _ _ = Refl
 
 ||| OND-3a: `leakyCapCheck` is a state CNO (`isNullOp`).
 public export
-leakyCnoIsNull : isNullOp NullOps.leakyCapCheck
+leakyCnoIsNull : isNullOp leakyCapCheck
 leakyCnoIsNull _ _ _ = Refl
 
 private
@@ -341,15 +355,17 @@ zeroNotOne Refl impossible
 ||| OND-3b (`CNO ⊥ OND` independence): Even though `leakyCapCheck` is a state
 ||| CNO, it violates OND under timing observation (`obsTime`).
 public export
-leakyCnoNotOndTime : Not (isOND NullOps.obsTime NullOps.leakyCapCheck)
+leakyCnoNotOndTime : Not (isOND obsTime leakyCapCheck)
 leakyCnoNotOndTime h = zeroNotOne (h 0 1 0)
 
 ||| Constant-time capability check (`ctCapCheck`) is both a state CNO and
 ||| satisfies full `isOND obsAll` (output + timing).
 public export
-ctCapCheckIsNull : isNullOp NullOps.ctCapCheck
+ctCapCheckIsNull : isNullOp ctCapCheck
 ctCapCheckIsNull _ _ _ = Refl
 
 public export
-ctCapCheckIsOND : isOND NullOps.obsAll NullOps.ctCapCheck
+ctCapCheckIsOND : isOND obsAll ctCapCheck
 ctCapCheckIsOND _ _ _ = Refl
+
+%auto_implicits on
