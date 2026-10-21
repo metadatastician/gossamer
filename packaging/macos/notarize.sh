@@ -49,12 +49,19 @@ readonly LIB_BINARY="${DIST_DIR}/libgossamer.dylib"
 readonly PKG_FILE="${DIST_DIR}/gossamer-${VERSION}.pkg"
 DMG_FILE="${DIST_DIR}/gossamer-${VERSION}-universal.dmg"
 if [ ! -f "${DMG_FILE}" ]; then
+    DMG_CANDIDATES=()
     for candidate in "${DIST_DIR}/gossamer-${VERSION}"-*.dmg; do
         if [ -f "${candidate}" ]; then
-            DMG_FILE="${candidate}"
-            break
+            DMG_CANDIDATES+=("${candidate}")
         fi
     done
+    if [ "${#DMG_CANDIDATES[@]}" -eq 1 ]; then
+        DMG_FILE="${DMG_CANDIDATES[0]}"
+    elif [ "${#DMG_CANDIDATES[@]}" -gt 1 ]; then
+        printf '[notarize.sh] ERROR: Multiple version-matched DMGs found without %s: %s\n' \
+            "${DMG_FILE}" "${DMG_CANDIDATES[*]}" >&2
+        exit 1
+    fi
 fi
 readonly DMG_FILE
 

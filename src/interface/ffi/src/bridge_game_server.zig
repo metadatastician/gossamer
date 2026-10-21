@@ -847,7 +847,7 @@ fn autoInferSchema(allocator: std.mem.Allocator, pairs_json: []const u8) i64 {
         if (!first) result.appendSlice(allocator, ",") catch return 0;
         first = false;
 
-        if (std.mem.indexOf(u8, obj_slice, "\"type\":\"") != null) {
+        if (hasJsonProperty(obj_slice, "\"type\"")) {
             result.appendSlice(allocator, obj_slice) catch return 0;
         } else {
             const entry = std.fmt.allocPrint(
@@ -869,6 +869,19 @@ fn autoInferSchema(allocator: std.mem.Allocator, pairs_json: []const u8) i64 {
 //==============================================================================
 // Helpers
 //==============================================================================
+
+/// Return true when `obj_slice` contains `quoted_key` followed by optional
+/// JSON whitespace and `:` (e.g. `"type":"int"` or `"type" : "enum"`).
+fn hasJsonProperty(obj_slice: []const u8, quoted_key: []const u8) bool {
+    var search_pos: usize = 0;
+    while (std.mem.indexOfPos(u8, obj_slice, search_pos, quoted_key)) |idx| {
+        var after = idx + quoted_key.len;
+        while (after < obj_slice.len and (obj_slice[after] == ' ' or obj_slice[after] == '\t' or obj_slice[after] == '\r' or obj_slice[after] == '\n')) : (after += 1) {}
+        if (after < obj_slice.len and obj_slice[after] == ':') return true;
+        search_pos = idx + quoted_key.len;
+    }
+    return false;
+}
 
 /// Extract the `"value"` for a matching `"key"` entry from `pairs_json`
 /// (`[{"key":"...","value":"..."},...]`).

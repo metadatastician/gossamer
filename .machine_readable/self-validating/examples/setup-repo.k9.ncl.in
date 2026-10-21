@@ -122,8 +122,9 @@ K9!
     "create-checkpoint-files" = {
       description = "Create %{config.repo_name}_chora.deed and 0-AI-MANIFEST.deed",
       commands = [
-        "echo '(repo-deed :deed-version \"1.2.0\" :canonical-name \"%{config.repo_name}\")' > %{config.repo_name}_chora.deed",
-        "echo '(praxis-deed :deed-version \"1.2.0\" :domain \"ai-manifest\")' > 0-AI-MANIFEST.deed",
+        "case '%{config.repo_name}' in *[!A-Za-z0-9._-]*|'') echo 'ERROR: invalid repo_name' >&2; exit 1 ;; esac",
+        "[ -e \"%{config.repo_name}_chora.deed\" ] || { printf '(repo-deed :deed-version \"1.2.0\" :canonical-name \"%s\")\\n' '%{config.repo_name}' > \"%{config.repo_name}_chora.deed\" && printf '%s\\n' \"%{config.repo_name}_chora.deed\" >> .setup-repo-created; }",
+        "[ -e 0-AI-MANIFEST.deed ] || { printf '(praxis-deed :deed-version \"1.2.0\" :domain \"ai-manifest\")\\n' > 0-AI-MANIFEST.deed && printf '%s\\n' 0-AI-MANIFEST.deed >> .setup-repo-created; }",
         "echo '✓ Checkpoint deed files created'",
       ],
     },
@@ -152,7 +153,7 @@ K9!
         "echo '⚠️  This will delete all generated files'",
         "echo 'Press Ctrl+C to cancel, or wait 5 seconds...'",
         "sleep 5",
-        "rm -f %{config.repo_name}_chora.deed 0-AI-MANIFEST.deed",
+        "if [ -f .setup-repo-created ]; then while IFS= read -r f; do [ -n \"$f\" ] && rm -f -- \"$f\"; done < .setup-repo-created; rm -f .setup-repo-created; fi",
         "echo '✓ Cleaned'",
       ],
     },
