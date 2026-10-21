@@ -486,7 +486,7 @@ joinLowRight {x = HostHigh}  {y = HostHigh}  Refl impossible
 
 ||| An inhabited diagnostic case for observation `obs` under evidence `evPred` (`Core.Case`).
 public export
-record ResidualCase {0 world, obsTy : Type} (observe : world -> obsTy) (evPred : world -> Type) (obs : obsTy) where
+record ResidualCase {world, obsTy : Type} (observe : world -> obsTy) (evPred : world -> Type) (obs : obsTy) where
   constructor MkResidualCase
   witness     : world
   witnessObs  : observe witness = obs
@@ -495,7 +495,7 @@ record ResidualCase {0 world, obsTy : Type} (observe : world -> obsTy) (evPred :
 ||| A claim `prop : world -> Type` holds across a residual case when it holds for EVERY
 ||| candidate world compatible with `(obs, evPred)` — not merely the witness (`Core.Holds`).
 public export
-HoldsInCase : {0 world, obsTy : Type} -> (observe : world -> obsTy) -> (evPred : world -> Type) ->
+HoldsInCase : {world, obsTy : Type} -> (observe : world -> obsTy) -> (evPred : world -> Type) ->
               (obs : obsTy) -> (prop : world -> Type) -> Type
 HoldsInCase {world} observe evPred obs prop =
   (w : world) -> observe w = obs -> evPred w -> prop w
@@ -504,7 +504,7 @@ HoldsInCase {world} observe evPred obs prop =
 ||| and the actual world satisfies `(observe actual = obs, evPred actual)`, then
 ||| `prop actual` holds conditionally.
 public export
-actualWorldSound : {0 world, obsTy : Type} -> {observe : world -> obsTy} -> {evPred : world -> Type} ->
+actualWorldSound : {world, obsTy : Type} -> {observe : world -> obsTy} -> {evPred : world -> Type} ->
                    {obs : obsTy} -> {prop : world -> Type} ->
                    HoldsInCase observe evPred obs prop ->
                    (actual : world) -> observe actual = obs -> evPred actual -> prop actual
@@ -513,7 +513,7 @@ actualWorldSound holds actual obsEq ev = holds actual obsEq ev
 ||| A quantity `qty : world -> qtyTy` is identified by `(observe, evPred, obs)` when all
 ||| compatible candidate worlds agree on `qty w` (`Core.Identifies`).
 public export
-Identifies : {0 world, obsTy, qtyTy : Type} -> (observe : world -> obsTy) -> (evPred : world -> Type) ->
+Identifies : {world, obsTy, qtyTy : Type} -> (observe : world -> obsTy) -> (evPred : world -> Type) ->
              (obs : obsTy) -> (qty : world -> qtyTy) -> (val : qtyTy) -> Type
 Identifies {world} observe evPred obs qty val =
   (w : world) -> observe w = obs -> evPred w -> qty w = val
@@ -524,7 +524,7 @@ Identifies {world} observe evPred obs qty val =
 ||| single subsystem when two candidate worlds produce the same residual).
 public export
 differentCandidatesRefuteId :
-     {0 world, obsTy, qtyTy : Type} -> {observe : world -> obsTy} -> {evPred : world -> Type} ->
+     {world, obsTy, qtyTy : Type} -> {observe : world -> obsTy} -> {evPred : world -> Type} ->
      {obs : obsTy} -> {qty : world -> qtyTy} ->
      (w1, w2 : world) ->
      observe w1 = obs -> evPred w1 ->

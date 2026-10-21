@@ -165,17 +165,17 @@ echoToResidue f kappa sound (MkEcho x Refl) =
 ||| A state transformer `step : stType -> stType` is a Certified Null Operation (`IsCNO`)
 ||| when it preserves every state identically (`CNO.agda`).
 public export
-IsCNO : {0 stType : Type} -> (stType -> stType) -> Type
+IsCNO : {stType : Type} -> (stType -> stType) -> Type
 IsCNO {stType} step = (st : stType) -> step st = st
 
 ||| The identity operation is a CNO (`halt-is-cno` / `empty-is-cno`).
 public export
-idIsCNO : {0 stType : Type} -> IsCNO {stType} (\x => x)
+idIsCNO : {stType : Type} -> IsCNO {stType} (\x => x)
 idIsCNO _ = Refl
 
 ||| Sequential composition of two CNOs is a CNO (`cno-composition`).
 public export
-cnoCompose : {0 stType : Type} -> {f, g : stType -> stType} ->
+cnoCompose : {stType : Type} -> {f, g : stType -> stType} ->
              IsCNO f -> IsCNO g -> IsCNO (\x => g (f x))
 cnoCompose cnoF cnoG st = trans (cong g (cnoF st)) (cnoG st)
 
@@ -183,7 +183,7 @@ cnoCompose cnoF cnoG st = trans (cong g (cnoF st)) (cnoG st)
 ||| inhabits its own `Echo step st` homotopy fiber at every state `st` with
 ||| `st` itself as the canonical preimage.
 public export
-cnoEchoFiber : {0 stType : Type} -> (step : stType -> stType) -> IsCNO step ->
+cnoEchoFiber : {stType : Type} -> (step : stType -> stType) -> IsCNO step ->
                (st : stType) -> Echo step st
 cnoEchoFiber step cno st = MkEcho st (cno st)
 
@@ -299,7 +299,7 @@ runOp o s p = MkExec (o.stepOut s p 0) (o.stepTime s p)
 ||| observation model `obs` when varying the secret input never alters the
 ||| observation (`∀ s1 s2 pub, obs (runOp o s1 pub) = obs (runOp o s2 pub)`).
 public export
-isOND : {0 Obs : Type} -> (Exec -> Obs) -> Op -> Type
+isOND : {obsTy : Type} -> (Exec -> obsTy) -> Op -> Type
 isOND obs o = (s1, s2, pub : Nat) -> obs (runOp o s1 pub) = obs (runOp o s2 pub)
 
 public export
@@ -338,7 +338,7 @@ ctCapCheck = MkOp (\_, _, cell => cell) (\_, _ => 1)
 
 ||| OND-2: `skipOp` is OND under ANY observation model.
 public export
-skipIsOND : {0 Obs : Type} -> (obs : Exec -> Obs) -> isOND obs NullOps.skipOp
+skipIsOND : {obsTy : Type} -> (obs : Exec -> obsTy) -> isOND obs NullOps.skipOp
 skipIsOND _ _ _ _ = Refl
 
 ||| OND-3a: `leakyCapCheck` is a state CNO (`isNullOp`).

@@ -161,6 +161,13 @@ comptime {
     _ = @import("ipc_handlers.zig");
 }
 
+// Shell execution FFI functions (gossamer_shell_spawn, gossamer_shell_kill).
+// Capability-gated background process spawn and termination for `gossamer dev`
+// and the Ephapax launcher bridges.
+comptime {
+    _ = @import("shell.zig");
+}
+
 // Version information — bump on each release
 const VERSION = "0.3.0";
 const BUILD_INFO = "Gossamer " ++ VERSION ++ " built with Zig " ++ @import("builtin").zig_version_string;
