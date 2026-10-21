@@ -31,8 +31,12 @@ import Gossamer.Capabilities
 // Hardcoded registry of managed servers. In production this would be read
 // from a config file, but for the panel we define it statically to avoid
 // an extra config layer.
-
-let VPS: String = "root@209.42.26.106"
+//
+// Host selection and remote execution follow estate standards:
+//   - Host is resolved via `bridge_get_vps_host` (`GOSSAMER_VPS_HOST`, defaulting
+//     to `localhost`) so Ephapax and the Zig FFI layer share one source of truth.
+//   - Remote commands execute via `pssh_exec` (preferring estate `pssh` with
+//     automatic fallback to `ssh`).
 
 // bridge_list_servers: () -> String (JSON array)
 // Returns the full server registry as a JSON string.
@@ -53,15 +57,18 @@ fn bridge_list_servers(): String =
     "]"
 
 // bridge_get_config: String -> String
-// SSHes to VPS and reads the config file for the given server ID.
+// Reads the config file for the given server ID over pssh/ssh.
 // Returns the raw file content as a string.
 fn bridge_get_config(serverId: String): String =
+    let vps = __ffi("bridge_get_vps_host") in
     let configPath = __ffi("bridge_resolve_config_path", serverId) in
-    __ffi("ssh_exec", VPS, "cat " ++ configPath)
+    __ffi("pssh_exec", vps, "cat " ++ configPath)
 
 // bridge_set_config: String -> String
 // Accepts JSON payload: {"server": "...", "key": "...", "value": "..."}
-// Detects config format and applies the change via sed, then restarts.
+// Detects config format, validates and escapes the replacement value via
+// bridge_build_sed, and applies the update + container restart via
+// bridge_apply_config_update (which aborts the restart if the sed update fails).
 //
 // XML format:  sed -i 's/Key="[^"]*"/Key="NewValue"/' file
 // INI format:  sed -i 's/^key *=.*/key = newvalue/' file
@@ -70,6 +77,7 @@ fn bridge_set_config(payload: String): String =
     let server = __ffi("json_field", payload, "server") in
     let key = __ffi("json_field", payload, "key") in
     let value = __ffi("json_field", payload, "value") in
+    let vps = __ffi("bridge_get_vps_host") in
     let format = __ffi("bridge_resolve_config_format", server) in
     let configPath = __ffi("bridge_resolve_config_path", server) in
     let container = __ffi("bridge_resolve_container", server) in
@@ -77,20 +85,31 @@ fn bridge_set_config(payload: String): String =
     // Build the sed command based on config format
     let sedCmd = __ffi("bridge_build_sed", format, key, value, configPath) in
 
-    // Execute: apply change + restart container
-    let _ = __ffi("ssh_exec", VPS, sedCmd) in
-    let _ = __ffi("ssh_exec", VPS, "podman restart " ++ container) in
-    "{\"status\":\"ok\",\"key\":\"" ++ key ++ "\",\"value\":\"" ++ value ++ "\"}"
+    // Execute: apply change + restart container only if the update succeeds
+    __ffi("bridge_apply_config_update", vps, sedCmd, container, key, value)
 
 // bridge_server_action: String -> String
 // Accepts JSON: {"server": "...", "action": "start|stop|restart|status|logs"}
 fn bridge_server_action(payload: String): String =
     let server = __ffi("json_field", payload, "server") in
     let action = __ffi("json_field", payload, "action") in
+    let vps = __ffi("bridge_get_vps_host") in
     let container = __ffi("bridge_resolve_container", server) in
 
     let cmd = __ffi("bridge_build_action_cmd", action, container) in
-    __ffi("ssh_exec", VPS, cmd)
+    __ffi("pssh_exec", vps, cmd)
+
+// bridge_cluster_action: String -> String
+// Accepts JSON: {"hosts": "host1,host2", "server": "...", "action": "start|stop|restart|status|logs"}
+// Executes the podman action via trusted host configuration (same source as other bridge actions).
+fn bridge_cluster_action(payload: String): String =
+    let hosts = __ffi("bridge_get_vps_host") in
+    let server = __ffi("json_field", payload, "server") in
+    let action = __ffi("json_field", payload, "action") in
+    let container = __ffi("bridge_resolve_container", server) in
+
+    let cmd = __ffi("bridge_build_action_cmd", action, container) in
+    __ffi("pssh_exec", hosts, cmd)
 
 // bridge_scan_config: String -> String (JSON schema array)
 // Reads a config file and auto-detects field types.
@@ -102,9 +121,10 @@ fn bridge_server_action(payload: String): String =
 //   - Enum option lists for dropdown fields
 //   - Grouping by category
 fn bridge_scan_config(serverId: String): String =
+    let vps = __ffi("bridge_get_vps_host") in
     let configPath = __ffi("bridge_resolve_config_path", serverId) in
     let format = __ffi("bridge_resolve_config_format", serverId) in
-    let rawContent = __ffi("ssh_exec", VPS, "cat " ++ configPath) in
+    let rawContent = __ffi("pssh_exec", vps, "cat " ++ configPath) in
 
     // Parse config into key-value pairs based on format
     let pairs = __ffi("bridge_parse_config", format, rawContent) in

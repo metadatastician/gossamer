@@ -1,0 +1,8 @@
+{
+  "reporter": "finishingbot",
+  "title": "finishingbot (release readiness)",
+  "status": "ran",
+  "reason": null,
+  "ref": "main",
+  "findings": []
+}

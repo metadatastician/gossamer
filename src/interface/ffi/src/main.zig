@@ -168,6 +168,12 @@ comptime {
     _ = @import("shell.zig");
 }
 
+// UnifiedApiAdapter — 16-protocol estate API surface and host OS adapter seam.
+pub const unified_api_adapter = @import("unified_api_adapter.zig");
+comptime {
+    _ = unified_api_adapter;
+}
+
 // Version information — bump on each release
 const VERSION = "0.3.0";
 const BUILD_INFO = "Gossamer " ++ VERSION ++ " built with Zig " ++ @import("builtin").zig_version_string;

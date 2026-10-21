@@ -1,0 +1,8 @@
+{
+  "reporter": "panicbot",
+  "title": "panicbot (panic recovery, error handling)",
+  "status": "ran",
+  "reason": null,
+  "ref": "main",
+  "findings": []
+}

@@ -3,7 +3,7 @@ K9!
 # adjust.k9.ncl — K9 trust-tier component of the adjust trident
 # Author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 #
-# Pairs with: Adjustfile.a2ml (declaration) + adjust.ncl (runner).
+# Pairs with: the `declaration` field of this file + adjust.ncl (runner).
 #
 # Verb:       adjust          (drift tolerances + corrective actions)
 # Tier:       Yard            (validation with subprocess for measurement;
@@ -22,13 +22,24 @@ K9!
 # erosion causing gradual parameter drift). Where must flags "broken
 # now", adjust flags "drifting toward broken".
 
-let base_k9 = import "../../svc/k9/template-hunt.k9.ncl" in
+#
+# 2026-10-19 (K9 contract v1.0.0, D173, standards#1058): this record is a
+# DECLARATION evaluated at 'Yard. The probes it lists are run by the paired
+# runner (adjust.ncl and the scripts/run-*.sh runners), which is the execution
+# surface; this file spawns nothing. A 'Hunt record needs signature_required,
+# a signature block and a verified signature (K9-S008/S009/C001); no
+# contractile carries one, so 'Hunt here was a claim the gate could never honour.
+
 let base    = import "../_base.ncl" in
 
 {
-  pedigree = base_k9.pedigree_schema & {
+  pedigree = base.pedigree_schema & {
     contractile_verb = "adjust",
-    paired_xfile     = "../adjust/Adjustfile.a2ml",
+    schema_version   = "1.0.0",
+    component_type   = "contractile:adjust",
+    semantics        = "drift tolerances + corrective actions",
+    side_effects     = [],
+    paired_xfile     = "../adjust/adjust.k9.ncl#declaration",
     paired_runner    = "../adjust/adjust.ncl",
 
     tier      = 'Yard,
@@ -38,7 +49,7 @@ let base    = import "../_base.ncl" in
       name = "adjust-k9",
       version = "1.0.0",
       description = "Drift-tolerance + corrective-action runner. Fifth trident instance. First (Yard, advisory) authority pattern.",
-      paired_xfile = "Adjustfile.a2ml",
+      paired_xfile = "adjust.k9.ncl#declaration",
       paired_runner = "adjust.ncl",
       author = "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>",
     },
@@ -48,12 +59,119 @@ let base    = import "../_base.ncl" in
       trust_level = "tolerance measurement + declared auto-fix",
       allow_network = false,
       allow_filesystem_write_conditional = true,  # auto_fix_when_available may edit
-      allow_subprocess = true,
+      allow_subprocess = false,   # the paired runner spawns; this record does not
       probe_scope = 'measurement_plus_declared_fix,
+    },
+
+    # Trident manifest — folded in from the retired <verb>.manifest.a2ml.
+    # The sha256 / size_bytes fields were "pending-first-verify" placeholders
+    # and the cross_refs named the retired Xfile; both are dropped. The
+    # declaration now lives in this file (`declaration` below), so the
+    # trident is runner + this k9 component.
+    trident = {
+      notes = "Fifth trident instance. First (Yard, advisory) authority pattern —\ncomplements the (Hunt, blocking) triple (must + trust + bust) and\nthe (Hunt, reporting) north-star (intend).\n",
+      trident_version = "1.0.0",
+      semantics = "drift tolerances + corrective actions",
+      cardinality = "one per repo",
+      authority = "advisory (continue-with-warnings)",
+      files = [
+      ],
+      signed_by = {
+        user = "Jonathan D.A. Jewell",
+        date = "2026-04-18",
+        context = "adjust trident — canonical template in rsr-template-repo. (Yard, advisory) authority pattern. Specialises in cumulative-drift catchment — tolerance bands + trend tracking + auto-fix-where-declared. Advisory (continue-with-warnings). Copy this trident into a new repo and define its drift tolerances and corrective actions.",
+      },
+      history = [
+        { date = "2026-04-18", event = "trident-born", note = "Adjustfile.a2ml and adjust.ncl pre-existed. This manifest + adjust.k9.ncl complete the trident. Exercises the Yard tier + advisory authority for the first time; on_exceeded = 'warn_and_attempt_fix rather than 'fail. adjust-specific track_drift_trend_over_sessions + flag_accelerating_drift." },
+        { date = "2026-10-06", event = "a2ml-retired", note = "The A2ML declaration and this manifest were folded into adjust.k9.ncl (declaration + pedigree.trident) under the owner directive that no .a2ml file remains. Item ids, probes and prose were carried over unchanged." },
+      ],
     },
   },
 
-  variance_schema = {
+  # -------------------------------------------------------------------
+  # Declaration — the adjust contract data. Migrated losslessly from the
+  # retired A2ML Xfile (owner directive: zero A2ML files). Item records
+  # carry the field names of adjust.ncl's `schema`; values are kept exactly
+  # as authored, so the runner schema is NOT applied as a contract here
+  # (several authored severities / classes / fields fall outside its enums).
+  # Read by .machine_readable/coaptation/extract-clauses.sh.
+  # -------------------------------------------------------------------
+  declaration = {
+    preamble = "# SPDX-License-Identifier: MPL-2.0\n# Adjustfile — Drift-tolerance contract for rsr-template-repo\n# Author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>\n#\n# Cumulative-drift catchment: tolerance bands + corrective actions.\n# Authority: advisory (Yard) — continue-with-warnings; auto_fix where deterministic.\n# Run with: adjust check\n# Fix with: adjust fix (applies deterministic patches; advisory otherwise)\n",
+    abstract = "Drift tolerances and corrective actions for rsr-template-repo. Unlike\nMUST (hard gate), ADJUST tracks cumulative drift against tolerance bands\nand proposes corrective actions. Advisory — it warns and trends, it does\nnot block.",
+    prose = [
+    ],
+    requirements = [
+      {
+        id = "placeholder-drift",
+        section = "Template Drift",
+        description = "Template placeholders should be replaced when copied",
+        tolerance = "0 placeholder markers in copied repos",
+        corrective = "Search and replace all {{PLACEHOLDER}} markers",
+        severity = 'advisory,
+        notes = "This check only applies to repos that copied from this template",
+      },
+      {
+        id = "template-version-drift",
+        section = "Template Drift",
+        description = "Template version should match RSR spec version",
+        tolerance = "Template version matches current RSR spec",
+        corrective = "Update template to match latest RSR spec",
+        severity = 'advisory,
+      },
+      {
+        id = "readme-completeness",
+        section = "Documentation Drift",
+        description = "README should document all template features",
+        tolerance = "README covers all contractiles and directory structure",
+        corrective = "Update README.adoc with missing sections",
+        severity = 'advisory,
+      },
+      {
+        id = "example-accuracy",
+        section = "Documentation Drift",
+        description = "Examples in documentation should match actual template content",
+        tolerance = "All code examples in docs are accurate",
+        corrective = "Audit and fix examples in documentation",
+        severity = 'advisory,
+      },
+      {
+        id = "contractile-sync",
+        section = "Structural Drift",
+        description = "All contractiles should have matching k9 declarations and ncl implementations",
+        tolerance = "Every <verb>.k9.ncl has a corresponding <verb>.ncl",
+        corrective = "Write the missing <verb>.ncl from its <verb>.k9.ncl declaration",
+        severity = 'advisory,
+      },
+      {
+        id = "no-broken-symlinks",
+        section = "Structural Drift",
+        description = "No broken symbolic links in template structure",
+        tolerance = "0 broken symlinks",
+        corrective = "Run symlink-check script",
+        severity = 'advisory,
+      },
+      {
+        id = "adoc-not-md",
+        section = "Accessibility Drift",
+        description = "Template docs should prefer AsciiDoc",
+        tolerance = "New prose docs are *.adoc",
+        corrective = "Convert any new *.md to *.adoc",
+        severity = 'advisory,
+      },
+      {
+        id = "spdx-header-consistency",
+        section = "Accessibility Drift",
+        description = "All template files have correct SPDX headers",
+        tolerance = "0 files missing SPDX-License-Identifier",
+        corrective = "Add SPDX headers to files that need them",
+        severity = 'advisory,
+      },
+    ],
+  },
+
+  # A record SHAPE (contract-only fields, no values): kept out of `nickel export`.
+  variance_schema | not_exported = {
     entry_id     | String,
     reason       | String,
     approved_by  | String,
@@ -86,7 +204,7 @@ let base    = import "../_base.ncl" in
       { kind = 'verisimdb, table = "contractile_executions",
         schema = "contractile_execution_v1",
         aux_tables = [ "adjust_drift_history" ] },
-      { kind = 'drift_log, path = ".machine_readable/descriptiles/DRIFT.a2ml",
+      { kind = 'drift_log, path = ".machine_readable/descriptiles/drift_praxis.deed",
         append_only = true },
     ],
 
@@ -141,7 +259,7 @@ let base    = import "../_base.ncl" in
             signature_required = true,
           },
         ],
-        signed_record_destination = ".machine_readable/descriptiles/ratification-<session-id>.a2ml",
+        signed_record_destination = ".machine_readable/descriptiles/ratification-<session-id>_praxis.deed",
         must_precede_work = true,
       },
 

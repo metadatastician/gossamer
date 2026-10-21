@@ -1,0 +1,29 @@
+;; SPDX-License-Identifier: MPL-2.0
+;; SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+(praxis-deed
+  :schema-version "1.0.0"
+  :canonical-name "gossamer-launcher"
+  (project
+    :name "gossamer"
+    :display "Gossamer"
+    :description "A linearly-typed webview shell"
+    :categories ("Development" "System" "Utility")
+    :version "0.3.1"
+    :license "MPL-2.0")
+  (repo
+    :path "")
+  (runtime
+    :kind "process"
+    :startup-command-search (
+      "{repo-dir}/cli/launcher/gossamer-launcher"
+      "{repo-dir}/cli/launcher/gossamer"
+      "gossamer-launcher")
+    :pid-file "${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/gossamer.pid"
+    :log-file "${XDG_STATE_HOME:-$HOME/.local/state}/gossamer/gossamer.log"
+    :wait-for-url-timeout-seconds 10)
+  (version-output
+    :first-line-format "gossamer {version} ({build-sha-short}) [{platform}]"
+    :example "gossamer 0.3.1 (abc1234) [linux-x86_64]"
+    :exit-code 0)
+  (icon
+    :source "{repo-dir}/brand/icon-256.png"))

@@ -79,6 +79,46 @@ fn isSafeOpsmToken(tok: []const u8) bool {
 threadlocal var shell_resp_buf: [65536]u8 = undefined;
 threadlocal var group_resp_buf: [64]u8 = undefined;
 
+const MAX_OPSM_SLOTS: usize = 64;
+
+const OpsmAuthSlot = struct {
+    active: bool = false,
+    channel: u64 = 0,
+    shell_token: u64 = 0,
+};
+
+var opsm_slots: [MAX_OPSM_SLOTS]OpsmAuthSlot = [_]OpsmAuthSlot{.{}} ** MAX_OPSM_SLOTS;
+var opsm_auth_mutex: std.Thread.Mutex = .{};
+
+/// Resolve the 64-bit Shell capability token associated with an opsm_runtime
+/// callback invocation. When user_data points to an OpsmAuthSlot managed by
+/// gossamer_channel_authorize_opsm, reads the full u64 token without pointer
+/// truncation or alignment constraints; otherwise falls back to interpreting
+/// user_data as an integer token for direct unit-test invocations.
+fn resolveOpsmToken(user_data: ?*anyopaque) u64 {
+    const ud = user_data orelse return 0;
+    const addr = @intFromPtr(ud);
+    const start = @intFromPtr(&opsm_slots[0]);
+    const end = start + @sizeOf(@TypeOf(opsm_slots));
+    if (addr >= start and addr < end and (addr - start) % @sizeOf(OpsmAuthSlot) == 0) {
+        opsm_auth_mutex.lock();
+        defer opsm_auth_mutex.unlock();
+        const slot: *const OpsmAuthSlot = @ptrFromInt(addr);
+        return if (slot.active) slot.shell_token else 0;
+    }
+    return @as(u64, addr);
+}
+
+fn clearOpsmSlotForChannel(channel: u64) void {
+    opsm_auth_mutex.lock();
+    defer opsm_auth_mutex.unlock();
+    for (&opsm_slots) |*slot| {
+        if (slot.active and slot.channel == channel) {
+            slot.* = .{};
+        }
+    }
+}
+
 /// Accept exactly install, remove, update, list, search, or info as command names.
 fn isAllowedOpsmCommand(cmd: []const u8) bool {
     return std.mem.eql(u8, cmd, "install") or
@@ -103,7 +143,7 @@ fn shellExecHandler(payload: [*:0]const u8, user_data: ?*anyopaque) callconv(.c)
     const allocator = std.heap.c_allocator;
     const payload_slice = std.mem.span(payload);
 
-    const token: u64 = if (user_data) |ud| @as(u64, @intFromPtr(ud)) else 0;
+    const token: u64 = resolveOpsmToken(user_data);
     if (token == 0 or gossamer_cap_check(token) != 0 or gossamer_cap_resource_kind(token) != 2) {
         return @ptrCast(@constCast("{\"error\":\"capability denied\"}"));
     }
@@ -727,5 +767,85 @@ fn bindWindowControlHandlers(channel: u64, handle_ptr: ?*anyopaque) void {
 /// channels, which the caller already handled).
 pub export fn gossamer_channel_register_defaults(channel: u64, handle_ptr: ?*anyopaque) void {
     bindWindowControlHandlers(channel, handle_ptr);
+    clearOpsmSlotForChannel(channel);
     _ = gossamer_channel_bind_async(channel, "opsm_runtime", &shellExecHandler, null);
 }
+
+/// Authorize the opsm_runtime handler on `channel` using a valid 64-bit Shell
+/// capability token (`resource_kind == 2`).
+///
+/// Stores the full u64 token in a dedicated slot table so that 32-bit targets
+/// and odd token values never suffer pointer truncation or alignment faults,
+/// then rebinds `opsm_runtime` on `channel` to that slot.
+///
+/// Returns:
+///   •  0 (ok) on success
+///   • -1 (invalid_handle) if `channel == 0` or binding fails
+///   • -7 (capability_denied) if `shell_token` is 0, revoked, or not a Shell capability
+///   • -99 (unknown_error) if all authorization slots are exhausted
+pub export fn gossamer_channel_authorize_opsm(channel: u64, shell_token: u64) callconv(.c) c_int {
+    if (channel == 0) return -1;
+    if (shell_token == 0 or gossamer_cap_check(shell_token) != 0 or gossamer_cap_resource_kind(shell_token) != 2) {
+        return -7;
+    }
+
+    var slot_ptr: ?*OpsmAuthSlot = null;
+    {
+        opsm_auth_mutex.lock();
+        defer opsm_auth_mutex.unlock();
+
+        for (&opsm_slots) |*slot| {
+            if (slot.active and slot.channel == channel) {
+                slot.shell_token = shell_token;
+                slot_ptr = slot;
+                break;
+            }
+        }
+        if (slot_ptr == null) {
+            for (&opsm_slots) |*slot| {
+                if (!slot.active) {
+                    slot.* = .{
+                        .active = true,
+                        .channel = channel,
+                        .shell_token = shell_token,
+                    };
+                    slot_ptr = slot;
+                    break;
+                }
+            }
+        }
+    }
+
+    const sp = slot_ptr orelse return -99;
+    return gossamer_channel_bind_async(channel, "opsm_runtime", &shellExecHandler, @ptrCast(sp));
+}
+
+//==============================================================================
+// Tests
+//==============================================================================
+
+test "gossamer_channel_authorize_opsm rejects invalid channel and non-Shell tokens" {
+    try std.testing.expectEqual(@as(c_int, -1), gossamer_channel_authorize_opsm(0, 123));
+    try std.testing.expectEqual(@as(c_int, -7), gossamer_channel_authorize_opsm(1, 0));
+    try std.testing.expectEqual(@as(c_int, -7), gossamer_channel_authorize_opsm(1, 999_999));
+}
+
+test "resolveOpsmToken preserves full 64-bit odd capability id in slot and clears on register_defaults" {
+    const channel: u64 = 42;
+    const synthetic_odd_cap_id: u64 = (@as(u64, 1) << 40) | 1;
+    {
+        opsm_auth_mutex.lock();
+        defer opsm_auth_mutex.unlock();
+        opsm_slots[0] = .{
+            .active = true,
+            .channel = channel,
+            .shell_token = synthetic_odd_cap_id,
+        };
+    }
+    const slot_ud: ?*anyopaque = @ptrCast(&opsm_slots[0]);
+    try std.testing.expectEqual(synthetic_odd_cap_id, resolveOpsmToken(slot_ud));
+
+    clearOpsmSlotForChannel(channel);
+    try std.testing.expectEqual(@as(u64, 0), resolveOpsmToken(slot_ud));
+}
+

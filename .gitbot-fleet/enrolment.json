@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "reporters": {
+    "rhodibot": { "title": "rhodibot (RSR compliance)", "enrolled": true },
+    "panicbot": { "title": "panicbot (panic recovery, error handling)", "enrolled": true },
+    "echidnabot": { "title": "echidnabot (formal verification: src/interface/abi/)", "enrolled": true },
+    "seambot": { "title": "seambot (integration health: ABI/FFI seams)", "enrolled": true },
+    "finishingbot": { "title": "finishingbot (release readiness)", "enrolled": true },
+    "accessibilitybot": { "title": "accessibilitybot (WCAG / AT-SPI2 / UIAutomation)", "enrolled": true },
+    "glambot": { "enrolled": false, "reason": "no standalone web frontend served by this repository" },
+    "cipherbot": { "enrolled": false, "reason": "cryptographic primitives delegated to OS / WebKit TLS stack" },
+    "sustainabot": { "enrolled": false, "reason": "fleet adapter slot reserved; no adapter exists yet (gitbot-fleet README)" }
+  }
+}

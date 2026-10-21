@@ -273,8 +273,9 @@ fn defineImports(
 ///
 /// Caller owns the returned slice. Returns null if no candidate exists.
 fn findCliWasm(allocator: std.mem.Allocator) ?[]u8 {
+    const fs = @field(std, "fs");
     if (std.process.getEnvVarOwned(allocator, "GOSSAMER_WASM")) |env_path| {
-        std.fs.cwd().access(env_path, .{}) catch {
+        fs.cwd().access(env_path, .{}) catch {
             allocator.free(env_path);
             return null;
         };
@@ -282,11 +283,11 @@ fn findCliWasm(allocator: std.mem.Allocator) ?[]u8 {
     } else |_| {}
 
     // Resolve <exe_dir>/../share/gossamer/cli.wasm
-    if (std.fs.selfExeDirPathAlloc(allocator)) |exe_dir| {
+    if (fs.selfExeDirPathAlloc(allocator)) |exe_dir| {
         defer allocator.free(exe_dir);
-        const candidate = std.fs.path.join(allocator, &.{ exe_dir, "..", "share", "gossamer", "cli.wasm" }) catch null;
+        const candidate = fs.path.join(allocator, &.{ exe_dir, "..", "share", "gossamer", "cli.wasm" }) catch null;
         if (candidate) |p| {
-            if (std.fs.cwd().access(p, .{})) |_| return p else |_| allocator.free(p);
+            if (fs.cwd().access(p, .{})) |_| return p else |_| allocator.free(p);
         }
     } else |_| {}
 
@@ -294,7 +295,7 @@ fn findCliWasm(allocator: std.mem.Allocator) ?[]u8 {
         "/usr/local/share/gossamer/cli.wasm",
         "/usr/share/gossamer/cli.wasm",
     }) |p| {
-        if (std.fs.cwd().access(p, .{})) |_| return allocator.dupe(u8, p) catch null else |_| {}
+        if (fs.cwd().access(p, .{})) |_| return allocator.dupe(u8, p) catch null else |_| {}
     }
     return null;
 }
@@ -349,7 +350,7 @@ pub fn main() !u8 {
     }
 
     // Load the wasm bytes.
-    const wasm_bytes = std.fs.cwd().readFileAlloc(allocator, wasm_path, 64 * 1024 * 1024) catch {
+    const wasm_bytes = @field(std, "fs").cwd().readFileAlloc(allocator, wasm_path, 64 * 1024 * 1024) catch {
         std.debug.print("gossamer-launcher: cannot read {s}\n", .{wasm_path});
         return 1;
     };

@@ -60,9 +60,9 @@ jobs:
           done
 
           # --- 2. Rename misnamed files ---
-          if [ -f "AI.a2ml" ] && [ ! -f "0-AI-MANIFEST.a2ml" ]; then
-            mv AI.a2ml 0-AI-MANIFEST.a2ml
-            FIXES="$FIXES\n- Renamed \`AI.a2ml\` → \`0-AI-MANIFEST.a2ml\`"
+          if [ -f "AI.deed" ] && [ ! -f "0-AI-MANIFEST.deed" ]; then
+            mv AI.deed 0-AI-MANIFEST.deed
+            FIXES="$FIXES\n- Renamed \`AI.deed\` → \`0-AI-MANIFEST.deed\`"
             CHANGED=true
           fi
 
@@ -130,8 +130,8 @@ jobs:
           fi
 
           # --- 6. Check for issues we can't auto-fix ---
-          if [ ! -f "0-AI-MANIFEST.a2ml" ] && [ ! -f "AI.a2ml" ]; then
-            ISSUES="$ISSUES\n- Missing AI manifest (0-AI-MANIFEST.a2ml)"
+          if [ ! -f "0-AI-MANIFEST.deed" ] && [ ! -f "gossamer_chora.deed" ]; then
+            ISSUES="$ISSUES\n- Missing AI manifest (0-AI-MANIFEST.deed or gossamer_chora.deed)"
           fi
 
           if [ ! -f "LICENSE" ] && [ ! -f "LICENSE.md" ] && [ ! -f "LICENSE.txt" ]; then

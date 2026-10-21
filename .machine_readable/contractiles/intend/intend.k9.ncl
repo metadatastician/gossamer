@@ -3,7 +3,7 @@ K9!
 # intend.k9.ncl — K9 trust-tier component of the intend trident
 # Author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 #
-# Pairs with: Intentfile.a2ml (declaration) + intend.ncl (runner).
+# Pairs with: the `declaration` field of this file + intend.ncl (runner).
 # Trident completeness is a hard precondition — a repo shipping
 # Intentfile without this file AND its runner is an invalid trident;
 # the contractile CLI's verify gate refuses partial publication.
@@ -13,7 +13,8 @@ K9!
 # Authority:  reporting       (never blocks; drift-log only)
 #
 # Cardinality: ONE intend trident per repo (see feedback_contractile_
-# layout_rules.md). ANCHOR.a2ml is the sole multi-instance exception —
+# layout_rules.md). The deed's (anchor) clause is the sole multi-instance
+# exception —
 # it is NOT a verb contractile.
 #
 # Design commitments baked in (see memory trail 2026-04-18 for full
@@ -24,25 +25,36 @@ K9!
 #   (feedback_audit_tool_suppression_design.md — structural > markers).
 # * Sessional drift detection hooks (on_close, on_open).
 # * Ratification at session open; drift log at session close.
-# * Evidence sinks: VeriSimDB (queryable) + 6a2/DRIFT.a2ml (repo-local).
+# * Evidence sinks: VeriSimDB (queryable) + descriptiles/drift_praxis.deed (repo-local).
 # * Failure-mode defenses cross-referenced to the AI failure catalog.
 
-let base_k9 = import "../../svc/k9/template-hunt.k9.ncl" in
+#
+# 2026-10-19 (K9 contract v1.0.0, D173, standards#1058): this record is a
+# DECLARATION evaluated at 'Yard. The probes it lists are run by the paired
+# runner (intend.ncl and the scripts/run-*.sh runners), which is the execution
+# surface; this file spawns nothing. A 'Hunt record needs signature_required,
+# a signature block and a verified signature (K9-S008/S009/C001); no
+# contractile carries one, so 'Hunt here was a claim the gate could never honour.
+
 let base    = import "../_base.ncl" in
 
 {
-  pedigree = base_k9.pedigree_schema & {
+  pedigree = base.pedigree_schema & {
     contractile_verb = "intend",
-    paired_xfile     = "../intend/Intentfile.a2ml",
+    schema_version   = "1.0.0",
+    component_type   = "contractile:intend",
+    semantics        = "north-star (commitments + aspirations)",
+    side_effects     = [],
+    paired_xfile     = "../intend/intend.k9.ncl#declaration",
     paired_runner    = "../intend/intend.ncl",
 
     # α two-axis declaration — capability × authority.
-    # intend is Hunt-capable (probes shell out) but reporting-authority
-    # (never blocks). must/trust/bust will declare (Hunt, blocking);
+    # intend is Yard-tier as a record (intend.ncl shells out for the probes)
+    # and reporting-authority (never blocks). must/trust/bust declare (Yard, blocking);
     # adjust/dust will declare (Yard, advisory). Splitting the axes
     # means "I'm Hunt-tier so I can override everything" is structurally
     # impossible — authority is a separate field.
-    tier      = 'Hunt,
+    tier      = 'Yard,
     authority = 'reporting,
 
     metadata = {
@@ -53,22 +65,129 @@ let base    = import "../_base.ncl" in
                                      # schema baked into on_open — prerequisite for
                                      # the adversarial Gemini+Copilot drift pilot.
       description = "Executes Intentfile probes + emits drift log. Non-gating; reporting authority only. on_open hook implements negotiation-ratification-accountability protocol.",
-      paired_xfile = "Intentfile.a2ml",
+      paired_xfile = "intend.k9.ncl#declaration",
       paired_runner = "intend.ncl",
       author = "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>",
     },
 
     security = {
-      leash = 'Hunt,
+      leash = 'Yard,
+      signature_required = false,
       trust_level = "subprocess + filesystem-read",
       allow_network = false,
       allow_filesystem_write = false,   # evidence sinks are indirected
-      allow_subprocess = true,
-      # Hunt-tier components must declare a signature posture. intend is
-      # reporting-authority (never mutates/blocks) but is Hunt-capable
-      # (probes shell out), so a signature is required before execution.
-      signature_required = true,
+      allow_subprocess = false,   # the paired runner spawns; this record does not
     },
+
+    # Trident manifest — folded in from the retired <verb>.manifest.a2ml.
+    # The sha256 / size_bytes fields were "pending-first-verify" placeholders
+    # and the cross_refs named the retired Xfile; both are dropped. The
+    # declaration now lives in this file (`declaration` below), so the
+    # trident is runner + this k9 component.
+    trident = {
+      notes = "Asserts: exactly three files constitute the intend trident; their\ncontent-hashes are pinned here; cross-references round-trip; no\npartial publication is permitted.\n\nThe contractile CLI's `verify <verb>` subcommand MUST:\n  1. Confirm all three listed files exist at the declared paths.\n  2. Compute each file's sha256 and match against the pinned value.\n  3. Follow each cross-reference and confirm the target file's\n     reciprocal field points back.\n  4. Refuse the dir (exit non-zero) if any of 1–3 fails.\n\nThis forecloses the failure mode where an agent publishes an A2ML\ndeclaration with no paired runner or K9 component — the trident is\natomically complete or it is invalid.\n",
+      trident_version = "1.0.0",
+      semantics = "north-star (commitments + aspirations)",
+      cardinality = "one per repo",
+      files = [
+      ],
+      signed_by = {
+        user = "Jonathan D.A. Jewell",
+        date = "2026-04-18",
+        context = "intend trident — canonical template in rsr-template-repo. North-star verb: reports progress toward committed next-actions ([[intents]]) and lists horizon aspirations ([[wishes]]). Non-gating (reporting authority). Copy this trident into a new repo and replace the declaration with project-specific content.",
+      },
+      history = [
+        { date = "2026-04-18", event = "trident-born", note = "intend/Intentfile.a2ml pre-existed (f380b62, lust absorption). This manifest + intend.k9.ncl complete the trident for the first time." },
+        { date = "2026-04-18", event = "negotiation-accountability-schema-landed", note = "intend.k9.ncl on_open hook extended: five negotiation inputs (timeline/standards/audience/invariants/dependencies), both-parties accountability pledge, plain-language-translation policy (AI authors spec form, user reviews in domain language). K9 metadata version bumped 1.0.0 → 2.0.0. Prerequisite for the adversarial Gemini+Copilot drift pilot; intend is the hardest verb (abstract north-star) so baking the full protocol here first means simpler verbs (trust, must) can inherit the template." },
+        { date = "2026-10-06", event = "a2ml-retired", note = "The A2ML declaration and this manifest were folded into intend.k9.ncl (declaration + pedigree.trident) under the owner directive that no .a2ml file remains. Item ids, probes and prose were carried over unchanged." },
+      ],
+    },
+  },
+
+  # -------------------------------------------------------------------
+  # Declaration — the intend contract data. Migrated losslessly from the
+  # retired A2ML Xfile (owner directive: zero A2ML files). Item records
+  # carry the field names of intend.ncl's `schema`; values are kept exactly
+  # as authored, so the runner schema is NOT applied as a contract here
+  # (several authored severities / classes / fields fall outside its enums).
+  # Read by .machine_readable/coaptation/extract-clauses.sh.
+  # -------------------------------------------------------------------
+  declaration = {
+    preamble = "# SPDX-License-Identifier: MPL-2.0\n# Intentfile — north-star contractile for rsr-template-repo\n# Author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>\n#\n# Paired runner: intend.ncl\n# Verb:          intend\n#\n# Semantics: North-star contractile. Declares BOTH concrete committed\n#            next-actions AND horizon aspirations the project wishes to\n#            become. Two sections share one file because they answer\n#            the same question at different ranges:\n#              [[intents]] — \"we WILL do this; track progress\"\n#                            status: declared → in_progress → done |\n#                                    deferred | retired\n#              [[wishes]]  — \"we WISH this were true; revisit later\"\n#                            status: declared → in_progress → achieved |\n#                                    abandoned\n#                            grouped by horizon: near / mid / far.\n#            Non-gating — this is a report, not a gate. See the `must`\n#            contractile for hard gates.\n",
+    abstract = "North-star contractile for rsr-template-repo. This repository is the\ncanonical template for Rhodium Standard Repository compliance. It provides\nthe scaffold that all hyperpolymath repos should copy and customize.",
+    prose = [
+      {
+        section = "Purpose",
+        text = "The rsr-template-repo serves as the master template for all hyperpolymath\nrepositories. It contains the complete set of contractile files, machine-readable\nspecifications, and governance documentation that define the Rhodium Standard.\n\nEvery new repository in the hyperpolymath estate should be initialized by\ncopying this template and substituting the placeholder values with\nrepo-specific content.",
+      },
+      {
+        section = "Anti-Purpose",
+        text = "This repository is NOT:\n- A general-purpose project scaffold for external use (hyperpolymath-only)\n- A replacement for per-repo customization (all files must be bespoke)\n- A static template that never changes (evolves with RSR spec)\n- A runtime library or framework (build-time only)",
+      },
+      {
+        section = "If In Doubt",
+        text = "If you are unsure whether a change is in scope, ask. Sensitive areas:\n- .machine_readable/ contractile definitions\n- RSR specification files\n- Governance templates\n- License policy documents",
+      },
+    ],
+    intents = [
+      {
+        id = "repo-initialization",
+        section = "Committed Next-Actions",
+        description = "Provide just copy-and-substitute template for new repos",
+        probe = "test -f scripts/init-repo.sh",
+        status = 'done,
+        notes = "Run with source scripts/init-repo.sh <new-repo-name>",
+      },
+      {
+        id = "contractile-completeness",
+        section = "Committed Next-Actions",
+        description = "Every RSR contractile has a k9 declaration and an ncl implementation",
+        probe = "ls .machine_readable/contractiles/*/*.k9.ncl | wc -l | grep -q \"^6$\"",
+        status = 'in_progress,
+        notes = "Currently 6 contractile verbs: intend, must, trust, adjust, bust, dust",
+      },
+      {
+        id = "automation-scripts",
+        section = "Committed Next-Actions",
+        description = "All repetitive tasks have just recipes",
+        probe = "grep -c \"^# \" Justfile | grep -q \"^[6-9][0-9]*$\"",
+        status = 'in_progress,
+      },
+    ],
+    wishes = [
+      {
+        id = "cross-repo-validation",
+        section = "Wishes",
+        group = "Near Horizon",
+        description = "Tooling to validate all repos against RSR spec",
+        horizon = 'near,
+        status = 'declared,
+      },
+      {
+        id = "automated-substitution",
+        section = "Wishes",
+        group = "Near Horizon",
+        description = "Script to automate repo-specific substitution in template",
+        horizon = 'near,
+        status = 'declared,
+      },
+      {
+        id = "formal-verification",
+        section = "Wishes",
+        group = "Mid Horizon",
+        description = "Idris2 proofs for all critical contractile invariants",
+        horizon = 'mid,
+        status = 'declared,
+      },
+      {
+        id = "ecosystem-visualization",
+        section = "Wishes",
+        group = "Far Horizon",
+        description = "Interactive graph of all hyperpolymath repos and dependencies",
+        horizon = 'far,
+        status = 'declared,
+      },
+    ],
   },
 
   # -------------------------------------------------------------------
@@ -80,7 +199,8 @@ let base    = import "../_base.ncl" in
   # Per user 2026-04-18: variances are structural, not magic-comment
   # markers — markers are gameable.
   # -------------------------------------------------------------------
-  variance_schema = {
+  # A record SHAPE (contract-only fields, no values): kept out of `nickel export`.
+  variance_schema | not_exported = {
     entry_id     | String,   # which intent/wish id the variance applies to
     reason       | String,
     approved_by  | String,
@@ -109,15 +229,15 @@ let base    = import "../_base.ncl" in
     per_wish = {
       run_probe = false,
       emit_horizon_summary = true,
-      # Vertical alignment soft-check per user_6a2_is_contractile_ought.md:
+      # Vertical alignment soft-check per user_descriptiles_is_contractile_ought.md:
       # highest-level alignment is meta ↔ north-star (soft), not hard gate.
       check_alignment_with_META = true,
     },
 
     # Evidence sinks — BOTH written, every execution.
     # VeriSimDB = queryable machine record (feedback_verisimdb_policy.md).
-    # 6a2/DRIFT.a2ml = repo-local append-only drift log (feedback_sessional_
-    # drift_detection.md + user_6a2_is_contractile_ought.md descriptive role).
+    # descriptiles/drift_praxis.deed = repo-local append-only drift log (feedback_sessional_
+    # drift_detection.md + user_descriptiles_is_contractile_ought.md descriptive role).
     evidence_sinks = [
       {
         kind   = 'verisimdb,
@@ -126,7 +246,7 @@ let base    = import "../_base.ncl" in
       },
       {
         kind        = 'drift_log,
-        path        = ".machine_readable/descriptiles/DRIFT.a2ml",
+        path        = ".machine_readable/descriptiles/drift_praxis.deed",
         append_only = true,
       },
     ],
@@ -218,7 +338,7 @@ let base    = import "../_base.ncl" in
             # the AI is the holder of the line against enthusiasm drift.
           },
         ],
-        signed_record_destination = ".machine_readable/descriptiles/ratification-<session-id>.a2ml",
+        signed_record_destination = ".machine_readable/descriptiles/ratification-<session-id>_praxis.deed",
         must_precede_work = true,
       },
 

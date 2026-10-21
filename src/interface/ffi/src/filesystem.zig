@@ -12,11 +12,12 @@
 
 const std = @import("std");
 const main = @import("main.zig");
+const fs = @import("unified_api_adapter.zig").fs;
 
 /// Accept absolute paths with no `..` component when split on `/` or `\`.
 /// Names containing `..` within a larger component are allowed.
 fn isValidFsPath(path_slice: []const u8) bool {
-    if (!std.fs.path.isAbsolute(path_slice)) return false;
+    if (!fs.path.isAbsolute(path_slice)) return false;
     var it = std.mem.tokenizeAny(u8, path_slice, "/\\");
     while (it.next()) |part| {
         if (std.mem.eql(u8, part, "..")) return false;
@@ -53,7 +54,7 @@ pub export fn gossamer_fs_read_text(
         return null;
     }
 
-    const file = std.fs.openFileAbsolute(path_slice, .{}) catch {
+    const file = fs.openFileAbsolute(path_slice, .{}) catch {
         main.setError("Failed to open file for reading");
         return null;
     };
@@ -108,7 +109,7 @@ pub export fn gossamer_fs_write_text(
         return .invalid_param;
     }
 
-    const file = std.fs.createFileAbsolute(path_slice, .{ .truncate = true }) catch {
+    const file = fs.createFileAbsolute(path_slice, .{ .truncate = true }) catch {
         main.setError("Failed to create/open file for writing");
         return .@"error";
     };
@@ -152,7 +153,7 @@ pub export fn gossamer_fs_exists(
     }
 
     // Use accessAbsolute to check existence without opening
-    std.fs.accessAbsolute(path_slice, .{}) catch {
+    fs.accessAbsolute(path_slice, .{}) catch {
         return 0; // Does not exist (or no access)
     };
 
@@ -188,7 +189,7 @@ pub export fn gossamer_fs_list_dir(
         return null;
     }
 
-    var dir = std.fs.openDirAbsolute(path_slice, .{ .iterate = true }) catch {
+    var dir = fs.openDirAbsolute(path_slice, .{ .iterate = true }) catch {
         main.setError("Failed to open directory");
         return null;
     };
@@ -251,7 +252,7 @@ pub export fn gossamer_fs_remove(
         return .invalid_param;
     }
 
-    std.fs.deleteFileAbsolute(path_slice) catch {
+    fs.deleteFileAbsolute(path_slice) catch {
         main.setError("Failed to delete file");
         return .@"error";
     };
@@ -287,7 +288,7 @@ pub export fn gossamer_fs_mkdir_p(
         return .invalid_param;
     }
 
-    std.fs.cwd().makePath(path_slice) catch |e| {
+    fs.cwd().makePath(path_slice) catch |e| {
         switch (e) {
             error.PathAlreadyExists => {
                 main.clearError();
@@ -334,7 +335,7 @@ pub export fn gossamer_fs_copy_file(
         return .invalid_param;
     }
 
-    std.fs.cwd().copyFile(src_slice, std.fs.cwd(), dst_slice, .{}) catch {
+    fs.cwd().copyFile(src_slice, fs.cwd(), dst_slice, .{}) catch {
         main.setError("Failed to copy file");
         return .@"error";
     };

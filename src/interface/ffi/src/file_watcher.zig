@@ -25,6 +25,7 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
+const fs = @import("unified_api_adapter.zig").fs;
 
 /// GLib C bindings for g_idle_add — thread-safe GTK main loop scheduling.
 /// The CLI already links glib-2.0 (see build.zig), so these symbols resolve.
@@ -315,7 +316,7 @@ fn scanForChanges(state: *WatcherState) bool {
 /// Files beyond capacity contribute to scan_overflow_digest; its comparison
 /// is left to scanForChanges. Directory, iteration, and stat errors are skipped.
 fn scanDirectory(state: *WatcherState, path: []const u8, check: bool) bool {
-    var dir = std.fs.cwd().openDir(path, .{ .iterate = true }) catch return false;
+    var dir = fs.cwd().openDir(path, .{ .iterate = true }) catch return false;
     defer dir.close();
 
     var any_changed = false;

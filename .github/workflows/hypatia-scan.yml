@@ -1,6 +1,19 @@
 # SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
-# This workflow is managed by gh actions-lock.
+#
+# hypatia-scan.yml — Hypatia Security Scan + Fleet Findings Verdict Grid
+#
+# Runs:
+#   1. Hypatia neurosymbolic scanner (hyperpolymath/hypatia@aa34a4cc6ba39d873710ff39763fdb9cde715f9d)
+#   2. panic-attack assail (hyperpolymath/panic-attack@b689a74d2762a1c19839ae3fbd59b7fe5ef920ea)
+#   3. pons asinorum structural hygiene check (hyperpolymath/pons-asinorum@32e55677d8fd1f3010848dee22e822c2f385c2a0)
+#   4. .gitbot-fleet/enrolment.json + .gitbot-fleet/report-backs/<member>.json
+#   5. Renders the Hypatia findings verdict grid via hyperpolymath/standards scripts/verdict-grid.sh
+#      (`<!-- verdict-grid:hypatia regenerated on every run -->`) and posts/updates it on pull requests.
+#
+# Note: Executes via step-level checkout of hyperpolymath/standards rather than
+# cross-owner workflow_call so runs succeed under metadatastician's repository
+# Actions allowlist without startup_failure.
 name: Hypatia Security Scan
 
 on:
@@ -9,10 +22,14 @@ on:
   push:
     branches: [main, master, develop]
   pull_request:
-    branches: [main, master]
+    branches: ['**']
   schedule:
     - cron: '0 0 * * 0'
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   actions: read
@@ -20,6 +37,218 @@ permissions:
   security-events: write
 
 jobs:
-  scan:
-    uses: hyperpolymath/standards/.github/workflows/hypatia-scan-reusable.yml@01c9b0c9f2646ebea0b30a9588462642ac94aee9
-    secrets: inherit
+  hypatia:
+    name: Hypatia + Fleet Verdict Grid
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+      security-events: write
+    env:
+      HYPATIA_SHA: aa34a4cc6ba39d873710ff39763fdb9cde715f9d
+      PANIC_ATTACK_SHA: b689a74d2762a1c19839ae3fbd59b7fe5ef920ea
+      PONS_SHA: 32e55677d8fd1f3010848dee22e822c2f385c2a0
+      STANDARDS_SHA: 01c9b0c9f2646ebea0b30a9588462642ac94aee9
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Elixir for Hypatia scanner
+        uses: erlef/setup-beam@v1.24.1
+        with:
+          elixir-version: '1.19.4'
+          otp-version: '28.3'
+
+      - name: Build and run Hypatia scanner
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git init "$HOME/hypatia"
+          git -C "$HOME/hypatia" remote add origin https://github.com/hyperpolymath/hypatia.git
+          git -C "$HOME/hypatia" fetch --depth 1 origin "$HYPATIA_SHA"
+          git -C "$HOME/hypatia" checkout --detach FETCH_HEAD
+          (cd "$HOME/hypatia" && mix deps.get && mix escript.build)
+          HYPATIA_FORMAT=json "$HOME/hypatia/hypatia-cli.sh" scan . --exit-zero > hypatia-findings.json
+          jq --arg root "$PWD" '
+            map(if (.file? // "") == $root then .file = "."
+                elif (.file? // "") | startswith($root + "/")
+                then .file = (.file | ltrimstr($root + "/"))
+                else . end)
+          ' hypatia-findings.json > hypatia-findings.relativized.json
+
+      - name: Build and run panic-attack assail
+        run: |
+          set -euo pipefail
+          out=panic-attack-findings.json
+          root="$HOME/.panic-attack"
+          bin="$root/bin/panic-attack"
+          marker() {
+            jq -n --arg status "$1" --arg reason "$2" --argjson exit_code "$3" \
+              --arg ref "$PANIC_ATTACK_SHA" '{status: $status, tool: "panic-attack",
+                ref: $ref, reason: $reason, exit_code: $exit_code, counts: null,
+                report: null}' > "$out"
+          }
+          if command -v cargo >/dev/null 2>&1 &&
+             timeout 600 cargo install --git https://github.com/hyperpolymath/panic-attack \
+               --rev "$PANIC_ATTACK_SHA" --locked --force --root "$root" panic-attack &&
+             [ -x "$bin" ]; then
+            report=$(mktemp)
+            rc=0
+            timeout 300 "$bin" assail . --output "$report" >/dev/null 2>&1 || rc=$?
+            if [ "$rc" -eq 0 ] && [ -s "$report" ]; then
+              jq --arg ref "$PANIC_ATTACK_SHA" '
+                [.weak_points[] | select(.suppressed != true) | .severity] as $s
+                | {status: "ran", tool: "panic-attack", ref: $ref, reason: null,
+                   exit_code: 0,
+                   counts: {critical: ($s | map(select(. == "Critical")) | length),
+                            high: ($s | map(select(. == "High")) | length),
+                            medium: ($s | map(select(. == "Medium")) | length),
+                            low: ($s | map(select(. == "Low")) | length)},
+                   report: .}' "$report" > "$out"
+            else
+              marker error "panic-attack assail exited $rc" "$rc"
+            fi
+          else
+            marker not_run "panic-attack build skipped or failed" null
+          fi
+
+      - name: Build and run pons asinorum scan
+        run: |
+          set -euo pipefail
+          out=pons-findings.json
+          root="$HOME/.pons"
+          bin="$root/bin/pons"
+          marker() {
+            jq -n --arg status "$1" --arg reason "$2" --argjson exit_code "$3" \
+              --arg ref "$PONS_SHA" '{status: $status, tool: "pons-asinorum",
+                ref: $ref, reason: $reason, exit_code: $exit_code, counts: null,
+                report: null}' > "$out"
+          }
+          if command -v cargo >/dev/null 2>&1 &&
+             timeout 600 cargo install --git https://github.com/hyperpolymath/pons-asinorum \
+               --rev "$PONS_SHA" --locked --force --root "$root" pons-cli &&
+             [ -x "$bin" ]; then
+            report=$(mktemp)
+            rc=0
+            timeout 300 "$bin" scan --format json . > "$report" 2>/dev/null || rc=$?
+            if [ "$rc" -eq 0 ] && [ -s "$report" ]; then
+              jq --arg ref "$PONS_SHA" '
+                [.findings[].severity | ascii_upcase] as $s
+                | {status: "ran", tool: "pons-asinorum", ref: $ref, reason: null, exit_code: 0,
+                   counts: {error: ($s | map(select(. == "ERROR")) | length),
+                            warn: ($s | map(select(. == "WARN")) | length),
+                            info: ($s | map(select(. == "INFO")) | length)},
+                   report: .}' "$report" > "$out"
+            else
+              marker error "pons scan exited $rc" "$rc"
+            fi
+          else
+            marker not_run "pons build skipped or failed" null
+          fi
+
+      - name: Check out the verdict grid renderer from standards
+        if: ${{ always() }}
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: hyperpolymath/standards
+          ref: 01c9b0c9f2646ebea0b30a9588462642ac94aee9
+          path: .standards-grid
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/verdict-grid.sh
+            scripts/lib/verdict-grid.jq
+          sparse-checkout-cone-mode: false
+
+      - name: Read the previous verdict grid
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+            | jq -r '[.[][] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- verdict-grid:hypatia ")))]
+                     | last | .body // ""' \
+            > "$RUNNER_TEMP/grid-previous.md" || : > "$RUNNER_TEMP/grid-previous.md"
+
+      - name: Render the Hypatia verdict grid
+        id: grid
+        if: ${{ always() }}
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number || 'local' }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -uo pipefail
+          renderer=.standards-grid/scripts/verdict-grid.sh
+          mkdir -p verdict-grid
+          findings=hypatia-findings.json
+          [ -f hypatia-findings.relativized.json ] && findings=hypatia-findings.relativized.json
+          enrolment=""
+          [ -f .gitbot-fleet/enrolment.json ] && enrolment=.gitbot-fleet/enrolment.json
+          bash "$renderer" render --out verdict-grid \
+            --hypatia "$findings" --panic panic-attack-findings.json --pons pons-findings.json \
+            --report-backs .gitbot-fleet/report-backs --enrolment "$enrolment" \
+            --previous "$RUNNER_TEMP/grid-previous.md" \
+            --sha "$HEAD_SHA" --run "$GITHUB_RUN_ID" \
+            --url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --pr "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --hypatia-ref "$HYPATIA_SHA" --panic-ref "$PANIC_ATTACK_SHA" --pons-ref "$PONS_SHA" > /dev/null
+          rm -rf .standards-grid
+
+      - name: Upload the verdict grid
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: verdict-grid
+          path: verdict-grid
+          if-no-files-found: error
+          retention-days: 90
+
+  verdict:
+    name: Post the Hypatia verdict grid
+    needs: hypatia
+    if: >-
+      always() && github.event_name == 'pull_request'
+      && needs.hypatia.result != 'skipped'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Download the grid
+        uses: actions/download-artifact@v8.0.2
+        continue-on-error: true
+        with:
+          name: verdict-grid
+          path: ${{ runner.temp }}/verdict-grid
+
+      - name: Create or update the grid comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GRID: ${{ runner.temp }}/verdict-grid/report.md
+          MARKER: '<!-- verdict-grid:hypatia regenerated on every run -->'
+        run: |
+          set -euo pipefail
+          if [ ! -s "$GRID" ]; then
+            echo "::warning::the verdict-grid artifact holds no report.md; the scan did not render a grid, see its job"
+            exit 0
+          fi
+          comment_id="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+            | jq -r --arg m "$MARKER" \
+                '[.[][] | select(.user.login == "github-actions[bot]" and (.body | contains($m)))] | last | .id // ""')"
+          jq -n --rawfile body "$GRID" '{body: $body}' > "$RUNNER_TEMP/grid-comment.json"
+          if [ -n "$comment_id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" --input "$RUNNER_TEMP/grid-comment.json" >/dev/null
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --input "$RUNNER_TEMP/grid-comment.json" >/dev/null
+          fi

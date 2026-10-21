@@ -1,11 +1,17 @@
 # SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
-# This workflow is managed by gh actions-lock.
-# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
-# dogfood-gate.yml — Hyperpolymath Dogfooding Quality Gate
-# Validates that the repo uses hyperpolymath's own formats and tools.
-# Companion to static-analysis-gate.yml (security) — this is for format compliance.
+# dogfood-gate.yml — DEED + K9 Conformance Gates and K9 Verdict Grid
+#
+# Runs the canonical validators and verdict-grid renderer from
+# hyperpolymath/standards@01c9b0c9f2646ebea0b30a9588462642ac94aee9:
+#   - 1-formats/deed/tools/deed_lint.js (against 1-formats/deed/spec/abnf/deed.abnf v1.2.0)
+#   - 1-formats/k9/tools/k9-validate.sh (against 1-formats/k9/spec/contract/k9_contract.ncl v1.0.0)
+#   - scripts/k9-grid.sh (conformance family of docs/VERDICT-GRID-SPEC.adoc)
+#
+# Note: Executes via step-level checkout of hyperpolymath/standards rather than
+# cross-owner workflow_call so runs succeed under metadatastician's repository
+# Actions allowlist without startup_failure.
 name: Dogfood Gate
 
 on:
@@ -13,307 +19,285 @@ on:
     branches: ['**']
   push:
     branches: [main, master]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
-  actions: read
   contents: read
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Job 2: K9 contract validation
+  # Job 1: DEED conformance — canonical deed_lint.js (standards 1-formats/deed/)
+  # ---------------------------------------------------------------------------
+  deed-validate:
+    name: Validate DEED manifests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out caller repository
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check out canonical DEED validator from standards
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: hyperpolymath/standards
+          ref: 01c9b0c9f2646ebea0b30a9588462642ac94aee9
+          path: .standards-deed
+          persist-credentials: false
+          sparse-checkout: |
+            1-formats/deed/tools
+            1-formats/deed/spec
+          sparse-checkout-cone-mode: false
+
+      - name: Self-test canonical DEED linter
+        run: node .standards-deed/1-formats/deed/tools/deed_lint.js --self-test
+
+      - name: Lint committed .deed files and enforce .a2ml retirement
+        run: |
+          set -euo pipefail
+          cp .standards-deed/1-formats/deed/tools/deed_lint.js "$RUNNER_TEMP/deed_lint.js"
+          LINTER="$RUNNER_TEMP/deed_lint.js"
+          rm -rf .standards-deed
+
+          a2ml_count=$(find . -type f -name '*.a2ml' -not -path './.git/*' | wc -l)
+          if [ "$a2ml_count" -gt 0 ]; then
+            echo "::error::Found $a2ml_count retired .a2ml file(s); migrate all .a2ml files to .deed (standards#837)"
+            find . -type f -name '*.a2ml' -not -path './.git/*'
+            exit 1
+          fi
+
+          mapfile -d '' files < <(find . -type f -name '*.deed' -not -path './.git/*' -print0 | sort -z)
+          count="${#files[@]}"
+          echo "Found $count .deed file(s)"
+          if [ "$count" -eq 0 ]; then
+            echo "::error::No .deed files found in repository"
+            exit 1
+          fi
+
+          node "$LINTER" "${files[@]}"
+          {
+            echo "## DEED Conformance (ABNF v1.2.0)"
+            echo ""
+            echo ":white_check_mark: Validated **$count** \`.deed\` file(s) with \`1-formats/deed/tools/deed_lint.js\` (0 retired \`.a2ml\` files)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # Job 2: K9 conformance — canonical k9-validate.sh (L0-L2) + k9-grid.sh
   # ---------------------------------------------------------------------------
   k9-validate:
     name: Validate K9 contracts
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      CANON_REF: 01c9b0c9f2646ebea0b30a9588462642ac94aee9
+      NICKEL_VERSION: '1.18.0'
+      NICKEL_SHA256: 9cba4dd65ae9915ec61f73033aafcff307a377665a83fd8f530df086763318cb
     steps:
-      - name: Checkout repository
+      - name: Check out caller repository
         uses: actions/checkout@v7.0.1
-
-      - name: Check for K9 files
-        id: detect
-        run: |
-          COUNT=$(find . \( -name '*.k9' -o -name '*.k9.ncl' \) -not -path './.git/*' | wc -l)
-          CONFIG_COUNT=$(find . \( -name '*.toml' -o -name '*.yaml' -o -name '*.yml' -o -name '*.json' \) \
-            -not -path './.git/*' -not -path './node_modules/*' -not -path './.deno/*' \
-            -not -name 'package-lock.json' -not -name 'Cargo.lock' -not -name 'deno.lock' | wc -l)
-          echo "k9_count=$COUNT" >> "$GITHUB_OUTPUT"
-          echo "config_count=$CONFIG_COUNT" >> "$GITHUB_OUTPUT"
-          if [ "$COUNT" -eq 0 ] && [ "$CONFIG_COUNT" -gt 0 ]; then
-            echo "::warning::Found $CONFIG_COUNT config files but no K9 contracts. Run k9iser to generate contracts."
-          fi
-
-      - name: Validate K9 contracts
-        if: steps.detect.outputs.k9_count > 0
-        uses: hyperpolymath/k9-ecosystem/validate-action@main
         with:
-          path: '.'
-          strict: 'false'
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Write summary
+      - name: Check out canonical K9 validator and grid renderer from standards
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: hyperpolymath/standards
+          ref: 01c9b0c9f2646ebea0b30a9588462642ac94aee9
+          path: .k9-canon
+          persist-credentials: false
+          sparse-checkout: |
+            1-formats/k9
+            scripts/k9-grid.sh
+            scripts/lib/k9-grid.jq
+          sparse-checkout-cone-mode: false
+
+      - name: Install Nickel (pinned, sha256-verified)
         run: |
-          K9_COUNT="${{ steps.detect.outputs.k9_count }}"
-          CFG_COUNT="${{ steps.detect.outputs.config_count }}"
-          if [ "$K9_COUNT" -eq 0 ]; then
-            cat <<'EOF' >> "$GITHUB_STEP_SUMMARY"
-          ## K9 Contract Validation
+          set -euo pipefail
+          URL="https://github.com/tweag/nickel/releases/download/${NICKEL_VERSION}/nickel-x86_64-linux"
+          curl -sSfL --proto '=https' --proto-redir '=https' --tlsv1.2 --retry 3 -o "$RUNNER_TEMP/nickel" "$URL"
+          echo "${NICKEL_SHA256}  ${RUNNER_TEMP}/nickel" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/nickel"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
-          :warning: **No K9 contract files found.** Repos with configuration files should have K9 contracts.
+      - name: Validator self-test
+        run: |
+          set +e
+          bash .k9-canon/1-formats/k9/tools/k9-validate.sh --self-test > "$RUNNER_TEMP/selftest.log" 2>&1
+          echo "SELFTEST_CODE=$?" >> "$GITHUB_ENV"
+          tail -n 5 "$RUNNER_TEMP/selftest.log"
 
-          Generate contracts with: `k9iser generate .`
-          EOF
-          else
-            echo "## K9 Contract Validation" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "Validated **${K9_COUNT}** K9 contract(s) against **${CFG_COUNT}** config file(s)." >> "$GITHUB_STEP_SUMMARY"
+      - name: Contract typecheck
+        run: |
+          set +e
+          nickel typecheck .k9-canon/1-formats/k9/spec/contract/k9_contract.ncl > "$RUNNER_TEMP/typecheck.log" 2>&1
+          echo "TYPECHECK_CODE=$?" >> "$GITHUB_ENV"
+          cat "$RUNNER_TEMP/typecheck.log"
+
+      - name: Enumerate committed K9 files and Validate (L0-L2, strict)
+        run: |
+          set -euo pipefail
+          git ls-files -z -- '*.k9.ncl' '*.k9' \
+            | tr '\0' '\n' \
+            | { grep -v -E '^(\.k9-canon/|9-archive/|1-formats/k9/tools/fixtures/)' || [ $? -eq 1 ]; } \
+            | sort > "$RUNNER_TEMP/expected"
+          echo "$(wc -l < "$RUNNER_TEMP/expected") committed K9 file(s)"
+          : > "$RUNNER_TEMP/changed"
+          : > "$RUNNER_TEMP/results.jsonl"
+          set +e
+          worst=0
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            bash .k9-canon/1-formats/k9/tools/k9-validate.sh --strict --layer L2 --json --quiet -- "$f" >> "$RUNNER_TEMP/results.jsonl" 2>> "$RUNNER_TEMP/corpus.log"
+            rc=$?
+            [ "$rc" -gt "$worst" ] && worst=$rc
+          done < "$RUNNER_TEMP/expected"
+          set -e
+          echo "CORPUS_CODE=$worst" >> "$GITHUB_ENV"
+          echo "validator worst exit status: $worst"
+
+      - name: Read previous K9 verdict grid on pull request
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+            | jq -r '[.[][] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- verdict-grid:k9 ")))]
+                     | last | .body // ""' \
+            > "$RUNNER_TEMP/previous.md" || : > "$RUNNER_TEMP/previous.md"
+
+      - name: Render the K9 verdict grid
+        id: grid
+        if: ${{ always() }}
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number || 'local' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          args=(--out "$RUNNER_TEMP/k9-grid" --results "$RUNNER_TEMP/results.jsonl" --expected "$RUNNER_TEMP/expected"
+                --changed "$RUNNER_TEMP/changed" --selftest "$RUNNER_TEMP/selftest.log" --selftest-code "$SELFTEST_CODE"
+                --typecheck "$RUNNER_TEMP/typecheck.log" --typecheck-code "$TYPECHECK_CODE" --corpus-code "$CORPUS_CODE"
+                --sha "$HEAD_SHA" --run "$GITHUB_RUN_ID" --url "$RUN_URL" --pr "$PR_NUMBER" --repo "$GITHUB_REPOSITORY"
+                --canon-ref "$CANON_REF" --require-files)
+          [ -s "$RUNNER_TEMP/previous.md" ] && args+=(--previous "$RUNNER_TEMP/previous.md")
+          bash .k9-canon/scripts/k9-grid.sh render "${args[@]}"
+          cp "$RUNNER_TEMP/selftest.log" "$RUNNER_TEMP/typecheck.log" "$RUNNER_TEMP/results.jsonl" "$RUNNER_TEMP/k9-grid/"
+          [ -f "$RUNNER_TEMP/corpus.log" ] && cp "$RUNNER_TEMP/corpus.log" "$RUNNER_TEMP/k9-grid/"
+          rm -rf .k9-canon
+
+      - name: Upload K9 verdict grid artifact
+        if: ${{ always() && steps.grid.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: k9-grid
+          path: ${{ runner.temp }}/k9-grid
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Gate on K9 verdict
+        env:
+          STATE: ${{ steps.grid.outputs.state }}
+        run: |
+          set -euo pipefail
+          echo "K9 verdict grid: $STATE"
+          if [ "$STATE" = "red" ]; then
+            echo "::error::K9 conformance failed; see the k9-grid artifact and the step summary"
+            exit 1
           fi
 
   # ---------------------------------------------------------------------------
-  # Job 3: Empty-linter — invisible character detection
+  # Job 3: Post/update the K9 verdict grid on the pull request
+  # ---------------------------------------------------------------------------
+  k9-verdict:
+    name: Post the K9 verdict grid
+    needs: k9-validate
+    if: >-
+      always() && github.event_name == 'pull_request'
+      && needs.k9-validate.result != 'skipped'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Download the grid
+        uses: actions/download-artifact@v8.0.2
+        continue-on-error: true
+        with:
+          name: k9-grid
+          path: ${{ runner.temp }}/k9-grid
+
+      - name: Create or update the grid comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GRID: ${{ runner.temp }}/k9-grid/report.md
+          MARKER: '<!-- verdict-grid:k9 regenerated on every run -->'
+        run: |
+          set -euo pipefail
+          if [ ! -s "$GRID" ]; then
+            echo "::warning::the k9-grid artifact holds no report.md; the lane did not render a grid, see its job"
+            exit 0
+          fi
+          comment_id="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+            | jq -r --arg m "$MARKER" \
+                '[.[][] | select(.user.login == "github-actions[bot]" and (.body | contains($m)))] | last | .id // ""')"
+          jq -n --rawfile body "$GRID" '{body: $body}' > "$RUNNER_TEMP/k9-comment.json"
+          if [ -n "$comment_id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" --input "$RUNNER_TEMP/k9-comment.json" >/dev/null
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --input "$RUNNER_TEMP/k9-comment.json" >/dev/null
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Job 4: Empty-linter — invisible character detection
   # ---------------------------------------------------------------------------
   empty-lint:
     name: Empty-linter (invisible characters)
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
-      - name: Scan for invisible characters
-        id: lint
+      - name: Scan for invisible C0/NUL characters
         run: |
-          # Inline invisible character detection (from empty-linter's core patterns).
-          # Checks for: zero-width spaces, zero-width joiners, BOM, soft hyphens,
-          # non-breaking spaces, null bytes, and other invisible Unicode in source files.
+          set -euo pipefail
+          PATTERNS='\x00|[\x01-\x08\x0B\x0C\x0E-\x1F]'
           set +e
-          PATTERNS='\x00|[\x01-\x08\x0B\x0C\x0E-\x1F]|\x{a0}|\x{ad}|\x{200b}|\x{200c}|\x{200d}|\x{200e}|\x{200f}|\x{202a}|\x{202b}|\x{202c}|\x{202d}|\x{202e}|\x{2060}|\x{feff}'
           find "$GITHUB_WORKSPACE" \
             -not -path '*/.git/*' -not -path '*/node_modules/*' \
-            -not -path '*/.deno/*' -not -path '*/target/*' \
-            -not -path '*/_build/*' -not -path '*/deps/*' \
-            -not -path '*/external_corpora/*' -not -path '*/.lake/*' \
-            -type f \( -name '*.rs' -o -name '*.ex' -o -name '*.exs' -o -name '*.res' \
-              -o -name '*.js' -o -name '*.ts' -o -name '*.json' -o -name '*.toml' \
-              -o -name '*.yml' -o -name '*.yaml' -o -name '*.md' -o -name '*.adoc' \
-              -o -name '*.idr' -o -name '*.zig' -o -name '*.v' -o -name '*.jl' \
-              -o -name '*.gleam' -o -name '*.hs' -o -name '*.ml' -o -name '*.sh' \) \
-            -exec grep -aPrl "$PATTERNS" {} \; > /tmp/empty-lint-results.txt 2>/dev/null
-          EL_EXIT=$?
+            -not -path '*/target/*' -not -path '*/zig-out/*' \
+            -type f \( -name '*.rs' -o -name '*.zig' -o -name '*.idr' -o -name '*.eph' \
+              -o -name '*.deed' -o -name '*.k9' -o -name '*.ncl' -o -name '*.json' \
+              -o -name '*.toml' -o -name '*.yml' -o -name '*.yaml' -o -name '*.md' \
+              -o -name '*.adoc' -o -name '*.sh' \) \
+            -exec LC_ALL=C.UTF-8 grep -aPl "$PATTERNS" {} + > /tmp/empty-lint-blocking.txt
           set -e
-
-          FINDINGS=$(wc -l < /tmp/empty-lint-results.txt 2>/dev/null || echo 0)
-          echo "findings=$FINDINGS" >> "$GITHUB_OUTPUT"
-          echo "exit_code=$EL_EXIT" >> "$GITHUB_OUTPUT"
-          echo "ready=true" >> "$GITHUB_OUTPUT"
-
-          # Emit annotations for each file with invisible chars
-          while IFS= read -r filepath; do
-            [ -z "$filepath" ] && continue
-            REL_PATH="${filepath#$GITHUB_WORKSPACE/}"
-            echo "::warning file=${REL_PATH}::Invisible Unicode characters detected (zero-width space, BOM, NBSP, etc.)"
-          done < /tmp/empty-lint-results.txt
-
-      - name: Write summary
-        run: |
-          if [ "${{ steps.lint.outputs.ready }}" = "true" ]; then
-            FINDINGS="${{ steps.lint.outputs.findings }}"
-            if [ "$FINDINGS" -gt 0 ] 2>/dev/null; then
-              echo "## Empty-Linter Results" >> "$GITHUB_STEP_SUMMARY"
-              echo "" >> "$GITHUB_STEP_SUMMARY"
-              echo "Found **${FINDINGS}** invisible character issue(s). See annotations above." >> "$GITHUB_STEP_SUMMARY"
-            else
-              echo "## Empty-Linter Results" >> "$GITHUB_STEP_SUMMARY"
-              echo "" >> "$GITHUB_STEP_SUMMARY"
-              echo ":white_check_mark: No invisible character issues found." >> "$GITHUB_STEP_SUMMARY"
-            fi
-          else
-            echo "## Empty-Linter" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "Skipped: empty-linter not available." >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-  # ---------------------------------------------------------------------------
-  # Job 4: Groove manifest check (for repos that should expose services)
-  # ---------------------------------------------------------------------------
-  groove-check:
-    name: Groove manifest check
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-
-      - name: Check for Groove manifest
-        id: groove
-        run: |
-          # Check for static or dynamic Groove endpoints
-          HAS_MANIFEST="false"
-          HAS_GROOVE_CODE="false"
-
-          if [ -f ".well-known/groove/manifest.json" ]; then
-            HAS_MANIFEST="true"
-            # Validate the manifest JSON
-            if ! jq empty .well-known/groove/manifest.json 2>/dev/null; then
-              echo "::error file=.well-known/groove/manifest.json::Invalid JSON in Groove manifest"
-            else
-              SVC_ID=$(jq -r '.service_id // "unknown"' .well-known/groove/manifest.json)
-              echo "service_id=$SVC_ID" >> "$GITHUB_OUTPUT"
-            fi
-          fi
-
-          # Check for Groove endpoint code (Rust, Elixir, Zig, V)
-          if grep -rl 'well-known/groove' --include='*.rs' --include='*.ex' --include='*.zig' --include='*.v' --include='*.res' . 2>/dev/null | head -1 | grep -q .; then
-            HAS_GROOVE_CODE="true"
-          fi
-
-          # Check if this repo likely serves HTTP (has server/listener code)
-          HAS_SERVER="false"
-          if grep -rl 'TcpListener\|Bandit\|Plug.Cowboy\|httpz\|vweb\|axum::serve\|actix_web' --include='*.rs' --include='*.ex' --include='*.zig' --include='*.v' . 2>/dev/null | head -1 | grep -q .; then
-            HAS_SERVER="true"
-          fi
-
-          echo "has_manifest=$HAS_MANIFEST" >> "$GITHUB_OUTPUT"
-          echo "has_groove_code=$HAS_GROOVE_CODE" >> "$GITHUB_OUTPUT"
-          echo "has_server=$HAS_SERVER" >> "$GITHUB_OUTPUT"
-
-          if [ "$HAS_SERVER" = "true" ] && [ "$HAS_MANIFEST" = "false" ] && [ "$HAS_GROOVE_CODE" = "false" ]; then
-            echo "::warning::This repo has server code but no Groove endpoint. Add .well-known/groove/manifest.json for service discovery."
-          fi
-
-      - name: Write summary
-        run: |
-          echo "## Groove Protocol Check" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Check | Status |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|-------|--------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Static manifest (.well-known/groove/manifest.json) | ${{ steps.groove.outputs.has_manifest }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Groove endpoint in code | ${{ steps.groove.outputs.has_groove_code }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Has HTTP server code | ${{ steps.groove.outputs.has_server }} |" >> "$GITHUB_STEP_SUMMARY"
-
-  # ---------------------------------------------------------------------------
-  # Job 5: eclexiaiser manifest validation
-  # ---------------------------------------------------------------------------
-  eclexiaiser-validate:
-    name: Validate eclexiaiser manifest
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-
-      - name: Check and validate eclexiaiser manifest
-        id: eclex
-        run: |
-          if [ ! -f "eclexiaiser.toml" ]; then
-            # Check if repo has a Containerfile — if so, recommend eclexiaiser
-            if [ -f "Containerfile" ]; then
-              echo "::warning::Containerfile present but no eclexiaiser.toml. Run \`eclexiaiser init\` to scaffold energy/carbon budgets."
-            fi
-            echo "has_manifest=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          echo "has_manifest=true" >> "$GITHUB_OUTPUT"
-
-          # Validate TOML structure using Python 3.11+ tomllib. Single-line
-          # -c on purpose: the previous multi-line block sat at column 0
-          # inside this run: | scalar — invalid YAML that silently killed
-          # the whole workflow. (A scripts/*.py file is not an option: the
-          # estate bans Python as a repo language.)
-          python3 -c 'import tomllib,sys; d=tomllib.load(open("eclexiaiser.toml","rb")); p=d.get("project",{}); fns=d.get("functions",[]); errs=[m for c,m in [(not p.get("name","").strip(),"project.name is required"),(not fns,"at least one [[functions]] entry is required")] if c]+[m for fn in fns for c,m in [(not fn.get("name","").strip(),"function name cannot be empty"),(not fn.get("source","").strip(),"function %r has no source path"%fn.get("name",""))] if c]; print("\n".join("ERROR: "+e for e in errs) or "Valid: %s (%d function(s))"%(p.get("name"),len(fns))); sys.exit(1 if errs else 0)' || {
-            echo "::error file=eclexiaiser.toml::Invalid eclexiaiser.toml — see step output for details"
+          blocking=$(wc -l < /tmp/empty-lint-blocking.txt 2>/dev/null || echo 0)
+          if [ "${blocking:-0}" -gt 0 ]; then
+            echo "::error::$blocking file(s) contain C0 control characters or NUL bytes"
+            cat /tmp/empty-lint-blocking.txt
             exit 1
-          }
-
-      - name: Write summary
-        run: |
-          if [ "${{ steps.eclex.outputs.has_manifest }}" = "true" ]; then
-            echo "## Eclexiaiser Manifest" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo ":white_check_mark: **eclexiaiser.toml** present and valid." >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "## Eclexiaiser Manifest" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo ":ballot_box_with_check: No eclexiaiser.toml. Add one with \`eclexiaiser init\` for energy/carbon tracking." >> "$GITHUB_STEP_SUMMARY"
           fi
-
-  # ---------------------------------------------------------------------------
-  # Job 6: Dogfooding summary
-  # ---------------------------------------------------------------------------
-  dogfood-summary:
-    name: Dogfooding compliance summary
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: [k9-validate, empty-lint, groove-check, eclexiaiser-validate]
-    if: always()
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-
-      - name: Generate dogfooding scorecard
-        run: |
-          SCORE=0
-          MAX=5
-
-          # K9 contracts present?
-          if find . \( -name '*.k9' -o -name '*.k9.ncl' \) -not -path './.git/*' | head -1 | grep -q .; then
-            SCORE=$((SCORE + 1))
-            K9_STATUS=":white_check_mark:"
-          else
-            K9_STATUS=":x:"
-          fi
-
-          # .editorconfig present?
-          if [ -f ".editorconfig" ]; then
-            SCORE=$((SCORE + 1))
-            EC_STATUS=":white_check_mark:"
-          else
-            EC_STATUS=":x:"
-          fi
-
-          # Groove manifest or code?
-          if [ -f ".well-known/groove/manifest.json" ] || grep -rl 'well-known/groove' --include='*.rs' --include='*.ex' --include='*.zig' . 2>/dev/null | head -1 | grep -q .; then
-            SCORE=$((SCORE + 1))
-            GROOVE_STATUS=":white_check_mark:"
-          else
-            GROOVE_STATUS=":ballot_box_with_check:"
-          fi
-
-          # VeriSimDB integration?
-          if grep -rl 'verisimdb\|VeriSimDB' --include='*.toml' --include='*.yaml' --include='*.yml' --include='*.json' --include='*.rs' --include='*.ex' . 2>/dev/null | head -1 | grep -q .; then
-            SCORE=$((SCORE + 1))
-            VSDB_STATUS=":white_check_mark:"
-          else
-            VSDB_STATUS=":ballot_box_with_check:"
-          fi
-
-          # eclexiaiser energy tracking?
-          if [ -f "eclexiaiser.toml" ]; then
-            SCORE=$((SCORE + 1))
-            ECLEX_STATUS=":white_check_mark:"
-          else
-            ECLEX_STATUS=":ballot_box_with_check:"
-          fi
-
-          cat <<EOF >> "$GITHUB_STEP_SUMMARY"
-          ## Dogfooding Scorecard
-
-          **Score: ${SCORE}/${MAX}**
-
-          | Tool/Format | Status | Notes |
-          |-------------|--------|-------|
-          | K9 contracts | ${K9_STATUS} | Required for repos with config files |
-          | .editorconfig | ${EC_STATUS} | Required for all repos |
-          | Groove endpoint | ${GROOVE_STATUS} | Required for service repos |
-          | VeriSimDB integration | ${VSDB_STATUS} | Required for stateful repos |
-          | eclexiaiser | ${ECLEX_STATUS} | Energy/carbon budgets for container services |
-
-          ---
-          *Generated by the [Dogfood Gate](https://github.com/hyperpolymath/rsr-template-repo) workflow.*
-          *Dogfooding is guinea pig fooding — we test our tools on ourselves.*
-          EOF
+          echo "No C0/NUL corruption detected."

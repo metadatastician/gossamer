@@ -1,5 +1,4 @@
 # SPDX-License-Identifier: MPL-2.0
-# (MPL-2.0 is automatic legal fallback until PMPL is formally recognised)
 #
 # _base.ncl — Shared contractile base
 #
@@ -29,7 +28,7 @@
 #         name = "must-runner",
 #         version = "1.0.0",
 #         description = "...",
-#         paired_xfile = "Mustfile.a2ml",
+#         paired_xfile = "must.k9.ncl#declaration",
 #         author = "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>",
 #       },
 #     },
@@ -38,7 +37,6 @@
 #   }
 #
 # See: docs/CONTRACTILE-SPEC.adoc §Shared Base
-
 {
   # -------------------------------------------------------------------------
   # pedigree_schema
@@ -50,11 +48,11 @@
   # -------------------------------------------------------------------------
   pedigree_schema = {
     schema_version | String | default = "1.0.0",
-    contractile_verb | String | default = "UNSET",   # MUST override in verb
-    semantics | String | default = "UNSET",           # MUST override in verb
+    contractile_verb | String | default = "UNSET", # MUST override in verb
+    semantics | String | default = "UNSET", # MUST override in verb
     security = {
       leash | [| 'Kennel, 'Yard, 'Hunt |] | default = 'Kennel,
-      trust_level | String | default = "UNSET",       # MUST override in verb
+      trust_level | String | default = "UNSET", # MUST override in verb
       allow_network | Bool | default = false,
       allow_filesystem_write | Bool | default = false,
       allow_subprocess | Bool | default = true,
@@ -63,10 +61,10 @@
       #      destructive_mode_requires_flag (dust)
     },
     metadata = {
-      name | String | default = "UNSET",              # MUST override in verb
+      name | String | default = "UNSET", # MUST override in verb
       version | String | default = "1.0.0",
-      description | String | default = "UNSET",       # MUST override in verb
-      paired_xfile | String | default = "UNSET",      # MUST override in verb
+      description | String | default = "UNSET", # MUST override in verb
+      paired_xfile | String | default = "UNSET", # MUST override in verb
       author | String | default = "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>",
     },
   },
@@ -118,7 +116,8 @@
     allowed_exit_codes | Array Number | default = [0],
     permission_class
       | [| 'read_only, 'filesystem_write, 'subprocess, 'network |]
-      | default = 'read_only,
+      | default
+      = 'read_only,
   },
 
   # -------------------------------------------------------------------------
@@ -135,7 +134,7 @@
   run_defaults = {
     on_pass = "continue",
     on_any_fail = "exit-nonzero",
-    report_format = "a2ml",
+    report_format = "json",
     emit_summary = true,
   },
 }
