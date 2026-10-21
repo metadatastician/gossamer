@@ -43,6 +43,7 @@ const servers = [_]Server{
 };
 
 fn getVpsHost() []const u8 {
+    if (@import("builtin").os.tag == .windows) return "localhost";
     return std.posix.getenv("GOSSAMER_VPS_HOST") orelse "localhost";
 }
 
