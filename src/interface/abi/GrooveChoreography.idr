@@ -360,15 +360,13 @@ grooveBrokerKCut : ResourceAlgebra g => (a, b, c : g) ->
 grooveBrokerKCut a b c =
   kcutLoss 1 (grooveBrokerChoreo a b c) grooveBrokerCut grooveBrokerConsistent
 
-%auto_implicits off
-
 public export
 grooveLossFull : gradeAt 1 (grooveBrokerChoreo (Finite 1) (Finite 2) (Finite 5)) = Finite 8
 grooveLossFull = Refl
 
 public export
 grooveLossAtCut : gradeAt 1 (cutGlobal (grooveBrokerChoreo (Finite 1) (Finite 2) (Finite 5))
-                                       grooveBrokerCut) = Finite 3
+                                       GrooveChoreography.grooveBrokerCut) = Finite 3
 grooveLossAtCut = Refl
 
 public export
@@ -385,7 +383,5 @@ public export
 grooveOccupancyAtCut : peak (gradeAt 1 (cutGlobal (grooveBrokerChoreo (MkHWM 1 0 LTEZero)
                                                                       (MkHWM 2 0 LTEZero)
                                                                       (MkHWM 5 0 LTEZero))
-                                                  grooveBrokerCut)) = 2
+                                                  GrooveChoreography.grooveBrokerCut)) = 2
 grooveOccupancyAtCut = Refl
-
-%auto_implicits on

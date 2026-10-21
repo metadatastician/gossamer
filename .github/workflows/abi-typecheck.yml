@@ -61,15 +61,32 @@ jobs:
           echo "$HOME/.idris2/bin" >> "$GITHUB_PATH"
 
       - name: Typecheck the shell ABI package (groove-agnostic)
-        run: idris2 --typecheck gossamer-abi.ipkg
+        run: |
+          if ! idris2 --typecheck gossamer-abi.ipkg > /tmp/idris.log 2>&1; then
+            cat /tmp/idris.log
+            printf '::error::%s\n' "$(tr '\n\r' '  ' < /tmp/idris.log | tail -c 1500)"
+            exit 1
+          fi
+          cat /tmp/idris.log
 
       - name: Install the shell ABI package (dependency of groove)
         run: idris2 --install gossamer-abi.ipkg
 
       - name: Typecheck the groove protocol package (depends on the shell)
-        run: idris2 --typecheck gossamer-groove.ipkg
+        run: |
+          if ! idris2 --typecheck gossamer-groove.ipkg > /tmp/idris.log 2>&1; then
+            cat /tmp/idris.log
+            printf '::error::%s\n' "$(tr '\n\r' '  ' < /tmp/idris.log | tail -c 1500)"
+            exit 1
+          fi
+          cat /tmp/idris.log
 
       - name: Build & run the ABI runtime test suite
         run: |
-          idris2 --build gossamer-abi-tests.ipkg
+          if ! idris2 --build gossamer-abi-tests.ipkg > /tmp/idris.log 2>&1; then
+            cat /tmp/idris.log
+            printf '::error::%s\n' "$(tr '\n\r' '  ' < /tmp/idris.log | tail -c 1500)"
+            exit 1
+          fi
+          cat /tmp/idris.log
           ./build/exec/gossamer-abi-tests

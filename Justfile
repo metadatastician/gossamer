@@ -85,7 +85,7 @@ build-launcher: build-ffi
 
 # Release-mode launcher + cli.wasm (used by packaging recipes).
 build-launcher-release: build-ffi-release
-    cd cli/launcher && EPHAPAX="{{ephapax}}" zig build -Doptimize=ReleaseSafe
+    cd cli/launcher && (EPHAPAX="{{ephapax}}" zig build -Doptimize=ReleaseSafe > /tmp/launcher-build.log 2>&1 || { cat /tmp/launcher-build.log; printf '::error::launcher build failed: %s\n' "$(tr '\n\r' '  ' < /tmp/launcher-build.log | tail -c 1500)"; exit 1; })
 
 # Build everything (FFI + CLI + check)
 build: build-ffi build-cli check

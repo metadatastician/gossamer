@@ -336,16 +336,14 @@ public export
 ctCapCheck : Op
 ctCapCheck = MkOp (\_, _, cell => cell) (\_, _ => 1)
 
-%auto_implicits off
-
 ||| OND-2: `skipOp` is OND under ANY observation model.
 public export
-skipIsOND : {0 Obs : Type} -> (obs : Exec -> Obs) -> isOND obs skipOp
+skipIsOND : {0 Obs : Type} -> (obs : Exec -> Obs) -> isOND obs NullOps.skipOp
 skipIsOND _ _ _ _ = Refl
 
 ||| OND-3a: `leakyCapCheck` is a state CNO (`isNullOp`).
 public export
-leakyCnoIsNull : isNullOp leakyCapCheck
+leakyCnoIsNull : isNullOp NullOps.leakyCapCheck
 leakyCnoIsNull _ _ _ = Refl
 
 private
@@ -355,17 +353,15 @@ zeroNotOne Refl impossible
 ||| OND-3b (`CNO ⊥ OND` independence): Even though `leakyCapCheck` is a state
 ||| CNO, it violates OND under timing observation (`obsTime`).
 public export
-leakyCnoNotOndTime : Not (isOND obsTime leakyCapCheck)
+leakyCnoNotOndTime : Not (isOND NullOps.obsTime NullOps.leakyCapCheck)
 leakyCnoNotOndTime h = zeroNotOne (h 0 1 0)
 
 ||| Constant-time capability check (`ctCapCheck`) is both a state CNO and
 ||| satisfies full `isOND obsAll` (output + timing).
 public export
-ctCapCheckIsNull : isNullOp ctCapCheck
+ctCapCheckIsNull : isNullOp NullOps.ctCapCheck
 ctCapCheckIsNull _ _ _ = Refl
 
 public export
-ctCapCheckIsOND : isOND obsAll ctCapCheck
+ctCapCheckIsOND : isOND NullOps.obsAll NullOps.ctCapCheck
 ctCapCheckIsOND _ _ _ = Refl
-
-%auto_implicits on

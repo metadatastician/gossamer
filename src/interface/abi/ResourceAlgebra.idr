@@ -29,11 +29,9 @@ import Gossamer.ABI.Types
 -- 1. The Parametric Resource Algebra Kernel
 --------------------------------------------------------------------------------
 
-%auto_implicits off
-
 ||| Grade algebra operations: alternatives (`oplus`, `zeroG`) and sequence (`otimes`, `oneG`).
 public export
-interface ResourceOps (0 g : Type) where
+interface ResourceOps g where
   ||| Alternatives (⊕).
   oplus  : g -> g -> g
   ||| Sequence (⊗).
@@ -46,40 +44,38 @@ interface ResourceOps (0 g : Type) where
 ||| A verified grade algebra: alternatives form an idempotent commutative monoid
 ||| (`oplus`, `zeroG`); sequence forms a monoid (`otimes`, `oneG`).
 public export
-interface ResourceOps g => ResourceAlgebra (0 g : Type) where
+interface ResourceOps g => ResourceAlgebra g where
   -- IsAltMonoid oplus zeroG
   altAssoc : (a, b, c : g) -> oplus (oplus a b) c = oplus a (oplus b c)
   altComm  : (a, b : g) -> oplus a b = oplus b a
   altIdem  : (a : g) -> oplus a a = a
-  altUnitL : (a : g) -> oplus zeroG a = a
+  altUnitL : (a : g) -> oplus ResourceAlgebra.zeroG a = a
   -- IsSeqMonoid otimes oneG
   seqAssoc : (a, b, c : g) -> otimes (otimes a b) c = otimes a (otimes b c)
-  seqUnitL : (a : g) -> otimes oneG a = a
-  seqUnitR : (a : g) -> otimes a oneG = a
+  seqUnitL : (a : g) -> otimes ResourceAlgebra.oneG a = a
+  seqUnitR : (a : g) -> otimes a ResourceAlgebra.oneG = a
 
 ||| Right unit of alternatives (`IsAltMonoid.unitʳ`).
 public export
-altUnitR : {0 g : Type} -> ResourceAlgebra g => (a : g) -> oplus a zeroG = a
-altUnitR a = trans (altComm a zeroG) (altUnitL a)
+altUnitR : ResourceAlgebra g => (a : g) -> oplus a ResourceAlgebra.zeroG = a
+altUnitR a = trans (altComm a ResourceAlgebra.zeroG) (altUnitL a)
 
 ||| The induced order: `a ≼ b` when `b` absorbs `a` under `oplus`.
 public export
-LeG : {0 g : Type} -> ResourceAlgebra g => g -> g -> Type
+LeG : ResourceAlgebra g => g -> g -> Type
 LeG a b = oplus a b = b
 
 ||| `zeroG` is least in the induced order.
 public export
-zeroLeast : {0 g : Type} -> ResourceAlgebra g => (a : g) -> LeG zeroG a
+zeroLeast : ResourceAlgebra g => (a : g) -> LeG ResourceAlgebra.zeroG a
 zeroLeast a = altUnitL a
 
 ||| Annihilating resource algebra: `zeroG` absorbs under `otimes`.
 ||| Separate from `IsDioid` because `HWMGrade` is a dioid with `zeroG = oneG`.
 public export
-interface ResourceAlgebra g => IsAnnihilating (0 g : Type) where
-  annihilL : (a : g) -> otimes zeroG a = zeroG
-  annihilR : (a : g) -> otimes a zeroG = zeroG
-
-%auto_implicits on
+interface ResourceAlgebra g => IsAnnihilating g where
+  annihilL : (a : g) -> otimes ResourceAlgebra.zeroG a = ResourceAlgebra.zeroG
+  annihilR : (a : g) -> otimes a ResourceAlgebra.zeroG = ResourceAlgebra.zeroG
 
 ||| Reflexivity of `LeG`.
 public export
@@ -838,10 +834,8 @@ public export
 hwmAltIdem : (a : HWMGrade) -> hwmAlt a a = a
 hwmAltIdem (MkHWM p n _) = hwmEq (maxIdem p) (maxIdem n)
 
-%auto_implicits off
-
 public export
-hwmAltUnitL : (a : HWMGrade) -> hwmAlt hwmZero a = a
+hwmAltUnitL : (a : HWMGrade) -> hwmAlt ResourceAlgebra.hwmZero a = a
 hwmAltUnitL (MkHWM p n _) = hwmEq Refl Refl
 
 public export
@@ -854,16 +848,14 @@ hwmSeqAssoc (MkHWM p1 n1 _) (MkHWM p2 n2 _) (MkHWM p3 n3 _) =
     (plusAssoc n1 n2 n3)
 
 public export
-hwmSeqUnitL : (a : HWMGrade) -> hwmSeq hwmZero a = a
+hwmSeqUnitL : (a : HWMGrade) -> hwmSeq ResourceAlgebra.hwmZero a = a
 hwmSeqUnitL (MkHWM p n _) = hwmEq Refl Refl
 
 public export
-hwmSeqUnitR : (a : HWMGrade) -> hwmSeq a hwmZero = a
+hwmSeqUnitR : (a : HWMGrade) -> hwmSeq a ResourceAlgebra.hwmZero = a
 hwmSeqUnitR (MkHWM p n b) =
   hwmEq (trans (cong (maximum p) (plusZeroR n)) (maxAbsorbLTE b))
         (plusZeroR n)
-
-%auto_implicits on
 
 public export
 ResourceOps HWMGrade where
@@ -1001,11 +993,9 @@ private
 twoNotThree : Not (the Nat 2 = 3)
 twoNotThree Refl impossible
 
-%auto_implicits off
-
 ||| S-1: Occupancy is not cost (peaks 2 and 3 with 0 drift have peak 3, cost 5).
 public export
-occupancyIsNotCost : Not (peak (hwmSeq hwmTwo hwmThree) = 5)
+occupancyIsNotCost : Not (peak (hwmSeq ResourceAlgebra.hwmTwo ResourceAlgebra.hwmThree) = 5)
 occupancyIsNotCost = threeNotFive
 
 ||| S-2: Loss alternatives pick `min` (2), whereas MaxPlus alternatives pick `max` (3).
@@ -1043,7 +1033,7 @@ activityBudget Realtime = Val 60
 
 ||| `Paused` is the multiplicative identity `oneG = Val 0` of `MaxPlusGrade`.
 public export
-pausedIsZeroBudget : activityBudget Paused = oneG
+pausedIsZeroBudget : activityBudget Paused = ResourceAlgebra.oneG
 pausedIsZeroBudget = Refl
 
 ||| Activity levels are monotonically ordered in `MaxPlusGrade`:
@@ -1063,5 +1053,3 @@ midLeHigh = Refl
 public export
 highLeRealtime : LeG (activityBudget High) (activityBudget Realtime)
 highLeRealtime = Refl
-
-%auto_implicits on
