@@ -12,8 +12,8 @@ trap 'rm -rf "$stage"' EXIT
 
 install -d "$stage/DEBIAN" "$stage/usr/bin" "$stage/usr/lib" \
   "$stage/usr/share/gossamer" "$stage/usr/include/gossamer"
-sed "s/^Architecture:.*/Architecture: $arch/" packaging/debian/control \
-  > "$stage/DEBIAN/control"
+sed -e '/^#/d' -e '/./,$!d' -e "s/^Architecture:.*/Architecture: $arch/" \
+  packaging/debian/control > "$stage/DEBIAN/control"
 install -m 0755 cli/launcher/zig-out/bin/gossamer-launcher \
   "$stage/usr/bin/gossamer"
 install -m 0755 src/interface/ffi/zig-out/lib/libgossamer.so \

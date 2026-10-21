@@ -23,6 +23,23 @@ import Gossamer.ABI.ReversibleFS
 
 %default total
 
+Eq WindowState where
+  Created   == Created   = True
+  Visible   == Visible   = True
+  Hidden    == Hidden    = True
+  Minimized == Minimized = True
+  Maximized == Maximized = True
+  Closed    == Closed    = True
+  _         == _         = False
+
+Show WindowState where
+  show Created   = "Created"
+  show Visible   = "Visible"
+  show Hidden    = "Hidden"
+  show Minimized = "Minimized"
+  show Maximized = "Maximized"
+  show Closed    = "Closed"
+
 public export
 suiteName : String
 suiteName = "Gossamer ABI · EstateMathTest"
@@ -81,9 +98,9 @@ tests =
       let mutate : WindowState -> WindowState
           mutate _ = Minimized
       in allPass
-           [ assertEq (evalGuardedWindowOp Locked   mutate Visible) Visible
-           , assertEq (evalGuardedWindowOp ReadOnly mutate Focused) Focused
-           , assertEq (evalGuardedWindowOp Free     mutate Visible) Minimized
+           [ assertEq (evalGuardedWindowOp Locked   mutate Visible)   Visible
+           , assertEq (evalGuardedWindowOp ReadOnly mutate Maximized) Maximized
+           , assertEq (evalGuardedWindowOp Free     mutate Visible)   Minimized
            ]
 
   , test "estate/nullops: safeRevokeCap is a CNO on inactive or already-revoked tokens" $
