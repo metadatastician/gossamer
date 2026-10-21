@@ -161,71 +161,85 @@ dioidMonoR c {a} {b} p = trans (sym (distribR a b c)) (cong (\x => otimes x c) p
 -- 2. Self-Contained Arithmetic & Order Lemmas on Nat
 --------------------------------------------------------------------------------
 
+||| Witness reflexivity of the natural-number order.
 public export
 lteRefl : (n : Nat) -> LTE n n
 lteRefl Z     = LTEZero
 lteRefl (S n) = LTESucc (lteRefl n)
 
+||| Compose natural-number upper-bound witnesses.
 public export
 lteTrans : {m, n, p : Nat} -> LTE m n -> LTE n p -> LTE m p
 lteTrans LTEZero     _           = LTEZero
 lteTrans (LTESucc q) (LTESucc r) = LTESucc (lteTrans q r)
 
+||| Preserve an upper bound when adding the same natural number on the left.
 public export
 plusMonoRLTE : (m : Nat) -> {n, p : Nat} -> LTE n p -> LTE (m + n) (m + p)
 plusMonoRLTE Z     q = q
 plusMonoRLTE (S m) q = LTESucc (plusMonoRLTE m q)
 
+||| Show that any two witnesses of the same natural-number bound are equal.
 public export
 lteIrrelevant : {m, n : Nat} -> (p, q : LTE m n) -> p = q
 lteIrrelevant LTEZero     LTEZero     = Refl
 lteIrrelevant (LTESucc p) (LTESucc q) = cong LTESucc (lteIrrelevant p q)
 
+||| Prove that adding zero on the right preserves a natural number.
 public export
 plusZeroR : (n : Nat) -> n + 0 = n
 plusZeroR Z     = Refl
 plusZeroR (S k) = cong S (plusZeroR k)
 
+||| Move a successor from an addition result into its right operand.
 public export
 plusSuccR : (m, n : Nat) -> S (m + n) = m + S n
 plusSuccR Z     n = Refl
 plusSuccR (S m) n = cong S (plusSuccR m n)
 
+||| Prove commutativity of natural-number addition.
 public export
 plusComm : (m, n : Nat) -> m + n = n + m
 plusComm Z     n = sym (plusZeroR n)
 plusComm (S m) n = trans (cong S (plusComm m n)) (plusSuccR n m)
 
+||| Prove associativity of natural-number addition.
 public export
 plusAssoc : (m, n, p : Nat) -> (m + n) + p = m + (n + p)
 plusAssoc Z     n p = Refl
 plusAssoc (S m) n p = cong S (plusAssoc m n p)
 
+||| Prove that subtracting zero preserves a natural number.
 public export
 minusZeroR : (n : Nat) -> minus n 0 = n
 minusZeroR Z     = Refl
 minusZeroR (S k) = Refl
 
+||| Prove that zero is a right identity for natural-number maximum.
 public export
 maxZeroRight : (n : Nat) -> maximum n 0 = n
 maxZeroRight Z     = Refl
 maxZeroRight (S k) = Refl
 
+||| Prove that zero absorbs natural-number minimum on the right.
 public export
 minZeroRight : (n : Nat) -> minimum n 0 = 0
 minZeroRight Z     = Refl
 minZeroRight (S k) = Refl
 
+||| Prove idempotence of natural-number maximum.
 public export
 maxIdem : (n : Nat) -> maximum n n = n
 maxIdem Z     = Refl
 maxIdem (S k) = cong S (maxIdem k)
 
+||| Prove idempotence of natural-number minimum.
 public export
 minIdem : (n : Nat) -> minimum n n = n
 minIdem Z     = Refl
 minIdem (S k) = cong S (minIdem k)
 
+||| Prove commutativity of natural-number maximum.
 public export
 maxComm : (m, n : Nat) -> maximum m n = maximum n m
 maxComm Z     Z     = Refl
@@ -233,6 +247,7 @@ maxComm Z     (S n) = Refl
 maxComm (S m) Z     = Refl
 maxComm (S m) (S n) = cong S (maxComm m n)
 
+||| Prove commutativity of natural-number minimum.
 public export
 minComm : (m, n : Nat) -> minimum m n = minimum n m
 minComm Z     Z     = Refl
@@ -240,6 +255,7 @@ minComm Z     (S n) = Refl
 minComm (S m) Z     = Refl
 minComm (S m) (S n) = cong S (minComm m n)
 
+||| Prove associativity of natural-number maximum.
 public export
 maxAssoc : (m, n, p : Nat) -> maximum (maximum m n) p = maximum m (maximum n p)
 maxAssoc Z     n     p     = Refl
@@ -247,6 +263,7 @@ maxAssoc (S m) Z     p     = Refl
 maxAssoc (S m) (S n) Z     = Refl
 maxAssoc (S m) (S n) (S p) = cong S (maxAssoc m n p)
 
+||| Prove associativity of natural-number minimum.
 public export
 minAssoc : (m, n, p : Nat) -> minimum (minimum m n) p = minimum m (minimum n p)
 minAssoc Z     n     p     = Refl
@@ -254,38 +271,45 @@ minAssoc (S m) Z     p     = Refl
 minAssoc (S m) (S n) Z     = Refl
 minAssoc (S m) (S n) (S p) = cong S (minAssoc m n p)
 
+||| Witness that maximum bounds its left operand.
 public export
 maxLeftUpperBound : (m, n : Nat) -> LTE m (maximum m n)
 maxLeftUpperBound Z     n     = LTEZero
 maxLeftUpperBound (S m) Z     = lteRefl (S m)
 maxLeftUpperBound (S m) (S n) = LTESucc (maxLeftUpperBound m n)
 
+||| Witness that maximum bounds its right operand.
 public export
 maxRightUpperBound : (m, n : Nat) -> LTE n (maximum m n)
 maxRightUpperBound Z     n     = lteRefl n
 maxRightUpperBound (S m) Z     = LTEZero
 maxRightUpperBound (S m) (S n) = LTESucc (maxRightUpperBound m n)
 
+||| Witness that a natural number is bounded by its successor.
 public export
 lteSuccR : (n : Nat) -> LTE n (S n)
 lteSuccR Z     = LTEZero
 lteSuccR (S n) = LTESucc (lteSuccR n)
 
+||| Witness that adding a natural number cannot decrease the left operand.
 public export
 lteAddRightNat : (m, n : Nat) -> LTE m (m + n)
 lteAddRightNat Z     n = LTEZero
 lteAddRightNat (S m) n = LTESucc (lteAddRightNat m n)
 
+||| Witness that a sum bounds its right operand.
 public export
 lteAddLeftNat : (b, c : Nat) -> LTE c (b + c)
 lteAddLeftNat Z     c = lteRefl c
 lteAddLeftNat (S b) c = lteTrans (lteAddLeftNat b c) (lteSuccR (b + c))
 
+||| Preserve an upper bound when adding the same natural number on the right.
 public export
 plusLteMonoR : (c, a, b : Nat) -> LTE a b -> LTE (a + c) (b + c)
 plusLteMonoR c Z     b     LTEZero     = lteAddLeftNat b c
 plusLteMonoR c (S a) (S b) (LTESucc p) = LTESucc (plusLteMonoR c a b p)
 
+||| Recover p by subtracting and restoring n, given n <= p.
 public export
 plusMinusLteNat : (n, p : Nat) -> LTE n p -> minus p n + n = p
 plusMinusLteNat Z     p     LTEZero     =
@@ -293,6 +317,7 @@ plusMinusLteNat Z     p     LTEZero     =
 plusMinusLteNat (S n) (S p) (LTESucc q) =
   trans (sym (plusSuccR (minus p n) n)) (cong S (plusMinusLteNat n p q))
 
+||| Collapse a shared operand across two nested maxima.
 public export
 maxDup : (p, x, y : Nat) ->
          maximum (maximum p x) (maximum p y) = maximum p (maximum x y)
@@ -304,6 +329,7 @@ maxDup p x y =
   (trans (sym (maxAssoc p p (maximum x y)))
          (cong (\z => maximum z (maximum x y)) (maxIdem p))))))
 
+||| Regroup four maximum operands by exchanging the middle two.
 public export
 maxInterchange : (a, b, c, d : Nat) ->
                  maximum (maximum a b) (maximum c d)
@@ -316,11 +342,13 @@ maxInterchange a b c d =
            (maxAssoc c b d))))
   (sym (maxAssoc a c (maximum b d))))
 
+||| Distribute left addition over natural-number maximum.
 public export
 plusDistribLMax : (a, b, c : Nat) -> a + maximum b c = maximum (a + b) (a + c)
 plusDistribLMax Z     b c = Refl
 plusDistribLMax (S a) b c = cong S (plusDistribLMax a b c)
 
+||| Distribute right addition over natural-number maximum.
 public export
 plusDistribRMax : (a, b, c : Nat) -> maximum a b + c = maximum (a + c) (b + c)
 plusDistribRMax a b c =
@@ -329,6 +357,7 @@ plusDistribRMax a b c =
   (trans (cong (\z => maximum z (c + b)) (plusComm c a))
          (cong (maximum (a + c)) (plusComm c b))))
 
+||| Preserve componentwise upper bounds when taking maximum.
 public export
 maxMonoLTE : {a, a', b, b' : Nat} -> LTE a a' -> LTE b b' ->
              LTE (maximum a b) (maximum a' b')
@@ -338,16 +367,19 @@ maxMonoLTE {a' = S k} {b' = b'} (LTESucc p) LTEZero    =
   lteTrans (LTESucc p) (maxLeftUpperBound (S k) b')
 maxMonoLTE                      (LTESucc p) (LTESucc q) = LTESucc (maxMonoLTE p q)
 
+||| Eliminate a maximum operand known to be bounded by the other.
 public export
 maxAbsorbLTE : {n, p : Nat} -> LTE n p -> maximum p n = p
 maxAbsorbLTE {p} LTEZero     = maxZeroRight p
 maxAbsorbLTE     (LTESucc q) = cong S (maxAbsorbLTE q)
 
+||| Distribute left addition over natural-number minimum.
 public export
 plusDistribLMin : (a, b, c : Nat) -> a + minimum b c = minimum (a + b) (a + c)
 plusDistribLMin Z     b c = Refl
 plusDistribLMin (S a) b c = cong S (plusDistribLMin a b c)
 
+||| Distribute right addition over natural-number minimum.
 public export
 plusDistribRMin : (a, b, c : Nat) -> minimum a b + c = minimum (a + c) (b + c)
 plusDistribRMin a b c =
@@ -356,42 +388,50 @@ plusDistribRMin a b c =
   (trans (cong (\z => minimum z (c + b)) (plusComm c a))
          (cong (minimum (a + c)) (plusComm c b))))
 
+||| Recover equality of natural numbers from equality of their successors.
 public export
 succInj : {m, n : Nat} -> S m = S n -> m = n
 succInj Refl = Refl
 
+||| Select the right minimum operand from a witness that it is smaller.
 public export
 minimumOfLTE : {k, n : Nat} -> LTE k n -> minimum n k = k
 minimumOfLTE {n} LTEZero     = minZeroRight n
 minimumOfLTE     (LTESucc q) = cong S (minimumOfLTE q)
 
+||| Recover a natural-number bound from a minimum selecting its right operand.
 public export
 lteOfMinimum : (n, k : Nat) -> minimum n k = k -> LTE k n
 lteOfMinimum n     Z     _    = LTEZero
 lteOfMinimum Z     (S k) Refl impossible
 lteOfMinimum (S n) (S k) prf  = LTESucc (lteOfMinimum n k (succInj prf))
 
+||| Select the right maximum operand from a witness that it is larger.
 public export
 maximumOfLTE : {m, n : Nat} -> LTE m n -> maximum m n = n
 maximumOfLTE LTEZero     = Refl
 maximumOfLTE (LTESucc q) = cong S (maximumOfLTE q)
 
+||| Recover a natural-number bound from a maximum selecting its right operand.
 public export
 lteOfMaximum : (m, n : Nat) -> maximum m n = n -> LTE m n
 lteOfMaximum Z     n     _    = LTEZero
 lteOfMaximum (S m) Z     Refl impossible
 lteOfMaximum (S m) (S n) prf  = LTESucc (lteOfMaximum m n (succInj prf))
 
+||| Combine two upper-bound witnesses into an upper bound for their maximum.
 public export
 maxLub : {a, b, c : Nat} -> LTE a c -> LTE b c -> LTE (maximum a b) c
 maxLub LTEZero     q           = q
 maxLub (LTESucc p) LTEZero     = LTESucc p
 maxLub (LTESucc p) (LTESucc q) = LTESucc (maxLub p q)
 
+||| Select the left minimum operand from a witness that it is smaller.
 public export
 minOfLTE : {m, n : Nat} -> LTE m n -> minimum m n = m
 minOfLTE {m} {n} le = trans (minComm m n) (minimumOfLTE le)
 
+||| Distribute maximum over a minimum in its right operand.
 public export
 maxDistribLMin : (a, b, c : Nat) ->
                  maximum a (minimum b c) = minimum (maximum a b) (maximum a c)
@@ -400,6 +440,7 @@ maxDistribLMin (S a) Z     c     = sym (minOfLTE (maxLeftUpperBound (S a) c))
 maxDistribLMin (S a) (S b) Z     = cong S (sym (minimumOfLTE (maxLeftUpperBound a b)))
 maxDistribLMin (S a) (S b) (S c) = cong S (maxDistribLMin a b c)
 
+||| Distribute maximum over a minimum in its left operand.
 public export
 maxDistribRMin : (a, b, c : Nat) ->
                  maximum (minimum a b) c = minimum (maximum a c) (maximum b c)
@@ -443,10 +484,12 @@ lossAlt (Finite m) (Finite n) = Finite (minimum m n)
 lossAlt (Finite m) Infinity   = Finite m
 lossAlt Infinity   g          = g
 
+||| Recover equality of finite loss amounts from equality of their grades.
 public export
 finiteInjective : {m, n : Nat} -> Finite m = Finite n -> m = n
 finiteInjective Refl = Refl
 
+||| Prove associativity of loss alternatives, including Infinity.
 public export
 lossAltAssoc : (a, b, c : LossGrade) ->
                lossAlt (lossAlt a b) c = lossAlt a (lossAlt b c)
@@ -455,6 +498,7 @@ lossAltAssoc (Finite a) (Finite b) Infinity   = Refl
 lossAltAssoc (Finite a) Infinity   c          = Refl
 lossAltAssoc Infinity   b          c          = Refl
 
+||| Prove that choosing the less lossy alternative is independent of order.
 public export
 lossAltComm : (a, b : LossGrade) -> lossAlt a b = lossAlt b a
 lossAltComm (Finite a) (Finite b) = cong Finite (minComm a b)
@@ -462,11 +506,13 @@ lossAltComm (Finite a) Infinity   = Refl
 lossAltComm Infinity   (Finite b) = Refl
 lossAltComm Infinity   Infinity   = Refl
 
+||| Prove that repeating a loss alternative leaves its grade unchanged.
 public export
 lossAltIdem : (a : LossGrade) -> lossAlt a a = a
 lossAltIdem (Finite a) = cong Finite (minIdem a)
 lossAltIdem Infinity   = Refl
 
+||| Prove associativity of cumulative loss, including obliteration.
 public export
 lossSeqAssoc : (a, b, c : LossGrade) ->
                lossSeq (lossSeq a b) c = lossSeq a (lossSeq b c)
@@ -475,11 +521,13 @@ lossSeqAssoc (Finite a) (Finite b) Infinity   = Refl
 lossSeqAssoc (Finite a) Infinity   c          = Refl
 lossSeqAssoc Infinity   b          c          = Refl
 
+||| Prove that a lossless prefix preserves the following loss grade.
 public export
 lossSeqUnitL : (a : LossGrade) -> lossSeq (Finite 0) a = a
 lossSeqUnitL (Finite a) = Refl
 lossSeqUnitL Infinity   = Refl
 
+||| Prove that a lossless suffix preserves the preceding loss grade.
 public export
 lossSeqUnitR : (a : LossGrade) -> lossSeq a (Finite 0) = a
 lossSeqUnitR (Finite a) = cong Finite (plusZeroR a)
@@ -502,6 +550,7 @@ ResourceAlgebra LossGrade where
   seqUnitL = lossSeqUnitL
   seqUnitR = lossSeqUnitR
 
+||| Distribute a common loss prefix over alternatives.
 public export
 lossDistribL : (a, b, c : LossGrade) ->
                lossSeq a (lossAlt b c) = lossAlt (lossSeq a b) (lossSeq a c)
@@ -510,6 +559,7 @@ lossDistribL (Finite a) (Finite b) Infinity   = Refl
 lossDistribL (Finite a) Infinity   c          = Refl
 lossDistribL Infinity   b          c          = Refl
 
+||| Distribute a common loss suffix over alternatives.
 public export
 lossDistribR : (a, b, c : LossGrade) ->
                lossSeq (lossAlt a b) c = lossAlt (lossSeq a c) (lossSeq b c)
@@ -529,6 +579,7 @@ IsOrdered LossGrade where
   otimesMonoL = dioidMonoL
   otimesMonoR = dioidMonoR
 
+||| Prove that an obliterating suffix absorbs any preceding loss grade.
 public export
 lossAnnihilR : (a : LossGrade) -> lossSeq a Infinity = Infinity
 lossAnnihilR (Finite _) = Refl
@@ -539,6 +590,7 @@ IsAnnihilating LossGrade where
   annihilL = \_ => Refl
   annihilR = lossAnnihilR
 
+||| Refute equality between a finite loss grade and obliteration.
 public export
 finiteNotInfinity : {n : Nat} -> Not (Finite n = Infinity)
 finiteNotInfinity Refl impossible
@@ -553,6 +605,7 @@ public export
 lteOfLossLe : (n, k : Nat) -> LeG (Finite n) (Finite k) -> LTE k n
 lteOfLossLe n k prf = lteOfMinimum n k (finiteInjective prf)
 
+||| Prove that lossless execution is greatest in the induced loss order.
 public export
 lossLeOne : (g : LossGrade) -> LeG g (Finite 0)
 lossLeOne (Finite n) = cong Finite (minZeroRight n)
@@ -593,10 +646,12 @@ maxPlusSeq Bot     _       = Bot
 maxPlusSeq (Val m) Bot     = Bot
 maxPlusSeq (Val m) (Val n) = Val (m + n)
 
+||| Recover equality of finite costs from equality of their MaxPlus grades.
 public export
 valInjective : {m, n : Nat} -> Val m = Val n -> m = n
 valInjective Refl = Refl
 
+||| Prove associativity of worst-case cost alternatives, including Bot.
 public export
 maxPlusAltAssoc : (a, b, c : MaxPlusGrade) ->
                   maxPlusAlt (maxPlusAlt a b) c = maxPlusAlt a (maxPlusAlt b c)
@@ -605,6 +660,7 @@ maxPlusAltAssoc (Val a) (Val b) Bot     = Refl
 maxPlusAltAssoc (Val a) Bot     c       = Refl
 maxPlusAltAssoc Bot     b       c       = Refl
 
+||| Prove that worst-case alternative cost is independent of operand order.
 public export
 maxPlusAltComm : (a, b : MaxPlusGrade) -> maxPlusAlt a b = maxPlusAlt b a
 maxPlusAltComm (Val a) (Val b) = cong Val (maxComm a b)
@@ -612,11 +668,13 @@ maxPlusAltComm (Val a) Bot     = Refl
 maxPlusAltComm Bot     (Val b) = Refl
 maxPlusAltComm Bot     Bot     = Refl
 
+||| Prove that repeating a cost alternative leaves its grade unchanged.
 public export
 maxPlusAltIdem : (a : MaxPlusGrade) -> maxPlusAlt a a = a
 maxPlusAltIdem (Val a) = cong Val (maxIdem a)
 maxPlusAltIdem Bot     = Refl
 
+||| Prove associativity of sequential cost accumulation, including Bot.
 public export
 maxPlusSeqAssoc : (a, b, c : MaxPlusGrade) ->
                   maxPlusSeq (maxPlusSeq a b) c = maxPlusSeq a (maxPlusSeq b c)
@@ -625,11 +683,13 @@ maxPlusSeqAssoc (Val a) (Val b) Bot     = Refl
 maxPlusSeqAssoc (Val a) Bot     c       = Refl
 maxPlusSeqAssoc Bot     b       c       = Refl
 
+||| Prove that a zero-cost prefix preserves the following cost grade.
 public export
 maxPlusSeqUnitL : (a : MaxPlusGrade) -> maxPlusSeq (Val 0) a = a
 maxPlusSeqUnitL (Val a) = Refl
 maxPlusSeqUnitL Bot     = Refl
 
+||| Prove that a zero-cost suffix preserves the preceding cost grade.
 public export
 maxPlusSeqUnitR : (a : MaxPlusGrade) -> maxPlusSeq a (Val 0) = a
 maxPlusSeqUnitR (Val a) = cong Val (plusZeroR a)
@@ -652,6 +712,7 @@ ResourceAlgebra MaxPlusGrade where
   seqUnitL = maxPlusSeqUnitL
   seqUnitR = maxPlusSeqUnitR
 
+||| Distribute a common cost prefix over worst-case alternatives.
 public export
 maxPlusDistribL : (a, b, c : MaxPlusGrade) ->
                   maxPlusSeq a (maxPlusAlt b c)
@@ -662,6 +723,7 @@ maxPlusDistribL (Val a) Bot     (Val c) = Refl
 maxPlusDistribL (Val a) Bot     Bot     = Refl
 maxPlusDistribL Bot     b       c       = Refl
 
+||| Distribute a common cost suffix over worst-case alternatives.
 public export
 maxPlusDistribR : (a, b, c : MaxPlusGrade) ->
                   maxPlusSeq (maxPlusAlt a b) c
@@ -684,6 +746,7 @@ IsOrdered MaxPlusGrade where
   otimesMonoL = dioidMonoL
   otimesMonoR = dioidMonoR
 
+||| Prove that Bot absorbs sequential cost on the right.
 public export
 maxPlusAnnihilR : (a : MaxPlusGrade) -> maxPlusSeq a Bot = Bot
 maxPlusAnnihilR (Val _) = Refl
@@ -694,10 +757,12 @@ IsAnnihilating MaxPlusGrade where
   annihilL = \_ => Refl
   annihilR = maxPlusAnnihilR
 
+||| Translate a natural-number bound into the induced finite-cost order.
 public export
 maxPlusLeOfLTE : {m, n : Nat} -> LTE m n -> LeG (Val m) (Val n)
 maxPlusLeOfLTE le = cong Val (maximumOfLTE le)
 
+||| Recover a natural-number bound from ordered finite cost grades.
 public export
 lteOfMaxPlusLe : (m, n : Nat) -> LeG (Val m) (Val n) -> LTE m n
 lteOfMaxPlusLe m n prf = lteOfMaximum m n (valInjective prf)
@@ -713,6 +778,7 @@ minMaxSeq Infinity   _          = Infinity
 minMaxSeq (Finite m) Infinity   = Infinity
 minMaxSeq (Finite m) (Finite n) = Finite (maximum m n)
 
+||| Prove associativity of bottleneck sequencing, including Infinity.
 public export
 minMaxSeqAssoc : (a, b, c : LossGrade) ->
                  minMaxSeq (minMaxSeq a b) c = minMaxSeq a (minMaxSeq b c)
@@ -721,16 +787,19 @@ minMaxSeqAssoc (Finite a) (Finite b) Infinity   = Refl
 minMaxSeqAssoc (Finite a) Infinity   c          = Refl
 minMaxSeqAssoc Infinity   b          c          = Refl
 
+||| Prove that a zero bottleneck prefix preserves the following grade.
 public export
 minMaxSeqUnitL : (a : LossGrade) -> minMaxSeq (Finite 0) a = a
 minMaxSeqUnitL (Finite a) = Refl
 minMaxSeqUnitL Infinity   = Refl
 
+||| Prove that a zero bottleneck suffix preserves the preceding grade.
 public export
 minMaxSeqUnitR : (a : LossGrade) -> minMaxSeq a (Finite 0) = a
 minMaxSeqUnitR (Finite a) = cong Finite (maxZeroRight a)
 minMaxSeqUnitR Infinity   = Refl
 
+||| Distribute a common bottleneck prefix over minimum alternatives.
 public export
 minMaxDistribL : (a, b, c : LossGrade) ->
                  minMaxSeq a (lossAlt b c) = lossAlt (minMaxSeq a b) (minMaxSeq a c)
@@ -739,6 +808,7 @@ minMaxDistribL (Finite a) (Finite b) Infinity   = Refl
 minMaxDistribL (Finite a) Infinity   c          = Refl
 minMaxDistribL Infinity   b          c          = Refl
 
+||| Distribute a common bottleneck suffix over minimum alternatives.
 public export
 minMaxDistribR : (a, b, c : LossGrade) ->
                  minMaxSeq (lossAlt a b) c = lossAlt (minMaxSeq a c) (minMaxSeq b c)
@@ -826,24 +896,29 @@ public export
 hwmZero : HWMGrade
 hwmZero = MkHWM 0 0 LTEZero
 
+||| Prove associativity of componentwise occupancy alternatives.
 public export
 hwmAltAssoc : (a, b, c : HWMGrade) -> hwmAlt (hwmAlt a b) c = hwmAlt a (hwmAlt b c)
 hwmAltAssoc (MkHWM p n _) (MkHWM p' n' _) (MkHWM p'' n'' _) =
   hwmEq (maxAssoc p p' p'') (maxAssoc n n' n'')
 
+||| Prove that occupancy alternatives are independent of order.
 public export
 hwmAltComm : (a, b : HWMGrade) -> hwmAlt a b = hwmAlt b a
 hwmAltComm (MkHWM p n _) (MkHWM p' n' _) =
   hwmEq (maxComm p p') (maxComm n n')
 
+||| Prove that repeating an occupancy alternative leaves its grade unchanged.
 public export
 hwmAltIdem : (a : HWMGrade) -> hwmAlt a a = a
 hwmAltIdem (MkHWM p n _) = hwmEq (maxIdem p) (maxIdem n)
 
+||| Prove that zero occupancy is a left identity for alternatives.
 public export
 hwmAltUnitL : (a : HWMGrade) -> hwmAlt ResourceAlgebra.hwmZero a = a
 hwmAltUnitL (MkHWM p n _) = hwmEq Refl Refl
 
+||| Prove associativity of occupancy sequencing with retained drift.
 public export
 hwmSeqAssoc : (a, b, c : HWMGrade) -> hwmSeq (hwmSeq a b) c = hwmSeq a (hwmSeq b c)
 hwmSeqAssoc (MkHWM p1 n1 _) (MkHWM p2 n2 _) (MkHWM p3 n3 _) =
@@ -853,10 +928,12 @@ hwmSeqAssoc (MkHWM p1 n1 _) (MkHWM p2 n2 _) (MkHWM p3 n3 _) =
            (cong (maximum p1) (sym (plusDistribLMax n1 p2 (n2 + p3))))))
     (plusAssoc n1 n2 n3)
 
+||| Prove that a zero-occupancy prefix preserves the following phase grade.
 public export
 hwmSeqUnitL : (a : HWMGrade) -> hwmSeq ResourceAlgebra.hwmZero a = a
 hwmSeqUnitL (MkHWM p n _) = hwmEq Refl Refl
 
+||| Prove that a zero-occupancy suffix preserves the preceding phase grade.
 public export
 hwmSeqUnitR : (a : HWMGrade) -> hwmSeq a ResourceAlgebra.hwmZero = a
 hwmSeqUnitR (MkHWM p n b) =
@@ -880,6 +957,7 @@ ResourceAlgebra HWMGrade where
   seqUnitL = hwmSeqUnitL
   seqUnitR = hwmSeqUnitR
 
+||| Distribute a common occupancy prefix over componentwise alternatives.
 public export
 hwmDistribL : (a, b, c : HWMGrade) ->
               hwmSeq a (hwmAlt b c) = hwmAlt (hwmSeq a b) (hwmSeq a c)
@@ -888,6 +966,7 @@ hwmDistribL (MkHWM p n _) (MkHWM p2 n2 _) (MkHWM p3 n3 _) =
                (sym (maxDup p (n + p2) (n + p3))))
         (plusDistribLMax n n2 n3)
 
+||| Distribute a common occupancy suffix over componentwise alternatives.
 public export
 hwmDistribR : (a, b, c : HWMGrade) ->
               hwmSeq (hwmAlt a b) c = hwmAlt (hwmSeq a c) (hwmSeq b c)
@@ -910,6 +989,7 @@ IsOrdered HWMGrade where
 -- 7. Occupancy Reclamation Laws (occupancy-types R-1..R-5)
 --------------------------------------------------------------------------------
 
+||| Prove that adding a positive natural number strictly increases the result.
 private
 ltPlusPositive : (m : Nat) -> {n : Nat} -> LT 0 n -> LT m (m + n)
 ltPlusPositive Z     {n = S k} (LTESucc _) = LTESucc LTEZero
@@ -942,6 +1022,7 @@ occupancyLeCost : (a, b : HWMGrade) -> LTE (peak (hwmSeq a b)) (peak a + peak b)
 occupancyLeCost (MkHWM p1 n1 b1) (MkHWM p2 n2 b2) =
   maxLub (lteAddRightNat p1 p2) (plusLteMonoR p2 n1 p1 b1)
 
+||| Reduce the peak formula to additive cost when peak equals retained drift.
 private
 noReclaimAux : (p, n, p2 : Nat) -> p = n -> maximum p (n + p2) = p + p2
 noReclaimAux p p p2 Refl =
@@ -991,10 +1072,12 @@ public export
 hwmThree : HWMGrade
 hwmThree = MkHWM 3 0 LTEZero
 
+||| Refute the peak/cost equality used by the separation examples.
 private
 threeNotFive : Not (the Nat 3 = 5)
 threeNotFive Refl impossible
 
+||| Refute equality of the distinct alternative grades in the separation example.
 private
 twoNotThree : Not (the Nat 2 = 3)
 twoNotThree Refl impossible
@@ -1014,6 +1097,7 @@ public export
 maxPlusOrder : LeG (Val 1) (Val 2)
 maxPlusOrder = Refl
 
+||| Witness the reversed induced order for finite loss grades 2 and 1 (S-3).
 public export
 lossOrderReversed : LeG (Finite 2) (Finite 1)
 lossOrderReversed = Refl
@@ -1048,14 +1132,17 @@ public export
 pausedLeLow : LeG (activityBudget Paused) (activityBudget Low)
 pausedLeLow = Refl
 
+||| Witness that the Low activity budget is bounded by Mid.
 public export
 lowLeMid : LeG (activityBudget Low) (activityBudget Mid)
 lowLeMid = Refl
 
+||| Witness that the Mid activity budget is bounded by High.
 public export
 midLeHigh : LeG (activityBudget Mid) (activityBudget High)
 midLeHigh = Refl
 
+||| Witness that the High activity budget is bounded by Realtime.
 public export
 highLeRealtime : LeG (activityBudget High) (activityBudget Realtime)
 highLeRealtime = Refl

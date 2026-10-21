@@ -37,5 +37,5 @@ points = [
   { system = "android-webview", direction = "outbound", protocol = "JNI via jni.zig vtable model (Android)" },
   { system = "panll", direction = "inbound", protocol = "IPC channels (sync + async + streaming)" },
   { system = "gossamer.conf.json", direction = "inbound", protocol = "JSON configuration (CSP, build paths)" },
-  { system = "affinescript-api", direction = "inbound", protocol = "Deno ESM (@gossamer/api, bindings/affinescript/)" },
+  { system = "affinescript-api", direction = "inbound", protocol = "Bun ESM (@gossamer/api, bindings/affinescript/)" },
 ]

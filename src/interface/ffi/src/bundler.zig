@@ -105,8 +105,9 @@ fn isSafeBundlePath(name: []const u8) bool {
 /// Initialize extraction for an app.
 /// Creates the extraction directory and caches it globally for the selected app.
 /// App names must be non-empty and contain neither `..` nor `/` nor `\`.
-/// Returns a borrowed directory path, invalidated when another app is selected,
-/// or null for invalid names, unsupported platforms, or allocation/directory errors.
+/// Returns a borrowed directory path, invalidated when another app is selected
+/// or bundler cleanup runs. Returns null for invalid names, unsupported platforms,
+/// or allocation/directory errors.
 fn initExtraction(app_name_z: [*:0]const u8) ?[]u8 {
     const app_name = std.mem.span(app_name_z);
     if (!isSafeBundlePath(app_name) or std.mem.indexOfAny(u8, app_name, "/\\") != null) return null;

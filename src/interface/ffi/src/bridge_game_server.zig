@@ -506,9 +506,10 @@ const baro_fields = [_]BaroFieldMeta{
 
 /// Fetch Barotrauma XML over SSH and combine its values with known field metadata.
 /// pairs_json is ignored. Uses getVpsHost; an invalid host or SSH process
-/// failure returns an allocated "[]". Missing XML attributes become empty values.
+/// failure returns an allocated "[]". Missing XML attributes and attribute lookup
+/// allocation failures become empty values; the SSH exit status is ignored.
 /// Returns a caller-owned, null-terminated JSON string allocated with allocator,
-/// encoded as an i64 pointer, or 0 on allocation failure.
+/// encoded as an i64 pointer, or 0 if allocation of the response fails.
 fn overlayBarotraumaSchema(allocator: std.mem.Allocator, pairs_json: []const u8) i64 {
     _ = pairs_json;
     // Build the enriched schema directly from the known fields + current server values.

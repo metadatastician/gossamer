@@ -778,18 +778,17 @@ impl Drop for App {
                     contexts.cast(),
                 )
             };
+        } else if unsafe { gossamer_async_inflight_count() } == 0 {
+            // Free command contexts directly when no channel was opened and no workers run.
+            for ctx_ptr in self._contexts.drain(..) {
+                // SAFETY: these were created by Box::into_raw in command() / command_async()
+                unsafe { drop(Box::from_raw(ctx_ptr)) };
+            }
         }
         // Destroy webview if not consumed by run()
         if self.handle != 0 {
             // SAFETY: handle is valid
             unsafe { gossamer_destroy(self.handle) };
-        }
-        // Free leaked command contexts when no detached async workers are in flight
-        if unsafe { gossamer_async_inflight_count() } == 0 {
-            for ctx_ptr in self._contexts.drain(..) {
-                // SAFETY: these were created by Box::into_raw in command() / command_async()
-                unsafe { drop(Box::from_raw(ctx_ptr)) };
-            }
         }
     }
 }
