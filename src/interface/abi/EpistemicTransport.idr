@@ -484,39 +484,39 @@ joinLowRight {x = HostHigh}  {y = HostHigh}  Refl impossible
 -- 5. Residual Evidence Diagnostics (residual-evidence-types Core.agda)
 --------------------------------------------------------------------------------
 
-||| An inhabited diagnostic case for observation `obs` under evidence `Ev` (`Core.Case`).
+||| An inhabited diagnostic case for observation `obs` under evidence `evPred` (`Core.Case`).
 public export
-record ResidualCase {0 W, O : Type} (observe : W -> O) (Ev : W -> Type) (obs : O) where
+record ResidualCase {0 world, obsTy : Type} (observe : world -> obsTy) (evPred : world -> Type) (obs : obsTy) where
   constructor MkResidualCase
-  witness     : W
+  witness     : world
   witnessObs  : observe witness = obs
-  witnessEv   : Ev witness
+  witnessEv   : evPred witness
 
-||| A claim `P : W -> Type` holds across a residual case when it holds for EVERY
-||| candidate world compatible with `(obs, Ev)` — not merely the witness (`Core.Holds`).
+||| A claim `prop : world -> Type` holds across a residual case when it holds for EVERY
+||| candidate world compatible with `(obs, evPred)` — not merely the witness (`Core.Holds`).
 public export
-HoldsInCase : {0 W, O : Type} -> (observe : W -> O) -> (Ev : W -> Type) ->
-              (obs : O) -> (P : W -> Type) -> Type
-HoldsInCase {W} observe Ev obs P =
-  (w : W) -> observe w = obs -> Ev w -> P w
+HoldsInCase : {0 world, obsTy : Type} -> (observe : world -> obsTy) -> (evPred : world -> Type) ->
+              (obs : obsTy) -> (prop : world -> Type) -> Type
+HoldsInCase {world} observe evPred obs prop =
+  (w : world) -> observe w = obs -> evPred w -> prop w
 
-||| Theorem (`Core.actual-world-sound`): If `P` holds across the residual case
-||| and the actual world satisfies `(observe actual = obs, Ev actual)`, then
-||| `P actual` holds conditionally.
+||| Theorem (`Core.actual-world-sound`): If `prop` holds across the residual case
+||| and the actual world satisfies `(observe actual = obs, evPred actual)`, then
+||| `prop actual` holds conditionally.
 public export
-actualWorldSound : {0 W, O : Type} -> {observe : W -> O} -> {Ev : W -> Type} ->
-                   {obs : O} -> {P : W -> Type} ->
-                   HoldsInCase observe Ev obs P ->
-                   (actual : W) -> observe actual = obs -> Ev actual -> P actual
+actualWorldSound : {0 world, obsTy : Type} -> {observe : world -> obsTy} -> {evPred : world -> Type} ->
+                   {obs : obsTy} -> {prop : world -> Type} ->
+                   HoldsInCase observe evPred obs prop ->
+                   (actual : world) -> observe actual = obs -> evPred actual -> prop actual
 actualWorldSound holds actual obsEq ev = holds actual obsEq ev
 
-||| A quantity `qty : W -> Q` is identified by `(observe, Ev, obs)` when all
+||| A quantity `qty : world -> qtyTy` is identified by `(observe, evPred, obs)` when all
 ||| compatible candidate worlds agree on `qty w` (`Core.Identifies`).
 public export
-Identifies : {0 W, O, Q : Type} -> (observe : W -> O) -> (Ev : W -> Type) ->
-             (obs : O) -> (qty : W -> Q) -> (val : Q) -> Type
-Identifies {W} observe Ev obs qty val =
-  (w : W) -> observe w = obs -> Ev w -> qty w = val
+Identifies : {0 world, obsTy, qtyTy : Type} -> (observe : world -> obsTy) -> (evPred : world -> Type) ->
+             (obs : obsTy) -> (qty : world -> qtyTy) -> (val : qtyTy) -> Type
+Identifies {world} observe evPred obs qty val =
+  (w : world) -> observe w = obs -> evPred w -> qty w = val
 
 ||| Theorem (`Core.different-candidates-refute-identification`):
 ||| Two compatible candidate worlds `w1, w2` with `qty w1 /= qty w2` refute
@@ -524,12 +524,12 @@ Identifies {W} observe Ev obs qty val =
 ||| single subsystem when two candidate worlds produce the same residual).
 public export
 differentCandidatesRefuteId :
-     {0 W, O, Q : Type} -> {observe : W -> O} -> {Ev : W -> Type} ->
-     {obs : O} -> {qty : W -> Q} ->
-     (w1, w2 : W) ->
-     observe w1 = obs -> Ev w1 ->
-     observe w2 = obs -> Ev w2 ->
+     {0 world, obsTy, qtyTy : Type} -> {observe : world -> obsTy} -> {evPred : world -> Type} ->
+     {obs : obsTy} -> {qty : world -> qtyTy} ->
+     (w1, w2 : world) ->
+     observe w1 = obs -> evPred w1 ->
+     observe w2 = obs -> evPred w2 ->
      Not (qty w1 = qty w2) ->
-     (val : Q) -> Not (Identifies observe Ev obs qty val)
+     (val : qtyTy) -> Not (Identifies observe evPred obs qty val)
 differentCandidatesRefuteId w1 w2 o1 e1 o2 e2 neq val idPrf =
   neq (trans (idPrf w1 o1 e1) (sym (idPrf w2 o2 e2)))

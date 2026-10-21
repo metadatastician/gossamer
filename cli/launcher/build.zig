@@ -50,6 +50,7 @@ pub fn build(b: *std.Build) void {
         .preferred_link_mode = .static,
         .search_strategy = .no_fallback,
     });
+    exe_module.linkSystemLibrary("unwind", .{});
 
     // libgossamer — built from ../../src/interface/ffi by `zig build` in
     // that directory. The bridges in src/bridges.zig declare the

@@ -142,19 +142,19 @@ echoMapSquare u v sq (MkEcho x p) =
 
 ||| Retained residue of an irreversible relegation (`EchoR`).
 public export
-record EchoR {0 B : Type} (C : Type) (Cert : C -> B -> Type) (y : B) where
+record EchoR {0 b : Type} (c : Type) (certRel : c -> b -> Type) (y : b) where
   constructor MkEchoR
-  residue : C
-  cert    : Cert residue y
+  residue : c
+  cert    : certRel residue y
 
 public export
 echoToResidue :
-     {0 A, B : Type} -> {0 C : Type} -> {0 Cert : C -> B -> Type}
-  -> (f : A -> B)
-  -> (kappa : A -> C)
-  -> (sound : (x : A) -> Cert (kappa x) (f x))
-  -> {0 y : B}
-  -> Echo f y -> EchoR C Cert y
+     {0 a, b : Type} -> {0 c : Type} -> {0 certRel : c -> b -> Type}
+  -> (f : a -> b)
+  -> (kappa : a -> c)
+  -> (sound : (x : a) -> certRel (kappa x) (f x))
+  -> {0 y : b}
+  -> Echo f y -> EchoR c certRel y
 echoToResidue f kappa sound (MkEcho x Refl) =
   MkEchoR (kappa x) (sound x)
 
@@ -162,20 +162,20 @@ echoToResidue f kappa sound (MkEcho x Refl) =
 -- 2. Pillar 1 of Absolute Zero: Certified Null Operations (CNO) & Echo Bridge
 --------------------------------------------------------------------------------
 
-||| A state transformer `step : S -> S` is a Certified Null Operation (`IsCNO`)
+||| A state transformer `step : stType -> stType` is a Certified Null Operation (`IsCNO`)
 ||| when it preserves every state identically (`CNO.agda`).
 public export
-IsCNO : {0 S : Type} -> (S -> S) -> Type
-IsCNO {S} step = (st : S) -> step st = st
+IsCNO : {0 stType : Type} -> (stType -> stType) -> Type
+IsCNO {stType} step = (st : stType) -> step st = st
 
 ||| The identity operation is a CNO (`halt-is-cno` / `empty-is-cno`).
 public export
-idIsCNO : {0 S : Type} -> IsCNO {S} (\x => x)
+idIsCNO : {0 stType : Type} -> IsCNO {stType} (\x => x)
 idIsCNO _ = Refl
 
 ||| Sequential composition of two CNOs is a CNO (`cno-composition`).
 public export
-cnoCompose : {0 S : Type} -> {f, g : S -> S} ->
+cnoCompose : {0 stType : Type} -> {f, g : stType -> stType} ->
              IsCNO f -> IsCNO g -> IsCNO (\x => g (f x))
 cnoCompose cnoF cnoG st = trans (cong g (cnoF st)) (cnoG st)
 
@@ -183,8 +183,8 @@ cnoCompose cnoF cnoG st = trans (cong g (cnoF st)) (cnoG st)
 ||| inhabits its own `Echo step st` homotopy fiber at every state `st` with
 ||| `st` itself as the canonical preimage.
 public export
-cnoEchoFiber : {0 S : Type} -> (step : S -> S) -> IsCNO step ->
-               (st : S) -> Echo step st
+cnoEchoFiber : {0 stType : Type} -> (step : stType -> stType) -> IsCNO step ->
+               (st : stType) -> Echo step st
 cnoEchoFiber step cno st = MkEcho st (cno st)
 
 --------------------------------------------------------------------------------
