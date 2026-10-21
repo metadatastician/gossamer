@@ -12,18 +12,14 @@ mkdir -p "$topdir"/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
 
 git archive --format=tar --prefix="gossamer-${version}/" HEAD \
   | gzip -n > "$topdir/SOURCES/gossamer-${version}.tar.gz"
-if ! rpmbuild -bb --nodeps \
+rpmbuild -bb --nodeps \
   --define "_topdir $topdir" \
   --define "repo_root $repo_root" \
   --define "debug_package %{nil}" \
   --define "_build_id_links none" \
   --define "__arch_install_post %{nil}" \
-  packaging/rpm/gossamer.spec > "$topdir/rpmbuild.log" 2>&1; then
-  cat "$topdir/rpmbuild.log"
-  printf '::error::rpmbuild failed: %s\n' "$(tr '\n\r' '  ' < "$topdir/rpmbuild.log" | tail -c 1500)"
-  exit 1
-fi
-cat "$topdir/rpmbuild.log"
+  --define "__os_install_post /usr/lib/rpm/brp-compress" \
+  packaging/rpm/gossamer.spec
 
 mkdir -p "$output_dir"
 find "$topdir/RPMS" -type f -name '*.rpm' -exec cp {} "$output_dir/" \;
