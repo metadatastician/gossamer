@@ -47,7 +47,16 @@ readonly DIST_DIR="dist/macos"
 readonly CLI_BINARY="${DIST_DIR}/gossamer"
 readonly LIB_BINARY="${DIST_DIR}/libgossamer.dylib"
 readonly PKG_FILE="${DIST_DIR}/gossamer-${VERSION}.pkg"
-readonly DMG_FILE="${DIST_DIR}/gossamer-${VERSION}-universal.dmg"
+DMG_FILE="${DIST_DIR}/gossamer-${VERSION}-universal.dmg"
+if [ ! -f "${DMG_FILE}" ]; then
+    for candidate in "${DIST_DIR}/gossamer-${VERSION}"-*.dmg; do
+        if [ -f "${candidate}" ]; then
+            DMG_FILE="${candidate}"
+            break
+        fi
+    done
+fi
+readonly DMG_FILE
 
 DRY_RUN=false
 

@@ -206,7 +206,7 @@ fn execRemoteCommandSlice(allocator: std.mem.Allocator, raw_hosts: []const u8, c
         }
         pssh_argv.appendSlice(allocator, &[_][]const u8{
             "-t",
-            "5",
+            "60",
             "-i",
             "-O",
             "BatchMode=yes",
@@ -848,13 +848,17 @@ fn autoInferSchema(allocator: std.mem.Allocator, pairs_json: []const u8) i64 {
         if (!first) result.appendSlice(allocator, ",") catch return 0;
         first = false;
 
-        const entry = std.fmt.allocPrint(
-            allocator,
-            "{{\"key\":\"{s}\",\"value\":\"{s}\",\"type\":\"{s}\"}}",
-            .{ key, value, inferred },
-        ) catch return 0;
-        defer allocator.free(entry);
-        result.appendSlice(allocator, entry) catch return 0;
+        if (std.mem.indexOf(u8, obj_slice, "\"type\":\"") != null) {
+            result.appendSlice(allocator, obj_slice) catch return 0;
+        } else {
+            const entry = std.fmt.allocPrint(
+                allocator,
+                "{s},\"type\":\"{s}\"}}",
+                .{ obj_slice[0 .. obj_slice.len - 1], inferred },
+            ) catch return 0;
+            defer allocator.free(entry);
+            result.appendSlice(allocator, entry) catch return 0;
+        }
     }
 
     result.appendSlice(allocator, "]") catch return 0;

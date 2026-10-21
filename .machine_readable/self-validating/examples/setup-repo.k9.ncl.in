@@ -48,7 +48,7 @@ K9!
 
     # RSR compliance features to enable
     features = {
-      checkpoint_files | Bool = true,  # STATE.a2ml, ECOSYSTEM.a2ml, META.a2ml
+      checkpoint_files | Bool = true,  # <repo>_chora.deed, 0-AI-MANIFEST.deed
       security_workflows | Bool = true,  # CodeQL, Scorecard, etc.
       quality_checks | Bool = true,  # Linting, formatting
       mirroring | Bool = false,  # GitLab/Bitbucket mirrors
@@ -120,12 +120,11 @@ K9!
     },
 
     "create-checkpoint-files" = {
-      description = "Create STATE.a2ml, ECOSYSTEM.a2ml, META.a2ml",
+      description = "Create %{config.repo_name}_chora.deed and 0-AI-MANIFEST.deed",
       commands = [
-        "echo '(state (version \"1.0.0\") (project \"%{config.repo_name}\"))' > STATE.a2ml",
-        "echo '(ecosystem (version \"1.0.0\") (name \"%{config.repo_name}\"))' > ECOSYSTEM.a2ml",
-        "echo '(meta (version \"1.0.0\") (project \"%{config.repo_name}\"))' > META.a2ml",
-        "echo '✓ Checkpoint files created'",
+        "echo '(repo-deed :deed-version \"1.2.0\" :canonical-name \"%{config.repo_name}\")' > %{config.repo_name}_chora.deed",
+        "echo '(praxis-deed :deed-version \"1.2.0\" :domain \"ai-manifest\")' > 0-AI-MANIFEST.deed",
+        "echo '✓ Checkpoint deed files created'",
       ],
     },
 
@@ -153,7 +152,7 @@ K9!
         "echo '⚠️  This will delete all generated files'",
         "echo 'Press Ctrl+C to cancel, or wait 5 seconds...'",
         "sleep 5",
-        "rm -f STATE.a2ml ECOSYSTEM.a2ml META.a2ml",
+        "rm -f %{config.repo_name}_chora.deed 0-AI-MANIFEST.deed",
         "echo '✓ Cleaned'",
       ],
     },

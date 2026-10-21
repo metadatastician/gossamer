@@ -1,8 +1,0 @@
-{
-  "reporter": "echidnabot",
-  "title": "echidnabot (formal verification: src/interface/abi/)",
-  "status": "ran",
-  "reason": null,
-  "ref": "main",
-  "findings": []
-}

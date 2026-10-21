@@ -46,7 +46,7 @@ RUNTIME_KIND="process"
 REPO_DIR=""
 ICON_SOURCE="/brand/icon-256.png"
 
-# Absolute path back to the per-app `<app>.launcher.a2ml` config that
+# Absolute path back to the per-app `<app>.launcher_praxis.deed` config that
 # produced this script. Consumed by the --integ / --disinteg arms when
 # the `launch-scaffolder` binary is on $PATH, so they can delegate to
 # the Rust implementation instead of running the shell fallback.
@@ -55,10 +55,12 @@ ICON_SOURCE="/brand/icon-256.png"
 CONFIG_FILE="${GOSSAMER_LAUNCHER_CONFIG:-}"
 if [ -z "$CONFIG_FILE" ]; then
     _launcher_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    if [ -f "$_launcher_dir/gossamer.launcher.a2ml" ]; then
+    if [ -f "$_launcher_dir/gossamer.launcher_praxis.deed" ]; then
+        CONFIG_FILE="$_launcher_dir/gossamer.launcher_praxis.deed"
+    elif [ -f "$_launcher_dir/gossamer.launcher.a2ml" ]; then
         CONFIG_FILE="$_launcher_dir/gossamer.launcher.a2ml"
     else
-        CONFIG_FILE="/home/hyperpolymath/developer/meta-repos/gossamer/gossamer.launcher.a2ml"
+        CONFIG_FILE="/home/hyperpolymath/developer/meta-repos/gossamer/gossamer.launcher_praxis.deed"
     fi
 fi
 

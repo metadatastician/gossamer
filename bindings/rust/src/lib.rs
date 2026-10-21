@@ -315,6 +315,11 @@ impl Capability {
         self.kind
     }
 
+    /// Return the underlying 64-bit capability token handle for FFI calls.
+    pub fn token(&self) -> u64 {
+        self.token
+    }
+
     /// Revoke this capability. Consumes the token.
     pub fn revoke(self) {
         // SAFETY: FFI call, safe to call with any token value
@@ -542,8 +547,15 @@ impl App {
     }
 
     /// Authorize the built-in `opsm_runtime` shell-exec handler on this app's
-    /// channel using a valid 64-bit Shell capability token (`resource_kind == 2`).
-    pub fn authorize_opsm(&self, shell_token: u64) -> Result<(), Error> {
+    /// channel using a valid [`Capability`] (`ResourceKind::Shell`).
+    pub fn authorize_opsm(&self, shell_cap: &Capability) -> Result<(), Error> {
+        // SAFETY: channel and shell_cap.token() are validated by the Zig FFI layer
+        check_result(unsafe { gossamer_channel_authorize_opsm(self.channel, shell_cap.token()) })
+    }
+
+    /// Authorize the built-in `opsm_runtime` shell-exec handler using a raw
+    /// 64-bit Shell capability token (`resource_kind == 2`).
+    pub fn authorize_opsm_token(&self, shell_token: u64) -> Result<(), Error> {
         // SAFETY: channel and shell_token are validated by the Zig FFI layer
         check_result(unsafe { gossamer_channel_authorize_opsm(self.channel, shell_token) })
     }

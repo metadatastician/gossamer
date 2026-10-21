@@ -122,7 +122,7 @@ install -m644 generated/abi/gossamer.h  "${STAGING_DIR}/usr/local/include/gossam
 # ── Step 4: Build .pkg installer (macOS only) ──────────────────────────────────
 
 if "${HAVE_PKGBUILD}"; then
-    readonly PKG_OUTPUT="${DIST_DIR}/${PACKAGE_NAME}-${VERSION}-${PACKAGE_ARCH}.pkg"
+    readonly PKG_OUTPUT="${DIST_DIR}/${PACKAGE_NAME}-${VERSION}.pkg"
     log "Building .pkg installer → ${PKG_OUTPUT}"
     pkgbuild \
         --root "${STAGING_DIR}" \

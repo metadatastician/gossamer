@@ -149,11 +149,18 @@ fn parseConfig(json_str: []const u8) Config {
 }
 
 fn extractCapabilitiesHasShell(json: []const u8) bool {
-    const key = "\"capabilities\":";
-    const key_pos = std.mem.indexOf(u8, json, key) orelse return false;
-    const after_key = json[key_pos + key.len ..];
+    const scope = if (std.mem.indexOf(u8, json, "\"security\"")) |sec_pos|
+        json[sec_pos..]
+    else
+        json;
+    const key = "\"capabilities\"";
+    const key_pos = std.mem.indexOf(u8, scope, key) orelse return false;
+    const after_key = scope[key_pos + key.len ..];
 
     var i: usize = 0;
+    while (i < after_key.len and (after_key[i] == ' ' or after_key[i] == '\t' or after_key[i] == '\n' or after_key[i] == '\r')) : (i += 1) {}
+    if (i >= after_key.len or after_key[i] != ':') return false;
+    i += 1;
     while (i < after_key.len and (after_key[i] == ' ' or after_key[i] == '\t' or after_key[i] == '\n' or after_key[i] == '\r')) : (i += 1) {}
     if (i >= after_key.len or after_key[i] != '[') return false;
     i += 1;

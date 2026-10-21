@@ -61,13 +61,13 @@ K9!
       "This is a Hunt-level component: it executes shell commands and changes the system.",
       "Review the deployment scripts before running it.",
       "A signature block being present is not a signature being verified.",
-      "Authorise Hunt explicitly: k9-svc authorize build/container/stapeln/deploy.k9.ncl",
+      "Authorise Hunt explicitly: k9-svc authorize container/deploy.k9.ncl",
     ],
 
     side_effects = [
-      "spawns build/container/stapeln/ct-build.sh, which builds the image and packs and signs a .ctp bundle beside it",
+      "spawns container/ct-build.sh, which builds the image and packs and signs a .ctp bundle beside it",
       "pulls and pushes ghcr.io/metadatastician/gossamer images",
-      "starts, updates and stops the gossamer stack with selur-compose, else podman compose over build/container/compose.yaml",
+      "starts, updates and stops the gossamer stack with selur-compose, else podman compose over container/compose.toml",
       "publishes the service on port 8080",
     ],
 
@@ -126,11 +126,11 @@ K9!
 #!/bin/sh
 set -eu
 echo "K9: Pre-deployment validation for gossamer..."
-cd build/container/stapeln
+cd container
 if command -v selur-compose >/dev/null 2>&1; then
   selur-compose verify
 else
-  podman compose --file ../compose.yaml config
+  podman compose --file compose.toml config
 fi
 echo "K9: Validation passed."
 "%,
@@ -141,12 +141,12 @@ echo "K9: Validation passed."
 set -eu
 ENV="${1:-dev}"
 echo "K9: Deploying gossamer to $ENV environment..."
-cd build/container/stapeln
+cd container
 ./ct-build.sh
 if command -v selur-compose >/dev/null 2>&1; then
   selur-compose up --detach
 else
-  podman compose --file ../compose.yaml up --detach
+  podman compose --file compose.toml up --detach
 fi
 echo "K9: Deployment to $ENV complete."
 "%,
@@ -156,11 +156,11 @@ echo "K9: Deployment to $ENV complete."
 #!/bin/sh
 set -eu
 echo "K9: Rolling back gossamer deployment..."
-cd build/container/stapeln
+cd container
 if command -v selur-compose >/dev/null 2>&1; then
   selur-compose down
 else
-  podman compose --file ../compose.yaml down
+  podman compose --file compose.toml down
 fi
 echo "K9: Rollback complete."
 "%,
