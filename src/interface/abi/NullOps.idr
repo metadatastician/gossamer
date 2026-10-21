@@ -37,10 +37,12 @@ import Gossamer.ABI.ResourceAlgebra
 -- argument alone, which `echoMapCompose` uses for pentagon coherence.
 %hide Builtin.trans
 
+||| Compose equality proofs, reducing on the first proof alone.
 public export
 trans : {0 A : Type} -> {0 x, y, z : A} -> x = y -> y = z -> x = z
 trans Refl q = q
 
+||| Prove associativity of equality composition for the local trans definition.
 public export
 transAssoc : {0 A : Type} -> {0 w, x, y, z : A}
           -> (p : w = x) -> (q : x = y) -> (r : y = z)
@@ -63,6 +65,7 @@ record Echo {0 A : Type} {0 B : Type} (f : A -> B) (y : B) where
   echoPre   : A
   echoProof : f echoPre = y
 
+||| View a function as the family of its homotopy fibers over its codomain.
 public export
 EchoOf : {0 A, B : Type} -> (A -> B) -> Displayed B
 EchoOf f = Echo f
@@ -253,6 +256,8 @@ revokeInactiveIsCNO : (tok : Bits64) -> (st : CapRevocationState) ->
 revokeInactiveIsCNO tok st notActive =
   cong (\b => applyRevoke b (elem tok st.revokedRing) tok st) notActive
 
+||| Prove that an already-recorded revocation leaves state unchanged,
+||| whether or not the token is active.
 private
 applyRevokeAlready : (active : Bool) -> (tok : Bits64) -> (st : CapRevocationState) ->
                      applyRevoke active True tok st = st
@@ -355,6 +360,7 @@ public export
 leakyCnoIsNull : isNullOp NullOps.leakyCapCheck
 leakyCnoIsNull _ _ _ = Refl
 
+||| Refute equality of the timing observations used in the disclosure witness.
 private
 zeroNotOne : Not (the Nat 0 = 1)
 zeroNotOne Refl impossible

@@ -97,11 +97,11 @@ fi
 chmod +x "${CLI_UNIVERSAL}"
 
 if [ "${PACKAGE_ARCH}" = "universal" ]; then
-    lipo -verify_arch x86_64 arm64 "${LIB_UNIVERSAL}" || true
-    lipo -verify_arch x86_64 arm64 "${CLI_UNIVERSAL}"
+    lipo "${LIB_UNIVERSAL}" -verify_arch x86_64 arm64 || true
+    lipo "${CLI_UNIVERSAL}" -verify_arch x86_64 arm64
 else
     lipo -info "${LIB_UNIVERSAL}" || true
-    lipo -verify_arch "${PACKAGE_ARCH}" "${CLI_UNIVERSAL}"
+    lipo "${CLI_UNIVERSAL}" -verify_arch "${PACKAGE_ARCH}"
 fi
 
 # Reusing staging directories could retain binaries from a previous package.

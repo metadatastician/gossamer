@@ -220,10 +220,12 @@ data TxTransition : TxState -> TxState -> Type where
   TxCommit   : TxTransition TxActive  TxCommitted
   TxRollback : TxTransition TxActive  TxRolledBack
 
+||| Refute any modeled transition out of a committed transaction.
 public export
 committedIsTerminal : TxTransition TxCommitted st -> Void
 committedIsTerminal _ impossible
 
+||| Refute any modeled transition out of a rolled-back transaction.
 public export
 rolledBackIsTerminal : TxTransition TxRolledBack st -> Void
 rolledBackIsTerminal _ impossible
@@ -272,6 +274,7 @@ weakenContained : {x : CapabilityName} -> {cs, xs : CapabilitySet} ->
 weakenContained ContainedNil        = ContainedNil
 weakenContained (ContainedCons h r) = ContainedCons (There h) (weakenContained r)
 
+||| Witness that every capability list contains its own requirements.
 public export
 containedRefl : (cs : CapabilitySet) -> ContainedIn cs cs
 containedRefl []        = ContainedNil
@@ -298,6 +301,7 @@ public export
 data CallCompatible : (caller : CapabilitySet) -> (callee : CapabilitySet) -> Type where
   MkCallCompatible : ContainedIn callee caller -> CallCompatible caller callee
 
+||| Certify that a capability set can call a callee with the same requirements.
 public export
 selfCallCompatible : (cs : CapabilitySet) -> CallCompatible cs cs
 selfCallCompatible cs = MkCallCompatible (containedRefl cs)

@@ -33,8 +33,8 @@ extern fn gossamer_resize(handle: u64, width: u32, height: u32) c_int;
 extern fn gossamer_request_close(handle: u64) c_int;
 extern fn gossamer_set_title(handle: u64, title: [*:0]const u8) c_int;
 extern fn gossamer_guard_set(handle: u64, mode: c_int) c_int;
-extern fn gossamer_cap_check(handle: u64, resource: [*:0]const u8, kind: c_int) c_int;
-extern fn gossamer_cap_resource_kind(name: [*:0]const u8) c_int;
+extern fn gossamer_cap_check(token: u64) c_int;
+extern fn gossamer_cap_resource_kind(token: u64) u32;
 extern fn gossamer_guard_get(handle: u64) c_int;
 extern fn gossamer_group_create(label: ?[*:0]const u8) u32;
 extern fn gossamer_group_add(group_id: u32, window_id: u32) c_int;
@@ -94,15 +94,17 @@ fn isAllowedOpsmCommand(cmd: []const u8) bool {
 /// Returns an error object when the capability gate denies the call, cmd is
 /// missing or not allowed, a cmd/tool/version token is invalid, or execution fails.
 /// Commands are limited to install, remove, update, list, search, and info.
+/// Blocks until the child finishes; stderr is discarded.
 /// Otherwise returns output (truncated to fit a 64 KiB response buffer) and
 /// exit_code, normalized to 0 for successful exit and 1 for all other terminations.
-/// The result is borrowed; copy it before the next call on the same thread.
-fn shellExecHandler(payload: [*:0]const u8, _: ?*anyopaque) callconv(.c) [*:0]const u8 {
+/// The result is borrowed; copy it before the next call on the same thread
+/// or before thread exit.
+fn shellExecHandler(payload: [*:0]const u8, user_data: ?*anyopaque) callconv(.c) [*:0]const u8 {
     const allocator = std.heap.c_allocator;
     const payload_slice = std.mem.span(payload);
 
-    const cap_kind = gossamer_cap_resource_kind("opsm_runtime");
-    if (gossamer_cap_check(0, "opsm_runtime", cap_kind) != 1) {
+    const token: u64 = if (user_data) |ud| @as(u64, @intFromPtr(ud)) else 0;
+    if (token == 0 or gossamer_cap_check(token) != 0 or gossamer_cap_resource_kind(token) != 2) {
         return @ptrCast(@constCast("{\"error\":\"capability denied\"}"));
     }
 
@@ -405,7 +407,8 @@ fn windowLowerHandler(_: [*:0]const u8, user_data: ?*anyopaque) callconv(.c) [*:
 /// JS: gossamer.group_create({label: "My Group"})
 /// The optional label is truncated to 63 bytes. Returns an ok object with
 /// group_id, or an error object if the group limit is reached.
-/// The success response is borrowed until the next call on the same thread.
+/// The success response is borrowed until the next call on the same thread
+/// or thread exit.
 fn groupCreateHandler(payload: [*:0]const u8, _: ?*anyopaque) callconv(.c) [*:0]const u8 {
     const payload_slice = std.mem.span(payload);
     const label = extractSimpleJsonField(payload_slice, "label");

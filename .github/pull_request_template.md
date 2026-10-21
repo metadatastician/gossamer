@@ -18,7 +18,7 @@
 - [ ] Tests pass (`just test` or equivalent)
 - [ ] Code is formatted (`just fmt` or equivalent)
 - [ ] Linter is clean (no new warnings or errors)
-- [ ] No banned language patterns (no TypeScript, no npm/bun, no Go/Python)
+- [ ] No banned language patterns (no TypeScript/ReScript, no npm/Node.js/Deno, no Go/Python)
 - [ ] No `unsafe` blocks without `// SAFETY:` comments
 - [ ] No banned functions (`believe_me`, `unsafeCoerce`, `Obj.magic`, `Admitted`, `sorry`)
 - [ ] SPDX license headers present on all new/modified source files

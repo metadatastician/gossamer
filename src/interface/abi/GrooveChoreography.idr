@@ -232,12 +232,14 @@ data Consistent : (p : Party) -> {gl : Global g} -> Cut gl -> Type where
 -- 5. Keystone K-CUT-LOSS Theorems (Choreographic/KCut.agda)
 --------------------------------------------------------------------------------
 
+||| Prove that truncation commutes with projecting a single message.
 projCutMsg : {s, r : Party} -> (rho : Role p s r) -> (x : g) -> (l : Local g) -> (c : LCut l) ->
              projMsg rho x (cutLocal l c) = cutLocal (projMsg rho x l) (cutprojMsg {x} rho c)
 projCutMsg (Sender _)     _ _ _ = Refl
 projCutMsg (Receiver _ _) _ _ _ = Refl
 projCutMsg (Outside _ _)  _ _ _ = Refl
 
+||| Prove that truncation commutes with projecting a single choice.
 projCutChoice : {s, r : Party} -> (rho : Role p s r) -> (x : g) -> (l, k : Local g) ->
                 (a : LCut l) -> (b : LCut k) ->
                 projChoice rho x (cutLocal l a) (cutLocal k b)
@@ -258,6 +260,7 @@ projCut p (Choice s r x l k) (ContChoice a b) =
   trans (cong2 (projChoice (role p s r) x) (projCut p l a) (projCut p k b))
         (projCutChoice (role p s r) x (proj p l) (proj p k) (cutproj p a) (cutproj p b))
 
+||| Lift a continuation grade equality through a message projection.
 gradeProjMsg : ResourceAlgebra g => {s, r : Party} ->
                (rho : Role p s r) -> (x : g) -> {y : g} -> {l : Local g} ->
                y = lgrade l -> otimes (at rho x) y = lgrade (projMsg rho x l)
@@ -265,6 +268,8 @@ gradeProjMsg (Sender _)         x e = cong (otimes x) e
 gradeProjMsg (Receiver _ _)     x e = cong (otimes x) e
 gradeProjMsg (Outside _ _) {y}  _ e = trans (seqUnitL y) e
 
+||| Lift branch grade equalities through a choice projection; outsider branches
+||| use Merge equality so their alternative grades collapse.
 gradeProjChoice : ResourceAlgebra g => {p, s, r : Party} ->
                   (rho : Role p s r) -> (x : g) -> {y1, y2 : g} -> {l, k : Global g} ->
                   y1 = lgrade (proj p l) -> y2 = lgrade (proj p k) ->
@@ -346,15 +351,18 @@ grooveBrokerChoreo : ResourceAlgebra g => (a, b, c : g) -> Global g
 grooveBrokerChoreo a b c =
   Msg 0 1 a (Msg 1 2 b (Choice 0 2 oneG (Msg 2 1 c End) (Msg 2 1 c End)))
 
+||| Cut after the two broker messages and the choice, before either final reply.
 public export
 grooveBrokerCut : ResourceAlgebra g => {a, b, c : g} -> Cut (grooveBrokerChoreo a b c)
 grooveBrokerCut = ContMsg (ContMsg (ContChoice Stop Stop))
 
+||| Certify projectability for broker party 1, whose choice branches coincide.
 public export
 grooveBrokerProjectable : ResourceAlgebra g => {a, b, c : g} ->
                           Projectable 1 (grooveBrokerChoreo a b c)
 grooveBrokerProjectable = PMsg (PMsg (PChoice (PMsg PEnd) (PMsg PEnd) Refl))
 
+||| Certify that the broker frontier preserves matching outsider branches for party 1.
 public export
 grooveBrokerConsistent : ResourceAlgebra g => {a, b, c : g} ->
                          Consistent 1 (grooveBrokerCut {a} {b} {c})
@@ -369,25 +377,30 @@ grooveBrokerKCut : ResourceAlgebra g => (a, b, c : g) ->
 grooveBrokerKCut a b c =
   kcutLoss 1 (grooveBrokerChoreo a b c) grooveBrokerCut grooveBrokerConsistent
 
+||| Verify total broker loss 8 for message grades 1, 2, and 5.
 public export
 grooveLossFull : gradeAt 1 (grooveBrokerChoreo (Finite 1) (Finite 2) (Finite 5)) = Finite 8
 grooveLossFull = Refl
 
+||| Verify broker loss 3 before the final reply with loss grade 5.
 public export
 grooveLossAtCut : gradeAt 1 (cutGlobal (grooveBrokerChoreo (Finite 1) (Finite 2) (Finite 5))
                                        GrooveChoreography.grooveBrokerCut) = Finite 3
 grooveLossAtCut = Refl
 
+||| Verify total broker cost 8 for sequential cost grades 1, 2, and 5.
 public export
 grooveLatencyFull : gradeAt 1 (grooveBrokerChoreo (Val 1) (Val 2) (Val 5)) = Val 8
 grooveLatencyFull = Refl
 
+||| Verify peak occupancy 5 for broker phases with peaks 1, 2, and 5 and zero drift.
 public export
 grooveOccupancyFull : peak (gradeAt 1 (grooveBrokerChoreo (MkHWM 1 0 LTEZero)
                                                           (MkHWM 2 0 LTEZero)
                                                           (MkHWM 5 0 LTEZero))) = 5
 grooveOccupancyFull = Refl
 
+||| Verify peak occupancy 2 before the final broker phase with peak 5 and zero drift.
 public export
 grooveOccupancyAtCut : peak (gradeAt 1 (cutGlobal (grooveBrokerChoreo (MkHWM 1 0 LTEZero)
                                                                       (MkHWM 2 0 LTEZero)
