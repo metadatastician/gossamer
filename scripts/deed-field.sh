@@ -165,7 +165,7 @@ uuid5_url() {
     bun -e '
       const h = new Bun.CryptoHasher("sha1");
       h.update(Buffer.from("6ba7b8119dad11d180b400c04fd430c8", "hex"));
-      h.update(process.argv[1]);
+      h.update(process.argv.at(-1));
       const b = h.digest().subarray(0, 16);
       b[6] = (b[6] & 0x0f) | 0x50;
       b[8] = (b[8] & 0x3f) | 0x80;
