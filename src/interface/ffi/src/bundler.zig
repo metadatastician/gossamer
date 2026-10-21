@@ -18,6 +18,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const main = @import("main.zig");
+const fs = @import("unified_api_adapter.zig").fs;
 
 const Result = main.Result;
 
@@ -76,7 +77,7 @@ fn getCacheDir(allocator: std.mem.Allocator, app_name: []const u8) ?[]u8 {
 
 /// Create directory and all parents.
 fn createDir(path: []const u8) bool {
-    std.fs.cwd().makePath(path) catch return false;
+    fs.cwd().makePath(path) catch return false;
     return true;
 }
 
@@ -149,7 +150,7 @@ fn initExtraction(app_name_z: [*:0]const u8) ?[]u8 {
 /// Returns null for invalid names, extraction initialization failure, or allocation failure.
 fn assetFullPath(allocator: std.mem.Allocator, app_name: [*:0]const u8, asset_name: [*:0]const u8) ?[]u8 {
     const asset = std.mem.span(asset_name);
-    if (!isSafeBundlePath(asset) or std.fs.path.isAbsolute(asset)) return null;
+    if (!isSafeBundlePath(asset) or fs.path.isAbsolute(asset)) return null;
     const dir = initExtraction(app_name) orelse return null;
     return std.fmt.allocPrint(allocator, "{s}/{s}", .{ dir, asset }) catch null;
 }
@@ -289,7 +290,7 @@ pub export fn gossamer_bundler_cleanup(app_name_z: [*:0]const u8) void {
     const dir = getCacheDir(allocator, app_name) orelse return;
     defer allocator.free(dir);
 
-    std.fs.deleteTreeAbsolute(dir) catch {};
+    fs.deleteTreeAbsolute(dir) catch {};
 
     // Reset global state
     if (global_state.app_name) |stored| {

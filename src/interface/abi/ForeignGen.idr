@@ -148,6 +148,10 @@ export
 prim__gossamer_channel_register_defaults : Bits64 -> Bits64 -> PrimIO ()
 
 export
+%foreign "C:gossamer_channel_authorize_opsm, libgossamer"
+prim__gossamer_channel_authorize_opsm : Bits64 -> Bits64 -> PrimIO Bits32
+
+export
 %foreign "C:gossamer_clipboard_read, libgossamer"
 prim__gossamer_clipboard_read : Bits64 -> Bits64 -> PrimIO Bits32
 

@@ -1193,7 +1193,7 @@ test "ssg_read_file with nonexistent path returns null" {
 test "ssg_write_file to tmp path returns 0" {
     const result = ssg_mod.gossamer_ssg_write_file("/tmp/gossamer_ssg_write_test.txt", "test");
     try testing.expectEqual(@as(c_int, 0), result);
-    std.fs.cwd().deleteFile("/tmp/gossamer_ssg_write_test.txt") catch {};
+    gossamer.unified_api_adapter.fs.cwd().deleteFile("/tmp/gossamer_ssg_write_test.txt") catch {};
 }
 
 test "ssg_list_files on nonexistent directory returns empty string not null" {

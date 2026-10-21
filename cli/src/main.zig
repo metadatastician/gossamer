@@ -15,6 +15,7 @@
 //
 
 const std = @import("std");
+const fs = @field(std, "fs");
 
 //==============================================================================
 // I/O helpers (Zig 0.15 — File.writeAll + fmt.bufPrint)
@@ -23,13 +24,13 @@ const std = @import("std");
 fn out(comptime fmt: []const u8, args: anytype) void {
     var buf: [4096]u8 = undefined;
     const msg = std.fmt.bufPrint(&buf, fmt, args) catch return;
-    std.fs.File.stdout().writeAll(msg) catch {};
+    fs.File.stdout().writeAll(msg) catch {};
 }
 
 fn err(comptime fmt: []const u8, args: anytype) void {
     var buf: [4096]u8 = undefined;
     const msg = std.fmt.bufPrint(&buf, fmt, args) catch return;
-    std.fs.File.stderr().writeAll(msg) catch {};
+    fs.File.stderr().writeAll(msg) catch {};
 }
 
 //==============================================================================
@@ -58,6 +59,8 @@ extern fn gossamer_navigate(handle: u64, url: [*:0]const u8) c_int;
 extern fn gossamer_load_html(handle: u64, html: [*:0]const u8) c_int;
 extern fn gossamer_channel_open(handle: u64) u64;
 extern fn gossamer_channel_register_defaults(channel: u64, handle_ptr: ?*anyopaque) void;
+extern fn gossamer_channel_authorize_opsm(channel: u64, shell_token: u64) c_int;
+extern fn gossamer_cap_grant(resource_kind: u32) u64;
 extern fn gossamer_run(handle: u64) void;
 extern fn gossamer_version() [*:0]const u8;
 extern fn gossamer_build_info() [*:0]const u8;
@@ -109,6 +112,8 @@ const Config = struct {
     /// Content-Security-Policy directive from gossamer.conf.json security.csp.
     /// When non-null, injected as a <meta> CSP tag after the IPC bridge is set up.
     csp: ?[]const u8 = null,
+    /// True when gossamer.conf.json declares the "shell" capability.
+    allow_shell: bool = false,
 };
 
 //==============================================================================
@@ -139,6 +144,7 @@ fn parseConfig(json_str: []const u8) Config {
     // Parse security.csp — the field is "csp":"..." inside the "security" block.
     // extractStringField finds the first match, which works since "csp" only appears in security.
     config.csp = extractStringField(json_str, "csp");
+    config.allow_shell = std.mem.indexOf(u8, json_str, "\"shell\"") != null;
     return config;
 }
 
@@ -312,6 +318,12 @@ fn cmdDev(allocator: std.mem.Allocator, config: Config, config_data: []const u8)
         // everything; the wasm CLI behind gossamer-launcher uses the
         // same path so wasm and native dispatch are byte-identical.
         gossamer_channel_register_defaults(channel, handle_ptr.?);
+        if (config.allow_shell) {
+            const shell_token = gossamer_cap_grant(2);
+            if (shell_token != 0 and gossamer_channel_authorize_opsm(channel, shell_token) == 0) {
+                out("  \x1b[32m✓\x1b[0m OPSM shell capability authorized\n", .{});
+            }
+        }
         out("  \x1b[32m✓\x1b[0m Default channel handlers bound (28 operations)\n", .{});
 
         // Register in the global window registry (multi-window foundation)
@@ -370,7 +382,7 @@ fn cmdBuild(allocator: std.mem.Allocator, config: Config) !void {
         out("  \x1b[32m✓\x1b[0m Build complete\n", .{});
     }
 
-    std.fs.cwd().access(config.frontend_dist, .{}) catch {
+    fs.cwd().access(config.frontend_dist, .{}) catch {
         out("  \x1b[31m✗\x1b[0m frontendDist not found: {s}\n", .{config.frontend_dist});
         return error.DistNotFound;
     };
@@ -394,7 +406,7 @@ fn cmdRun(allocator: std.mem.Allocator, config: Config) !void {
     var path_buf: [4096]u8 = undefined;
     const index_path = std.fmt.bufPrint(&path_buf, "{s}/index.html", .{config.frontend_dist}) catch return error.PathTooLong;
 
-    const html = std.fs.cwd().readFileAlloc(allocator, index_path, 1024 * 1024) catch {
+    const html = fs.cwd().readFileAlloc(allocator, index_path, 1024 * 1024) catch {
         out("  \x1b[31m✗\x1b[0m Cannot read {s}\n", .{index_path});
         return error.DistNotFound;
     };
@@ -426,6 +438,12 @@ fn cmdRun(allocator: std.mem.Allocator, config: Config) !void {
     const channel = gossamer_channel_open(handle);
     if (channel != 0) {
         gossamer_channel_register_defaults(channel, handle_ptr.?);
+        if (config.allow_shell) {
+            const shell_token = gossamer_cap_grant(2);
+            if (shell_token != 0) {
+                _ = gossamer_channel_authorize_opsm(channel, shell_token);
+            }
+        }
         _ = gossamer_registry_add(handle);
     }
 
@@ -479,13 +497,13 @@ fn cmdBundle(allocator: std.mem.Allocator, config: Config, config_data: []const 
     }
 
     // Verify frontendDist
-    std.fs.cwd().access(config.frontend_dist, .{}) catch {
+    fs.cwd().access(config.frontend_dist, .{}) catch {
         out("  \x1b[31m✗\x1b[0m frontendDist not found: {s}\n", .{config.frontend_dist});
         return error.DistNotFound;
     };
 
     // Create bundle output directory
-    std.fs.cwd().makePath("target/bundle") catch {};
+    fs.cwd().makePath("target/bundle") catch {};
 
     // Generate .desktop entry (Linux)
     const desktop_name = extractStringField(config_data, "category") orelse "Utility";
@@ -505,7 +523,7 @@ fn cmdBundle(allocator: std.mem.Allocator, config: Config, config_data: []const 
         var path_buf: [512]u8 = undefined;
         const id_lower = config.identifier;
         const desktop_path = std.fmt.bufPrint(&path_buf, "target/bundle/{s}.desktop", .{id_lower}) catch return error.BufferTooSmall;
-        const desktop_file = try std.fs.cwd().createFile(desktop_path, .{});
+        const desktop_file = try fs.cwd().createFile(desktop_path, .{});
         defer desktop_file.close();
         try desktop_file.writeAll(desktop_content);
         out("  \x1b[32m✓\x1b[0m Generated {s}\n", .{desktop_path});
@@ -527,8 +545,8 @@ fn cmdBundle(allocator: std.mem.Allocator, config: Config, config_data: []const 
             \\
         , .{ config.product_name, config.version, config.product_name }) catch return error.BufferTooSmall;
 
-        std.fs.cwd().makePath("target/bundle/deb/DEBIAN") catch {};
-        const ctrl_file = try std.fs.cwd().createFile("target/bundle/deb/DEBIAN/control", .{});
+        fs.cwd().makePath("target/bundle/deb/DEBIAN") catch {};
+        const ctrl_file = try fs.cwd().createFile("target/bundle/deb/DEBIAN/control", .{});
         defer ctrl_file.close();
         try ctrl_file.writeAll(ctrl_content);
         out("  \x1b[32m✓\x1b[0m Generated DEBIAN/control\n", .{});
@@ -538,10 +556,10 @@ fn cmdBundle(allocator: std.mem.Allocator, config: Config, config_data: []const 
     {
         var install_dir_buf: [512]u8 = undefined;
         const install_dir = std.fmt.bufPrint(&install_dir_buf, "target/bundle/deb/usr/share/{s}", .{config.identifier}) catch return error.BufferTooSmall;
-        std.fs.cwd().makePath(install_dir) catch {};
+        fs.cwd().makePath(install_dir) catch {};
 
         // Copy gossamer.conf.json into the package
-        std.fs.cwd().copyFile("gossamer.conf.json", std.fs.cwd(), std.fmt.bufPrint(&install_dir_buf, "target/bundle/deb/usr/share/{s}/gossamer.conf.json", .{config.identifier}) catch return error.BufferTooSmall, .{}) catch {};
+        fs.cwd().copyFile("gossamer.conf.json", fs.cwd(), std.fmt.bufPrint(&install_dir_buf, "target/bundle/deb/usr/share/{s}/gossamer.conf.json", .{config.identifier}) catch return error.BufferTooSmall, .{}) catch {};
 
         out("  \x1b[32m✓\x1b[0m Prepared deb package structure\n", .{});
     }
@@ -571,7 +589,7 @@ fn cmdBundle(allocator: std.mem.Allocator, config: Config, config_data: []const 
 }
 
 fn cmdInit() !void {
-    std.fs.cwd().access("gossamer.conf.json", .{}) catch {
+    fs.cwd().access("gossamer.conf.json", .{}) catch {
         const template =
             \\{
             \\  "$schema": "https://gossamer.dev/schemas/config/v1",
@@ -610,7 +628,7 @@ fn cmdInit() !void {
             \\  "bundle": { "active": true, "targets": ["deb", "appimage"] }
             \\}
         ;
-        const file = try std.fs.cwd().createFile("gossamer.conf.json", .{});
+        const file = try fs.cwd().createFile("gossamer.conf.json", .{});
         defer file.close();
         try file.writeAll(template);
         out("\n  \x1b[32m✓\x1b[0m Created gossamer.conf.json\n\n", .{});
@@ -665,7 +683,7 @@ pub fn main() !void {
     }
 
     // All other commands need gossamer.conf.json
-    const config_data = std.fs.cwd().readFileAlloc(allocator, "gossamer.conf.json", 256 * 1024) catch {
+    const config_data = fs.cwd().readFileAlloc(allocator, "gossamer.conf.json", 256 * 1024) catch {
         err("\n  \x1b[31m✗\x1b[0m gossamer.conf.json not found\n  \x1b[2mRun 'gossamer init' to create one.\x1b[0m\n\n", .{});
         std.process.exit(1);
     };

@@ -326,7 +326,7 @@ pub export fn gossamer_plugin_list() [*:0]const u8 {
         threadlocal var buf: [BUF_SIZE]u8 = undefined;
     };
 
-    var fbs = std.io.fixedBufferStream(&S.buf);
+    var fbs = @import("unified_api_adapter.zig").io.fixedBufferStream(&S.buf);
     const writer = fbs.writer();
 
     writer.writeByte('[') catch return "[]";

@@ -13,7 +13,7 @@
 //
 
 const std = @import("std");
-const fs = std.fs;
+const fs = @import("unified_api_adapter.zig").fs;
 const mem = std.mem;
 
 const alloc = std.heap.c_allocator;
@@ -61,7 +61,7 @@ pub export fn gossamer_ssg_write_file(path: [*:0]const u8, content: [*:0]const u
     const content_slice = mem.span(content);
 
     // Create parent directories if they don't exist.
-    if (std.fs.path.dirname(path_slice)) |dir| {
+    if (fs.path.dirname(path_slice)) |dir| {
         fs.cwd().makePath(dir) catch {};
     }
 
@@ -543,7 +543,7 @@ pub export fn gossamer_ssg_build_site(
         defer alloc.free(result_ptr[0 .. result_html.len + 1]);
 
         // Determine output filename: content/foo.md -> outDir/foo.html
-        const basename = std.fs.path.basename(file_path);
+        const basename = fs.path.basename(file_path);
         const stem = if (mem.endsWith(u8, basename, ".md"))
             basename[0 .. basename.len - 3]
         else

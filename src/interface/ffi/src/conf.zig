@@ -36,6 +36,7 @@
 
 const std = @import("std");
 const main = @import("main.zig");
+const fs = @import("unified_api_adapter.zig").fs;
 
 /// Heap-allocated wrapper handed back to C callers as `opaque*`. Owns
 /// the parsed JSON tree and any null-terminated string dupes returned
@@ -94,7 +95,7 @@ export fn gossamer_conf_load(
     const allocator = std.heap.c_allocator;
     const path_slice = std.mem.span(path);
 
-    const file = std.fs.cwd().openFile(path_slice, .{}) catch {
+    const file = fs.cwd().openFile(path_slice, .{}) catch {
         main.setError("Failed to open config file");
         return null;
     };

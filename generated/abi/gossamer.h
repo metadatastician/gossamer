@@ -588,8 +588,13 @@ uint8_t gossamer_is_desktop(void);
 const char* gossamer_platform_json(void);
 
 /// Bind the built-in window/group handlers using handle_ptr as callback user data,
-/// and bind opsm_runtime for async dispatch. Individual binding failures are ignored.
+/// and bind opsm_runtime for async dispatch (denied by default until authorized).
+/// Individual binding failures are ignored.
 void gossamer_channel_register_defaults(ChannelHandle channel, void* handle_ptr);
+/// Authorize the default opsm_runtime handler on channel using a valid 64-bit Shell
+/// capability token (resource_kind == 2). Returns GOSSAMER_OK (0) on success,
+/// GOSSAMER_ERR_INVALID_HANDLE (-1) if channel is 0, or GOSSAMER_ERR_CAPABILITY_DENIED (-7).
+GossamerResult gossamer_channel_authorize_opsm(ChannelHandle channel, CapToken shell_token);
 /// Set the global async IPC limit before dispatching calls; clamp to [1, 16384]
 /// and return the resulting limit. The default is 256.
 uint32_t gossamer_set_max_inflight(uint32_t max);

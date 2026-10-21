@@ -16,7 +16,7 @@
 #
 # Outputs:
 #   dist/macos/gossamer-0.3.0-<architecture>.dmg
-#   dist/macos/gossamer-0.3.0.pkg
+#   dist/macos/gossamer-0.3.0-<architecture>.pkg
 
 set -euo pipefail
 
@@ -97,10 +97,10 @@ fi
 chmod +x "${CLI_UNIVERSAL}"
 
 if [ "${PACKAGE_ARCH}" = "universal" ]; then
-    lipo "${LIB_UNIVERSAL}" -verify_arch x86_64 arm64 || true
+    lipo "${LIB_UNIVERSAL}" -verify_arch x86_64 arm64
     lipo "${CLI_UNIVERSAL}" -verify_arch x86_64 arm64
 else
-    lipo -info "${LIB_UNIVERSAL}" || true
+    lipo "${LIB_UNIVERSAL}" -verify_arch "${PACKAGE_ARCH}"
     lipo "${CLI_UNIVERSAL}" -verify_arch "${PACKAGE_ARCH}"
 fi
 
@@ -122,7 +122,7 @@ install -m644 generated/abi/gossamer.h  "${STAGING_DIR}/usr/local/include/gossam
 # ── Step 4: Build .pkg installer (macOS only) ──────────────────────────────────
 
 if "${HAVE_PKGBUILD}"; then
-    readonly PKG_OUTPUT="${DIST_DIR}/${PACKAGE_NAME}-${VERSION}.pkg"
+    readonly PKG_OUTPUT="${DIST_DIR}/${PACKAGE_NAME}-${VERSION}-${PACKAGE_ARCH}.pkg"
     log "Building .pkg installer → ${PKG_OUTPUT}"
     pkgbuild \
         --root "${STAGING_DIR}" \
