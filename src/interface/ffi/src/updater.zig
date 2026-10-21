@@ -135,8 +135,10 @@ pub const UpdateSource = struct {
     local_path: ?[*:0]const u8,
 };
 
-/// Global update source (set at initialization).
+/// Global update source (set at initialization) and owned parameter storage
+/// so the configured URL/repo/path never dangles after the caller frees its buffer.
 var update_source: ?UpdateSource = null;
+var update_param_buf: [512]u8 = [_]u8{0} ** 512;
 
 // ===========================================================================
 // Current Version
@@ -280,30 +282,44 @@ fn readVersionFromFile(path: [*:0]const u8) ?SemVer {
 
 /// Configure the update source.
 /// source_type: 0 = http_json, 1 = github_releases, 2 = local_file
-/// For http_json: url is the API endpoint
-/// For github_releases: github_repo is "owner/repo"
-/// For local_file: local_path is the path to the version file
+/// param1 is the API endpoint, "owner/repo", or version-file path, respectively.
+/// Copies 1–511 bytes into global storage, replacing the source for all handles.
+/// The caller may release param1 after return.
+/// Returns null_pointer for a zero handle or invalid_param for an unsupported
+/// source type or empty/oversized parameter, leaving the prior source unchanged.
+/// These failures set gossamer_last_error; success returns ok.
 pub export fn gossamer_updater_configure(handle_ptr: u64, source_type: u32, param1: [*:0]const u8) Result {
     if (main.ptrFromU64(handle_ptr) == null) {
         setError("Updater configure: null handle");
         return .null_pointer;
     }
 
-    const source = UpdateSource{
-        .source_type = switch (source_type) {
-            0 => .http_json,
-            1 => .github_releases,
-            2 => .local_file,
-            else => {
-                setError("Updater configure: invalid source type");
-                return .invalid_param;
-            },
+    const validated_type: UpdateSourceType = switch (source_type) {
+        0 => .http_json,
+        1 => .github_releases,
+        2 => .local_file,
+        else => {
+            setError("Updater configure: invalid source type");
+            return .invalid_param;
         },
-        .url = if (source_type == 0) param1 else null,
-        .github_repo = if (source_type == 1) param1 else null,
-        .local_path = if (source_type == 2) param1 else null,
     };
-    
+
+    const param_slice = std.mem.span(param1);
+    if (param_slice.len == 0 or param_slice.len >= update_param_buf.len) {
+        setError("Updater configure: parameter empty or too long");
+        return .invalid_param;
+    }
+    @memcpy(update_param_buf[0..param_slice.len], param_slice);
+    update_param_buf[param_slice.len] = 0;
+    const owned_param: [*:0]const u8 = update_param_buf[0..param_slice.len :0].ptr;
+
+    const source = UpdateSource{
+        .source_type = validated_type,
+        .url = if (source_type == 0) owned_param else null,
+        .github_repo = if (source_type == 1) owned_param else null,
+        .local_path = if (source_type == 2) owned_param else null,
+    };
+
     update_source = source;
     clearError();
     return .ok;

@@ -161,6 +161,13 @@ comptime {
     _ = @import("ipc_handlers.zig");
 }
 
+// Shell execution FFI functions (gossamer_shell_spawn, gossamer_shell_kill).
+// Capability-gated background process spawn and termination for `gossamer dev`
+// and the Ephapax launcher bridges.
+comptime {
+    _ = @import("shell.zig");
+}
+
 // Version information — bump on each release
 const VERSION = "0.3.0";
 const BUILD_INFO = "Gossamer " ++ VERSION ++ " built with Zig " ++ @import("builtin").zig_version_string;
@@ -288,6 +295,8 @@ pub const BindingCallback = *const fn ([*:0]const u8, ?*anyopaque) callconv(.c) 
 pub const BindingEntry = struct {
     callback: BindingCallback,
     user_data: ?*anyopaque,
+    channel: ?*ChannelHandle = null,
+
     /// When true, the callback is dispatched to a worker thread so that
     /// I/O-heavy operations do not block the GTK event loop.
     run_async: bool = false,
@@ -295,6 +304,14 @@ pub const BindingEntry = struct {
     /// Checked at dispatch time for liveness — if the plugin has been
     /// unloaded, the IPC call returns a clean error instead of crashing.
     plugin_id: u32 = 0,
+
+    pub fn beginCall(self: BindingEntry) bool {
+        return if (self.channel) |channel| channel.beginCall() else true;
+    }
+
+    pub fn endCall(self: BindingEntry) void {
+        if (self.channel) |channel| channel.endCall();
+    }
 };
 
 /// Borrowed-window guard used by window operations that should fail once the
@@ -455,6 +472,55 @@ pub const ChannelHandle = struct {
     open: bool,
     /// Allocator
     allocator: std.mem.Allocator,
+    mutex: std.Thread.Mutex = .{},
+    references: usize = 1,
+    inflight: usize = 0,
+    cleanup_callback: ?*const fn (?*anyopaque) callconv(.c) void = null,
+    cleanup_data: ?*anyopaque = null,
+
+    fn retain(self: *ChannelHandle) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        self.references += 1;
+    }
+
+    fn release(self: *ChannelHandle) void {
+        self.mutex.lock();
+        self.references -= 1;
+        const last = self.references == 0;
+        self.mutex.unlock();
+        if (last) self.allocator.destroy(self);
+    }
+
+    pub fn beginCall(self: *ChannelHandle) bool {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        if (!self.open) return false;
+        self.inflight += 1;
+        self.references += 1;
+        return true;
+    }
+
+    pub fn endCall(self: *ChannelHandle) void {
+        self.mutex.lock();
+        self.inflight -= 1;
+        const cb = if (!self.open and self.inflight == 0) self.cleanup_callback else null;
+        const data = self.cleanup_data;
+        if (cb != null) self.cleanup_callback = null;
+        self.mutex.unlock();
+        if (cb) |cleanup_cb| cleanup_cb(data);
+        self.release();
+    }
+
+    fn bind(self: *ChannelHandle, name: [:0]u8, entry: BindingEntry) !void {
+        const slot = try self.parent.bindings.getOrPut(name);
+        self.retain(); // Bindings keep a closed channel alive until window teardown.
+        if (slot.found_existing) {
+            self.allocator.free(name);
+            if (slot.value_ptr.channel) |old| old.release();
+        }
+        slot.value_ptr.* = entry;
+    }
 };
 
 //==============================================================================
@@ -1328,19 +1394,22 @@ pub export fn gossamer_lower(handle_ptr: u64) Result {
 // Delivered via __gossamer_emit() in each target webview's JS context.
 
 /// Broadcast an event to all registered windows.
+/// Returns the number of open, initialized windows whose evaluation call succeeded.
+/// Invalid event names/JSON, oversized payloads, allocation failures, and
+/// evaluation errors skip delivery to the affected windows.
 pub export fn gossamer_broadcast(event_name: [*:0]const u8, payload_json: [*:0]const u8) u32 {
+    var buf: [4096]u8 = undefined;
+    const js = prepareEmission(&buf, std.mem.span(event_name), std.mem.span(payload_json)) orelse return 0;
     registry_mutex.lock();
     defer registry_mutex.unlock();
 
     var delivered: u32 = 0;
-    const name_span = std.mem.span(event_name);
-    const payload_span = std.mem.span(payload_json);
-
     for (window_registry) |slot| {
         if (slot) |handle| {
             if (handle.initialized and !handle.closed) {
-                emitToHandle(handle, name_span, payload_span);
-                delivered += 1;
+                if (emitPreparedToHandle(handle, js)) {
+                    delivered += 1;
+                }
             }
         }
     }
@@ -1349,6 +1418,10 @@ pub export fn gossamer_broadcast(event_name: [*:0]const u8, payload_json: [*:0]c
 }
 
 /// Send an event to a specific window by its registry ID.
+/// Returns invalid_param for a missing target or a failed emission (including
+/// invalid/oversized input, allocation failure, or evaluation failure),
+/// error for a closed/uninitialized target, and ok when evaluation succeeds.
+/// Failures set gossamer_last_error; ok does not confirm JavaScript handled the event.
 pub export fn gossamer_send_to(target_id: u32, event_name: [*:0]const u8, payload_json: [*:0]const u8) Result {
     clearError();
     registry_mutex.lock();
@@ -1365,18 +1438,105 @@ pub export fn gossamer_send_to(target_id: u32, event_name: [*:0]const u8, payloa
         return .@"error";
     }
 
-    emitToHandle(h, std.mem.span(event_name), std.mem.span(payload_json));
+    if (!emitToHandle(h, std.mem.span(event_name), std.mem.span(payload_json))) {
+        setError("Invalid event name or JSON payload");
+        return .invalid_param;
+    }
     return .ok;
 }
 
 /// Helper: inject a __gossamer_emit call into a handle's webview.
-fn emitToHandle(handle: *GossamerHandle, event: []const u8, payload: []const u8) void {
-    // Build: window.__gossamer_emit&&window.__gossamer_emit('event',payload);
+/// Validates `event` and `payload` (must be valid JSON), embeds `payload`
+/// as an escaped JS string literal parsed via `JSON.parse(...)`, and returns
+/// true when platform evaluation succeeds, without confirming a JavaScript listener ran.
+/// Rejects empty event names or names containing single quotes, backslashes,
+/// newlines, carriage returns, or null bytes. Returns false for invalid JSON,
+/// allocation/evaluation failures, or input exceeding the bounded script buffers.
+fn emitToHandle(handle: *GossamerHandle, event: []const u8, payload: []const u8) bool {
     var buf: [4096]u8 = undefined;
-    const js = std.fmt.bufPrint(&buf, "window.__gossamer_emit&&window.__gossamer_emit('{s}',{s});", .{ event, payload }) catch return;
-    buf[@min(js.len, buf.len - 1)] = 0;
+    const js = prepareEmission(&buf, event, payload) orelse return false;
+    return emitPreparedToHandle(handle, js);
+}
+
+fn emitPreparedToHandle(handle: *GossamerHandle, js: [*:0]const u8) bool {
+    platform.eval(&handle.webview, js) catch return false;
+    return true;
+}
+
+/// Validate and escape once, rejecting oversized input before JSON allocation.
+fn prepareEmission(buf: *[4096]u8, event: []const u8, payload: []const u8) ?[*:0]const u8 {
+    if (event.len == 0 or event.len > buf.len or payload.len > 3584) return null;
+    // Reject event names containing JS string-breaking characters.
+    for (event) |ch| {
+        if (ch == '\'' or ch == '\\' or ch == '\n' or ch == '\r' or ch == 0) return null;
+    }
+    // Validate that payload is well-formed JSON before embedding.
+    if (!(std.json.validate(std.heap.c_allocator, payload) catch false)) {
+        return null;
+    }
+    var escaped_buf: [3584]u8 = undefined;
+    var esc_len: usize = 0;
+    for (payload) |ch| {
+        switch (ch) {
+            '\\' => {
+                if (esc_len + 2 > escaped_buf.len) return null;
+                escaped_buf[esc_len] = '\\';
+                escaped_buf[esc_len + 1] = '\\';
+                esc_len += 2;
+            },
+            '"' => {
+                if (esc_len + 2 > escaped_buf.len) return null;
+                escaped_buf[esc_len] = '\\';
+                escaped_buf[esc_len + 1] = '"';
+                esc_len += 2;
+            },
+            '\n' => {
+                if (esc_len + 2 > escaped_buf.len) return null;
+                escaped_buf[esc_len] = '\\';
+                escaped_buf[esc_len + 1] = 'n';
+                esc_len += 2;
+            },
+            '\r' => {
+                if (esc_len + 2 > escaped_buf.len) return null;
+                escaped_buf[esc_len] = '\\';
+                escaped_buf[esc_len + 1] = 'r';
+                esc_len += 2;
+            },
+            '\t' => {
+                if (esc_len + 2 > escaped_buf.len) return null;
+                escaped_buf[esc_len] = '\\';
+                escaped_buf[esc_len + 1] = 't';
+                esc_len += 2;
+            },
+            0x08 => {
+                if (esc_len + 2 > escaped_buf.len) return null;
+                escaped_buf[esc_len] = '\\';
+                escaped_buf[esc_len + 1] = 'b';
+                esc_len += 2;
+            },
+            0x0C => {
+                if (esc_len + 2 > escaped_buf.len) return null;
+                escaped_buf[esc_len] = '\\';
+                escaped_buf[esc_len + 1] = 'f';
+                esc_len += 2;
+            },
+            else => {
+                if (ch < 0x20 or esc_len + 1 > escaped_buf.len) return null;
+                escaped_buf[esc_len] = ch;
+                esc_len += 1;
+            },
+        }
+    }
+    const escaped_payload = escaped_buf[0..esc_len];
+    // Build: window.__gossamer_emit&&window.__gossamer_emit('event',JSON.parse("..."));
+    const js = std.fmt.bufPrint(
+        buf[0 .. buf.len - 1],
+        "window.__gossamer_emit&&window.__gossamer_emit('{s}',JSON.parse(\"{s}\"));",
+        .{ event, escaped_payload },
+    ) catch return null;
+    buf[js.len] = 0;
     const js_z: [*:0]const u8 = buf[0..js.len :0];
-    platform.eval(&handle.webview, js_z) catch {};
+    return js_z;
 }
 
 //==============================================================================
@@ -2912,9 +3072,10 @@ pub export fn gossamer_channel_bind(
     };
 
     // Register the callback + user data in the parent handle's bindings map
-    channel.parent.bindings.put(duped_name, .{
+    channel.bind(duped_name, .{
         .callback = cb,
         .user_data = user_data,
+        .channel = channel,
     }) catch {
         channel.allocator.free(duped_name);
         setError("Failed to register binding");
@@ -2978,9 +3139,10 @@ pub export fn gossamer_channel_bind_async(
 
     // Register the callback with run_async=true so the IPC dispatcher
     // spawns a worker thread instead of running inline on the GTK thread
-    channel.parent.bindings.put(duped_name, .{
+    channel.bind(duped_name, .{
         .callback = cb,
         .user_data = user_data,
+        .channel = channel,
         .run_async = true,
     }) catch {
         channel.allocator.free(duped_name);
@@ -2996,10 +3158,28 @@ pub export fn gossamer_channel_bind_async(
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__channelClose
 pub export fn gossamer_channel_close(channel_ptr: u64) void {
+    gossamer_channel_close_with_cleanup(channel_ptr, null, null);
+}
+
+/// Close dispatch immediately and reclaim caller data after this channel's last
+/// callback completes, including workers queued before they enter the callback.
+/// Cleanup may run on the closing thread or the last callback's worker thread.
+pub export fn gossamer_channel_close_with_cleanup(
+    channel_ptr: u64,
+    cleanup_callback: ?*const fn (?*anyopaque) callconv(.c) void,
+    cleanup_data: ?*anyopaque,
+) void {
     clearError();
     const raw_ptr = @as(?*ChannelHandle, @ptrFromInt(@as(usize, @intCast(channel_ptr)))) orelse return;
+    raw_ptr.mutex.lock();
     raw_ptr.open = false;
-    raw_ptr.allocator.destroy(raw_ptr);
+    raw_ptr.cleanup_callback = cleanup_callback;
+    raw_ptr.cleanup_data = cleanup_data;
+    const cb = if (raw_ptr.inflight == 0) raw_ptr.cleanup_callback else null;
+    if (cb != null) raw_ptr.cleanup_callback = null;
+    raw_ptr.mutex.unlock();
+    if (cb) |cleanup_cb| cleanup_cb(cleanup_data);
+    raw_ptr.release();
 }
 
 /// Query the number of currently inflight async IPC calls.
@@ -3191,6 +3371,9 @@ pub export fn gossamer_free(ptr: ?*anyopaque) void {
 }
 
 /// Revoke a capability token. Consumes it — future checks will fail.
+/// Zero is ignored. Tokens already in the bounded revocation history are not
+/// recorded again; other nonzero tokens, including unknown ones, are recorded.
+/// A full history evicts its oldest entry. Clears the thread-local last error.
 ///
 /// Matches: Gossamer.ABI.Foreign.prim__capRevoke
 pub export fn gossamer_cap_revoke(token: u64) void {
@@ -3203,6 +3386,16 @@ pub export fn gossamer_cap_revoke(token: u64) void {
             entry.active = false;
             if (cap_count > 0) cap_count -= 1;
             break;
+        }
+    }
+
+    // CNO idempotence (Gossamer.ABI.NullOps.safeRevokeCap): if the token is
+    // already present in the revocation window, do not re-append it and evict
+    // older revocations (prevents ring-buffer poisoning).
+    for (revoked_tokens[0..revoked_count]) |revoked| {
+        if (revoked == token) {
+            clearError();
+            return;
         }
     }
 
@@ -3417,10 +3610,14 @@ fn u64FromPtr(ptr: anytype) u64 {
     return @intCast(@intFromPtr(ptr));
 }
 
-/// Clean up a GossamerHandle and free all resources.
+/// Unregister and destroy an initialized handle, clear its tray association,
+/// shut down its voice host, and free its bindings and handle allocation.
+/// Returns immediately for an uninitialized handle; an initialized handle
+/// must not be used after this call.
 fn cleanup(handle: *GossamerHandle) void {
     if (!handle.initialized) return;
 
+    gossamer_registry_remove(u64FromPtr(handle));
     gossamer_tray_clear_window();
 
     // Destroy platform webview
@@ -3432,6 +3629,10 @@ fn cleanup(handle: *GossamerHandle) void {
     handle.voice_host = null;
 
     // Clean up bindings map
+    var bindings = handle.bindings.valueIterator();
+    while (bindings.next()) |entry| {
+        if (entry.channel) |channel| channel.release();
+    }
     handle.bindings.deinit();
 
     handle.initialized = false;
@@ -3444,6 +3645,78 @@ fn cleanup(handle: *GossamerHandle) void {
 //==============================================================================
 // Tests
 //==============================================================================
+
+test "channel cleanup waits for its own queued callbacks and runs exactly once" {
+    const Hooks = struct {
+        fn cleaned(data: ?*anyopaque) callconv(.c) void {
+            const count: *u32 = @ptrCast(@alignCast(data.?));
+            count.* += 1;
+        }
+        fn makeChannel() !*ChannelHandle {
+            const channel = try std.testing.allocator.create(ChannelHandle);
+            channel.* = .{ .parent = undefined, .open = true, .allocator = std.testing.allocator };
+            return channel;
+        }
+        fn finish(channel: *ChannelHandle) void {
+            channel.endCall();
+        }
+    };
+    const channel = try Hooks.makeChannel();
+    const other = try Hooks.makeChannel();
+    var cleaned: u32 = 0;
+    var other_cleaned: u32 = 0;
+
+    // Simulate two callbacks reserved by dispatch, one not yet on a worker.
+    try std.testing.expect(channel.beginCall());
+    try std.testing.expect(channel.beginCall());
+    try std.testing.expect(other.beginCall());
+    channel.retain(); // Simulate a binding that survives channel close.
+    gossamer_channel_close_with_cleanup(u64FromPtr(channel), Hooks.cleaned, &cleaned);
+    try std.testing.expect(!channel.beginCall());
+    try std.testing.expectEqual(@as(u32, 0), cleaned);
+    channel.endCall();
+    try std.testing.expectEqual(@as(u32, 0), cleaned);
+    const worker = try std.Thread.spawn(.{}, Hooks.finish, .{channel});
+    worker.join();
+    try std.testing.expectEqual(@as(u32, 1), cleaned);
+    // An unrelated channel is still busy, but cannot delay this one's cleanup.
+    try std.testing.expectEqual(@as(usize, 1), other.inflight);
+    channel.release();
+    other.endCall();
+    gossamer_channel_close_with_cleanup(u64FromPtr(other), Hooks.cleaned, &other_cleaned);
+    try std.testing.expectEqual(@as(u32, 1), other_cleaned);
+
+    // Window teardown may release its bindings before App closes the channel.
+    const after_run = try Hooks.makeChannel();
+    after_run.retain();
+    try std.testing.expect(after_run.beginCall());
+    after_run.release();
+    gossamer_channel_close_with_cleanup(u64FromPtr(after_run), Hooks.cleaned, &cleaned);
+    try std.testing.expectEqual(@as(u32, 1), cleaned);
+    after_run.endCall();
+    try std.testing.expectEqual(@as(u32, 2), cleaned);
+}
+
+test "broadcast rejects invalid and oversized input without taking the registry lock" {
+    // Any attempted lock in these calls would deadlock the test.
+    registry_mutex.lock();
+    defer registry_mutex.unlock();
+    try std.testing.expectEqual(@as(u32, 0), gossamer_broadcast("event", "not json"));
+    try std.testing.expectEqual(@as(u32, 0), gossamer_broadcast("bad'event", "{}"));
+    const oversized = [_:0]u8{' '} ** 3585;
+    try std.testing.expectEqual(@as(u32, 0), gossamer_broadcast("event", &oversized));
+    const escaping_overflow = "\"" ++ "\\n" ** 1790 ++ "\"";
+    try std.testing.expectEqual(@as(u32, 0), gossamer_broadcast("event", escaping_overflow));
+}
+
+test "prepared emission validates JSON and preserves escaped payload text" {
+    var buf: [4096]u8 = undefined;
+    const js = prepareEmission(&buf, "event", "{\"text\":\"a\\nb\\\\c\"}").?;
+    try std.testing.expectEqualStrings(
+        "window.__gossamer_emit&&window.__gossamer_emit('event',JSON.parse(\"{\\\"text\\\":\\\"a\\\\nb\\\\\\\\c\\\"}\"));",
+        std.mem.span(js),
+    );
+}
 
 test "result code mapping matches Idris2" {
     // Verify our Result enum values match Types.idr resultToInt

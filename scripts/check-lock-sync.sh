@@ -49,20 +49,14 @@ set -euo pipefail
 WF_DIR="${1:-.github/workflows}"
 LOCK="$WF_DIR/actions.lock"
 
-# gawk is required: the parser uses 3-argument match(), a GNU extension. mawk
-# (the Debian/Ubuntu default `awk`) does not support it, and a silent parse
-# failure here would read as a clean pass - the exact failure mode this script
-# exists to prevent. Probe it rather than trusting the name.
 AWK=""
-for cand in gawk awk; do
-  if command -v "$cand" >/dev/null 2>&1 \
-     && echo x | "$cand" '{ if (match($0, /(x)/, m) && m[1] == "x") exit 0; exit 1 }' 2>/dev/null; then
+for cand in gawk awk mawk; do
+  if command -v "$cand" >/dev/null 2>&1; then
     AWK="$cand"; break
   fi
 done
 if [ -z "$AWK" ]; then
-  echo "check-lock-sync: FATAL: no awk supporting 3-argument match() (need gawk)" >&2
-  echo "check-lock-sync: install it with: sudo apt-get install -y gawk" >&2
+  echo "check-lock-sync: FATAL: no awk found in PATH" >&2
   exit 1
 fi
 
@@ -117,14 +111,15 @@ FILENAME == lockfile {
   # --- the dependencies: section, for clause 3 ---
   if (indep) {
     # "    'owner/repo@ref':"  -- a top-level dependency record
-    if (match($0, /^    '([^']+)':/, m)) {
-      depkey = m[1]
+    if (match($0, /^    '[^']+':/)) {
+      depkey = substr($0, 6, RLENGTH - 7)
       haverec[ck(depkey)] = 1; disp[ck(depkey)] = depkey
       next
     }
     # "            - 'owner/repo@ref'"  -- a nested uses: of that record
-    if (match($0, /^            - '([^']+)'/, m) && depkey != "") {
-      r = ck(m[1]); disp[r] = m[1]
+    if (match($0, /^            - '[^']+'/) && depkey != "") {
+      val = substr($0, 16, RLENGTH - 16)
+      r = ck(val); disp[r] = val
       want[r] = 1
       wantsrc[r] = wantsrc[r] " dependencies:" depkey
       next
@@ -135,13 +130,16 @@ FILENAME == lockfile {
   if (!inwf) next
 
   # "    '.github/workflows/x.yml':"  or  "... : []"
-  if (match($0, /^    '([^']+)':/, m)) {
-    cur = m[1]
+  if (match($0, /^    '[^']+':/)) {
+    cur = substr($0, 6, RLENGTH - 7)
     seen_path[cur] = 1
     next
   }
-  if (match($0, /^        - '([^']+)'[[:space:]]*$/, m) && cur != "") {
-    lr = ck(m[1]); disp[lr] = m[1]; lock[cur, lr] = 1
+  if (match($0, /^        - '[^']+'[[:space:]]*$/) && cur != "") {
+    val = $0
+    sub(/^        - '/, "", val)
+    sub(/'[[:space:]]*$/, "", val)
+    lr = ck(val); disp[lr] = val; lock[cur, lr] = 1
     lockcount[cur]++
     want[lr] = 1
     wantsrc[lr] = wantsrc[lr] " " cur
@@ -155,8 +153,9 @@ FNR == 1 { wf = FILENAME }
 {
   line = $0
   sub(/[[:space:]]+#.*$/, "", line)              # strip trailing comment
-  if (match(line, /^[[:space:]]*-?[[:space:]]*uses:[[:space:]]*(.+)$/, m)) {
-    raw = m[1]
+  if (match(line, /^[[:space:]]*-?[[:space:]]*uses:[[:space:]]*.+$/)) {
+    raw = line
+    sub(/^[[:space:]]*-?[[:space:]]*uses:[[:space:]]*/, "", raw)
     gsub(/^["']|["']$/, "", raw)
     gsub(/[[:space:]]+$/, "", raw)
     if (raw ~ /^\$\//) dollar[wf] = dollar[wf] " " raw

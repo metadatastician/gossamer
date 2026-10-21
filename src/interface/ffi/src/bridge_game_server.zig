@@ -42,7 +42,56 @@ const servers = [_]Server{
     .{ .id = "voidexpanse", .name = "Void Expanse", .container = "voidexpanse", .port = 6100, .config = "/opt/voidexpanse/SettingsServer.xml", .format = "xml" },
 };
 
-const VPS_HOST = "root@209.42.26.106";
+/// Read GOSSAMER_VPS_HOST on POSIX systems, defaulting to localhost when unset.
+/// Windows always uses localhost. The returned value is borrowed and not validated.
+fn getVpsHost() []const u8 {
+    if (@import("builtin").os.tag == .windows) return "localhost";
+    return std.posix.getenv("GOSSAMER_VPS_HOST") orelse "localhost";
+}
+
+/// Accept 1–255 ASCII letters/digits or `.`, `-`, `_`, `@`, with no leading `-`.
+/// Checks characters and length only.
+fn isSafeHost(host: []const u8) bool {
+    if (host.len == 0 or host.len > 255) return false;
+    if (host[0] == '-') return false;
+    for (host) |ch| {
+        const ok = (ch >= 'a' and ch <= 'z') or
+            (ch >= 'A' and ch <= 'Z') or
+            (ch >= '0' and ch <= '9') or
+            ch == '.' or ch == '-' or ch == '_' or ch == '@';
+        if (!ok) return false;
+    }
+    return true;
+}
+
+/// Accept 1–256 ASCII letters/digits or `.`, `_`, `-` for a config token.
+fn isSafeConfigIdentifier(s: []const u8) bool {
+    if (s.len == 0 or s.len > 256) return false;
+    for (s) |ch| {
+        const ok = (ch >= 'a' and ch <= 'z') or
+            (ch >= 'A' and ch <= 'Z') or
+            (ch >= '0' and ch <= '9') or
+            ch == '.' or ch == '_' or ch == '-';
+        if (!ok) return false;
+    }
+    return true;
+}
+
+/// Accept absolute paths of 1–512 bytes containing only ASCII letters/digits
+/// or `/`, `.`, `-`, `_`, with no `..` substring.
+fn isSafeConfigPath(p: []const u8) bool {
+    if (p.len == 0 or p.len > 512) return false;
+    if (p[0] != '/') return false;
+    if (std.mem.indexOf(u8, p, "..") != null) return false;
+    for (p) |ch| {
+        const ok = (ch >= 'a' and ch <= 'z') or
+            (ch >= 'A' and ch <= 'Z') or
+            (ch >= '0' and ch <= '9') or
+            ch == '/' or ch == '.' or ch == '-' or ch == '_';
+        if (!ok) return false;
+    }
+    return true;
+}
 
 //==============================================================================
 // SSH Execution
@@ -50,20 +99,38 @@ const VPS_HOST = "root@209.42.26.106";
 
 /// Execute a command on the VPS via SSH.
 /// Args: host (i64 ptr to cstr), command (i64 ptr to cstr)
-/// Returns: i64 ptr to allocated result string.
+/// Uses noninteractive SSH with a five-second connection timeout and accepts new host keys.
+/// command is interpreted remotely by SSH; only the host token is validated here.
+/// Returns stdout regardless of the remote exit status; stderr is discarded.
+/// Null/invalid host, null command, or process errors become allocated error strings.
+/// The result is a null-terminated string owned by the caller (c_allocator);
+/// returns 0 on allocation failure.
 export fn ssh_exec(host_ptr: i64, cmd_ptr: i64, _: i64, _: i64, _: i64, _: i64) callconv(.c) i64 {
     const allocator = std.heap.c_allocator;
 
     const host = ptrToSlice(host_ptr) orelse return allocToI64(allocator, "error: null host");
     const cmd = ptrToSlice(cmd_ptr) orelse return allocToI64(allocator, "error: null command");
+    if (!isSafeHost(host)) return allocToI64(allocator, "error: invalid host");
 
-    // Build: ssh <host> '<cmd>'
-    const argv = [_][]const u8{ "ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no", host, cmd };
+    // Build: ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new -- <host> <cmd>
+    const argv = [_][]const u8{
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=5",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "--",
+        host,
+        cmd,
+    };
     const result = std.process.Child.run(.{
         .allocator = allocator,
         .argv = &argv,
     }) catch |e| {
         const err_msg = std.fmt.allocPrint(allocator, "error: ssh exec failed: {}", .{e}) catch return 0;
+        defer allocator.free(err_msg);
         return allocToI64(allocator, err_msg);
     };
     defer allocator.free(result.stderr);
@@ -175,6 +242,10 @@ export fn bridge_resolve_container(server_id_ptr: i64, _: i64, _: i64, _: i64, _
 
 /// Build a sed command for the given config format.
 /// Args: format, key, value, config_path (all cstr ptrs)
+/// Supports xml and ini; format/key/value must pass isSafeConfigIdentifier
+/// and config_path must pass isSafeConfigPath. Does not execute the command.
+/// Returns a caller-owned c_allocator C string with the command or an error
+/// for invalid parameters/unsupported formats; null inputs or allocation failures return 0.
 export fn bridge_build_sed(fmt_ptr: i64, key_ptr: i64, val_ptr: i64, path_ptr: i64, _: i64, _: i64) callconv(.c) i64 {
     const allocator = std.heap.c_allocator;
 
@@ -183,6 +254,10 @@ export fn bridge_build_sed(fmt_ptr: i64, key_ptr: i64, val_ptr: i64, path_ptr: i
     const value = ptrToSlice(val_ptr) orelse return 0;
     const path = ptrToSlice(path_ptr) orelse return 0;
 
+    if (!isSafeConfigIdentifier(format) or !isSafeConfigIdentifier(key) or !isSafeConfigIdentifier(value) or !isSafeConfigPath(path)) {
+        return allocToI64(allocator, "error: invalid sed parameters");
+    }
+
     const cmd = if (std.mem.eql(u8, format, "xml"))
         // XML: sed -i 's/Key="[^"]*"/Key="NewValue"/' file
         std.fmt.allocPrint(allocator, "sed -i 's/{s}=\"[^\"]*\"/{s}=\"{s}\"/' {s}", .{ key, key, value, path })
@@ -190,7 +265,7 @@ export fn bridge_build_sed(fmt_ptr: i64, key_ptr: i64, val_ptr: i64, path_ptr: i
         // INI: sed -i 's/^key *=.*/key = newvalue/' file
         std.fmt.allocPrint(allocator, "sed -i 's/^{s} *=.*/{s} = {s}/' {s}", .{ key, key, value, path })
     else
-        std.fmt.allocPrint(allocator, "echo 'unsupported format: {s}'", .{format});
+        return allocToI64(allocator, "error: unsupported config format");
 
     const result_str = cmd catch return 0;
     const result_z = allocator.dupeZ(u8, result_str) catch return 0;
@@ -200,11 +275,19 @@ export fn bridge_build_sed(fmt_ptr: i64, key_ptr: i64, val_ptr: i64, path_ptr: i
 
 /// Build a podman action command.
 /// Args: action (cstr), container (cstr)
+/// Supports start, stop, restart, status, and logs (last 50 lines).
+/// The container must pass isSafeConfigIdentifier and must not start with `-`.
+/// Does not execute the command. Returns a caller-owned c_allocator C string
+/// with the command or an error for invalid action/container; null inputs or
+/// allocation failures return 0.
 export fn bridge_build_action_cmd(action_ptr: i64, container_ptr: i64, _: i64, _: i64, _: i64, _: i64) callconv(.c) i64 {
     const allocator = std.heap.c_allocator;
 
     const action = ptrToSlice(action_ptr) orelse return 0;
     const container = ptrToSlice(container_ptr) orelse return 0;
+    if (!isSafeConfigIdentifier(container) or container[0] == '-') {
+        return allocToI64(allocator, "error: invalid container identifier");
+    }
 
     const cmd = if (std.mem.eql(u8, action, "start"))
         std.fmt.allocPrint(allocator, "podman start {s}", .{container})
@@ -217,7 +300,7 @@ export fn bridge_build_action_cmd(action_ptr: i64, container_ptr: i64, _: i64, _
     else if (std.mem.eql(u8, action, "logs"))
         std.fmt.allocPrint(allocator, "podman logs --tail 50 {s}", .{container})
     else
-        std.fmt.allocPrint(allocator, "echo 'unknown action: {s}'", .{action});
+        return allocToI64(allocator, "error: invalid action");
 
     const result_str = cmd catch return 0;
     const result_z = allocator.dupeZ(u8, result_str) catch return 0;
@@ -421,7 +504,11 @@ const baro_fields = [_]BaroFieldMeta{
     .{ .key = "MaxLagCompensation", .label = "Max Lag Compensation (ms)", .field_type = "int", .group = "Network", .min = 0, .max = 500 },
 };
 
-/// Overlay Barotrauma-specific metadata onto parsed fields.
+/// Fetch Barotrauma XML over SSH and combine its values with known field metadata.
+/// pairs_json is ignored. Uses getVpsHost; an invalid host or SSH process
+/// failure returns an allocated "[]". Missing XML attributes become empty values.
+/// Returns a caller-owned, null-terminated JSON string allocated with allocator,
+/// encoded as an i64 pointer, or 0 on allocation failure.
 fn overlayBarotraumaSchema(allocator: std.mem.Allocator, pairs_json: []const u8) i64 {
     _ = pairs_json;
     // Build the enriched schema directly from the known fields + current server values.
@@ -430,7 +517,23 @@ fn overlayBarotraumaSchema(allocator: std.mem.Allocator, pairs_json: []const u8)
     result.appendSlice(allocator,"[") catch return 0;
 
     // Get current config from VPS
-    const ssh_argv = [_][]const u8{ "ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no", VPS_HOST, "cat /opt/barotrauma-game/serversettings.xml" };
+    const vps_host = getVpsHost();
+    if (!isSafeHost(vps_host)) {
+        result.deinit(allocator);
+        return allocToI64(allocator, "[]");
+    }
+    const ssh_argv = [_][]const u8{
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=5",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "--",
+        vps_host,
+        "cat /opt/barotrauma-game/serversettings.xml",
+    };
     const ssh_result = std.process.Child.run(.{ .allocator = allocator, .argv = &ssh_argv }) catch {
         result.deinit(allocator);
         return allocToI64(allocator, "[]");

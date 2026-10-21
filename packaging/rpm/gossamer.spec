@@ -5,6 +5,11 @@
 # Build with: rpmbuild -bb packaging/rpm/gossamer.spec
 # (run from the repository root after adjusting _sourcedir/_builddir if needed)
 
+%global debug_package %{nil}
+%global _build_id_links none
+%global __arch_install_post %{nil}
+%global __os_install_post /usr/lib/rpm/brp-compress
+
 Name:           gossamer
 Version:        0.3.0
 Release:        1%{?dist}
@@ -57,11 +62,19 @@ building applications that embed the Gossamer webview shell framework.
 %setup -q
 
 %build
-# Build the Zig FFI shared library in release mode.
-just build-ffi-release
+if [ -n "%{?repo_root}" ] && [ -f "%{repo_root}/src/interface/ffi/zig-out/lib/libgossamer.so" ] && [ -f "%{repo_root}/src/interface/ffi/zig-out/lib/libgossamer.a" ] && [ -f "%{repo_root}/cli/launcher/zig-out/bin/gossamer-launcher" ] && [ -f "%{repo_root}/cli/launcher/zig-out/share/gossamer/cli.wasm" ]; then
+    mkdir -p src/interface/ffi/zig-out/lib cli/launcher/zig-out/bin cli/launcher/zig-out/share/gossamer
+    cp -Lf "%{repo_root}/src/interface/ffi/zig-out/lib/libgossamer.so" src/interface/ffi/zig-out/lib/libgossamer.so
+    cp -Lf "%{repo_root}/src/interface/ffi/zig-out/lib/libgossamer.a" src/interface/ffi/zig-out/lib/libgossamer.a
+    cp -Lf "%{repo_root}/cli/launcher/zig-out/bin/gossamer-launcher" cli/launcher/zig-out/bin/gossamer-launcher
+    cp -Lf "%{repo_root}/cli/launcher/zig-out/share/gossamer/cli.wasm" cli/launcher/zig-out/share/gossamer/cli.wasm
+else
+    # Build the Zig FFI shared library in release mode.
+    just build-ffi-release
 
-# Build the wasmtime-host launcher + cli.wasm in release mode.
-just build-launcher-release
+    # Build the wasmtime-host launcher + cli.wasm in release mode.
+    just build-launcher-release
+fi
 
 %install
 # Clear any stale install root.
@@ -91,7 +104,7 @@ install -Dm644 generated/abi/gossamer.h \
 
 %files
 %license LICENSE
-%doc README.adoc
+%doc README.md
 %{_libdir}/libgossamer.so
 %{_bindir}/gossamer
 %{_datadir}/gossamer/cli.wasm

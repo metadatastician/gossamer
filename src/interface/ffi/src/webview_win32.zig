@@ -965,6 +965,9 @@ const WebMessageHandler = extern struct {
     /// Called when JavaScript posts a message via chrome.webview.postMessage().
     /// Extracts the JSON message, parses {id, name, payload}, dispatches to
     /// the registered callback, and sends the response back via ExecuteScript.
+    /// Missing/unloaded handlers and null callback responses become JavaScript
+    /// errors. Malformed messages and payload allocation failures are dropped.
+    /// Returns S_OK even when dispatch fails.
     fn msgInvoke(_: *anyopaque, _: ?*anyopaque, args_raw: ?*anyopaque) callconv(.c) HRESULT {
         const handle = ipc_handle orelse return S_OK;
         const args = args_raw orelse return S_OK;
@@ -1016,12 +1019,22 @@ const WebMessageHandler = extern struct {
             sendIPCError(handle, id, "No handler bound for command");
             return S_OK;
         };
+        if (!@import("plugin.zig").isPluginLoaded(callback.plugin_id)) {
+            sendIPCError(handle, id, "Plugin unloaded — handler no longer available");
+            return S_OK;
+        }
 
         // Invoke the callback
         const payload_z = allocator.dupeZ(u8, payload) catch return S_OK;
         defer allocator.free(payload_z);
 
+        if (!callback.beginCall()) return S_OK;
+        defer callback.endCall();
         const response_ptr = callback.callback(payload_z, callback.user_data);
+        if (@intFromPtr(response_ptr) == 0) {
+            sendIPCError(handle, id, "Sync callback returned null");
+            return S_OK;
+        }
         const response = std.mem.span(response_ptr);
         sendIPCResponse(handle, id, response);
 
@@ -1034,14 +1047,18 @@ const WebMessageHandler = extern struct {
 //==============================================================================
 
 /// Send a success response back to the JavaScript IPC bridge.
+/// response must contain JSON text; the bridge parses it, resolves the callback
+/// identified by id, and removes it. Allocation/evaluation errors are ignored.
 fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8) void {
     const allocator = std.heap.c_allocator;
+    const escaped_id = escapeForJS(allocator, id) catch return;
+    defer allocator.free(escaped_id);
     const escaped = escapeForJS(allocator, response) catch return;
     defer allocator.free(escaped);
     const js = std.fmt.allocPrintSentinel(
         allocator,
         "if (window.__gossamer_callbacks[\"{s}\"]) {{ window.__gossamer_callbacks[\"{s}\"].resolve(JSON.parse(\"{s}\")); delete window.__gossamer_callbacks[\"{s}\"]; }}",
-        .{ id, id, escaped, id },
+        .{ escaped_id, escaped_id, escaped, escaped_id },
         0,
     ) catch return;
     defer allocator.free(js);
@@ -1049,12 +1066,18 @@ fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8
 }
 
 /// Send an error response back to the JavaScript IPC bridge.
+/// Reject the callback identified by id with the supplied message and remove it.
+/// Allocation/evaluation errors are ignored.
 fn sendIPCError(handle: *GossamerHandle, id: []const u8, msg_text: []const u8) void {
     const allocator = std.heap.c_allocator;
+    const escaped_id = escapeForJS(allocator, id) catch return;
+    defer allocator.free(escaped_id);
+    const escaped_msg = escapeForJS(allocator, msg_text) catch return;
+    defer allocator.free(escaped_msg);
     const js = std.fmt.allocPrintSentinel(
         allocator,
         "if (window.__gossamer_callbacks[\"{s}\"]) {{ window.__gossamer_callbacks[\"{s}\"].reject(new Error(\"{s}\")); delete window.__gossamer_callbacks[\"{s}\"]; }}",
-        .{ id, id, msg_text, id },
+        .{ escaped_id, escaped_id, escaped_msg, escaped_id },
         0,
     ) catch return;
     defer allocator.free(js);

@@ -155,6 +155,12 @@ const WatcherState = struct {
     files: [MAX_TRACKED_FILES]TrackedFile = undefined,
     file_count: usize = 0,
 
+    /// Commutative overflow digest (wrapping sum of mixed (path_hash, mtime_ns))
+    /// for files exceeding MAX_TRACKED_FILES, so changes to overflow files are
+    /// detected without triggering an infinite reload loop on every poll tick.
+    overflow_digest: u64 = 0,
+    scan_overflow_digest: u64 = 0,
+
     /// Timestamp (ns) of the last detected change, for debouncing.
     last_change_ns: i128 = 0,
 
@@ -257,19 +263,36 @@ fn watcherThreadFn(state: *WatcherState) void {
 // Directory scanning
 //==============================================================================
 
+/// Mix a `(path_hash, mtime_ns)` pair into a 64-bit digest contribution for
+/// files beyond `MAX_TRACKED_FILES`.
+fn hashOverflowEntry(path_hash: u64, mtime_ns: i128) u64 {
+    const mtime_bits: u128 = @bitCast(mtime_ns);
+    const lo: u64 = @truncate(mtime_bits);
+    const hi: u64 = @truncate(mtime_bits >> 64);
+    var h: u64 = path_hash ^ (lo *% 0x9E3779B97F4A7C15) ^ (hi *% 0xBF58476D1CE4E5B9);
+    h = (h ^ (h >> 30)) *% 0xBF58476D1CE4E5B9;
+    h = (h ^ (h >> 27)) *% 0x94D049BB133111EB;
+    return h ^ (h >> 31);
+}
+
 /// Perform the initial scan of all watched paths, populating the tracked
 /// file list with current mtimes. No reload is triggered.
 fn scanAllPaths(state: *WatcherState) void {
     state.file_count = 0;
+    state.scan_overflow_digest = 0;
     for (state.config.paths[0..state.config.path_count]) |watch_path| {
         _ = scanDirectory(state, watch_path, false);
     }
+    state.overflow_digest = state.scan_overflow_digest;
 }
 
-/// Scan all watched paths and return true if any file has changed (new,
-/// modified, or deleted).
+/// Scan watched paths recursively and update modification times and the overflow digest.
+/// Returns true for newly tracked files, changed tracked mtimes, or a changed
+/// digest of files beyond capacity. Deletions of individually tracked files
+/// are not detected; scan errors are skipped.
 fn scanForChanges(state: *WatcherState) bool {
     var any_changed = false;
+    state.scan_overflow_digest = 0;
 
     // Scan each watched path for files matching the configured extensions.
     for (state.config.paths[0..state.config.path_count]) |watch_path| {
@@ -278,14 +301,19 @@ fn scanForChanges(state: *WatcherState) bool {
         }
     }
 
+    if (state.scan_overflow_digest != state.overflow_digest) {
+        state.overflow_digest = state.scan_overflow_digest;
+        any_changed = true;
+    }
+
     return any_changed;
 }
 
-/// Scan a single directory (non-recursively) for files matching the watched
-/// extensions. In check mode, compares mtimes against tracked state.
-/// In populate mode (check=false), adds entries without checking.
-///
-/// Returns true if any change was detected (only meaningful when check=true).
+/// Scan a directory and its subdirectories for files matching the watched extensions.
+/// In check mode, update tracked mtimes and return true for new tracked files
+/// or changed mtimes. In populate mode, add entries and return false.
+/// Files beyond capacity contribute to scan_overflow_digest; its comparison
+/// is left to scanForChanges. Directory, iteration, and stat errors are skipped.
 fn scanDirectory(state: *WatcherState, path: []const u8, check: bool) bool {
     var dir = std.fs.cwd().openDir(path, .{ .iterate = true }) catch return false;
     defer dir.close();
@@ -327,13 +355,20 @@ fn scanDirectory(state: *WatcherState, path: []const u8, check: bool) bool {
                     any_changed = true;
                 }
             } else {
-                // New file appeared — track it and report as changed.
-                addTrackedFile(state, path_hash, mtime_ns);
-                any_changed = true;
+                // New file appeared — track it if capacity remains; otherwise
+                // fold into scan_overflow_digest so changes to overflow files
+                // are detected without firing a reload on every poll tick.
+                if (addTrackedFile(state, path_hash, mtime_ns)) {
+                    any_changed = true;
+                } else {
+                    state.scan_overflow_digest +%= hashOverflowEntry(path_hash, mtime_ns);
+                }
             }
         } else {
-            // Initial population — just add without flagging as changed.
-            addTrackedFile(state, path_hash, mtime_ns);
+            // Initial population — add to tracked files or fold into overflow baseline.
+            if (!addTrackedFile(state, path_hash, mtime_ns)) {
+                state.scan_overflow_digest +%= hashOverflowEntry(path_hash, mtime_ns);
+            }
         }
     }
 
@@ -368,17 +403,19 @@ fn findTrackedFile(state: *WatcherState, path_hash: u64) ?usize {
     return null;
 }
 
-/// Add a new tracked file entry. If the table is full, wraps around
-/// (evicts oldest entry). This is a simple bounded ring buffer.
-fn addTrackedFile(state: *WatcherState, path_hash: u64, mtime_ns: i128) void {
+/// Add a new tracked file entry. Returns true if tracked, false if the table
+/// is already at capacity (MAX_TRACKED_FILES).
+fn addTrackedFile(state: *WatcherState, path_hash: u64, mtime_ns: i128) bool {
     if (state.file_count < MAX_TRACKED_FILES) {
         state.files[state.file_count] = .{
             .path_hash = path_hash,
             .mtime_ns = mtime_ns,
         };
         state.file_count += 1;
+        return true;
     }
     // If full, silently drop — bounded by MAX_TRACKED_FILES.
+    return false;
 }
 
 //==============================================================================

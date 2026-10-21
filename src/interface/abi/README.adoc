@@ -1,3 +1,31 @@
 // SPDX-License-Identifier: MPL-2.0
-// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
-= abi Logic
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Gossamer Formal ABI (`src/interface/abi/`)
+
+This directory contains the canonical Idris 2 (`%default total`, zero `believe_me`, zero `postulate`, zero `assert_total`) formal ABI specifications and proofs for `libgossamer`, partitioned into two packages enforced by `scripts/check-abi-decoupling.sh` and `scripts/check-abi-ffi-cleave.sh`:
+
+== Shell Package (`gossamer-abi.ipkg` — 16 modules)
+
+* `Types.idr` — Core handles, `Result` codes, `GuardMode`, `TransmuteMode`, `PlatformProof`.
+* `Layout.idr` — C struct layout and alignment proofs.
+* `Foreign.idr` — Curated type-safe FFI wrappers (`MainThreadProof`, `LinearWebview`).
+* `ForeignGen.idr` — Auto-generated raw `%foreign` mirror of all 171 `export fn gossamer_*` symbols (`scripts/gen-abi-foreign.sh`).
+* `HandleLinearity.idr` — Linear lifecycle state machine (`Allocated -> Active -> Consumed`).
+* `WindowStateMachine.idr` — Window state transitions (`Created`, `Visible`, `Focused`, `Minimized`, `Maximized`, `Hidden`, `Closed`).
+* `TransmuteStateMachine.idr` — 19-of-36 legal mode transitions (`gui`, `tui`, `cli`, `terminal_export`, `panll_attach`, `panll_detach`) and `B1` backup-bit restoration proof.
+* `LayoutStability.idr` — ABI evolution prefix and size stability theorems.
+* `IPCIntegrity.idr` — Sequence monotonicity, FNV-1a payload hashing, and channel framing proofs.
+* `PanelIsolation.idr` — Constructive `Distinct` tag-exclusivity and panel state isolation proofs.
+* `ResourceCleanup.idr` — LIFO resource teardown and leak-freedom proofs.
+* `AndroidComponents.idr` — JNI lifecycle and `LinearHandle` proofs for Android services, receivers, and widgets.
+* `ResourceAlgebra.idr` — Unified resource algebra & grade kernel (`resource-algebra`, `occupancy-types`, `tropical-types`): `LossGrade`, `MaxPlusGrade`, `MinMax`, `HWMGrade` (`reclaimLaw`, `cutFactor`), separation theorems `S-1..S-4`, and `ActivityLevel` frame-budget grading.
+* `NullOps.idr` — Homotopy fibers & null-operation certification (`echo-types`, `absolute-zero`): `Echo` fibers, `EchoR` residues, Pillar 1 Certified Null Operations (`IsCNO`, `cnoEchoFiber`, `lockedGuardIsCNO`, `revokeInactiveIsCNO`), and Pillar 2 Observational Null Disclosure (`isOND`, `OND-3` `CNO ⊥ OND` independence).
+* `EpistemicTransport.idr` — Standpoint-indexed warrants, proof transport (`transmit` demotes `AsProof -> AsReceipt`, `opaqueNotCertifying`, `verifyReceiptIsGap`, `proofSound`), `Fresh`/`Stale` read-consistency (`epistemic-types`), `SecLabel` flow lattice (`secret-types`), and `ResidualCase` diagnostics (`residual-evidence-types`).
+* `ReversibleFS.idr` — Traversal-free `ValidPath`, loss-graded reversible traces (`allLosslessTrace`, `losslessTraceAll`, `obliterateAbsorbs`, `obliteratedNotLossless`, `ReversiblePair`, `TxState` from `januskey`), and `ContainedIn`/`CallCompatible` capability non-laundering (`typed-wasm`).
+
+== Groove Package (`gossamer-groove.ipkg` — 4 modules)
+
+* `Groove.idr` — Capability discovery manifests and handshake state machine.
+* `GrooveLinearity.idr` — Instantiates `LinearHandle` for `GrooveHandle`.
+* `GrooveResidue.idr` — Soft-groove disconnect zero-residue privacy proof (`softWipeZeroResidue`).
+* `GrooveChoreography.idr` — Graded multiparty choreographies and `K-CUT-LOSS` (`choreographic-types`): `projCut` (`K-2`), `gradeProj` (`K-3`), `cutProjectable` (`K-5`), `kcutLoss` (`K-1`), and `K-6` over `LossGrade`, `MaxPlusGrade`, and `HWMGrade`.

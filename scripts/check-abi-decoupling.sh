@@ -30,7 +30,7 @@ GROOVE_IPKG="gossamer-groove.ipkg"
 # $ABI_DIR is shell and must stay groove-agnostic.
 # GrooveTermination, CapabilityAuthenticity (and the shell's IPCDispatch)
 # relocated to the groove repo's proof package (PROOFS-1, ruled 2026-07-27).
-GROOVE_MODULES=(Groove GrooveLinearity GrooveResidue)
+GROOVE_MODULES=(Groove GrooveLinearity GrooveResidue GrooveChoreography)
 
 fail=0
 err() { printf '::error::%s\n' "$1" >&2; fail=1; }

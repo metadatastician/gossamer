@@ -32,6 +32,8 @@ modules = Test.Spec
         , IPCTest
         , ContractsTest
         , SecurityTest
+        , TransmuteTest
+        , EstateMathTest
         , Main
 
 main = Main

@@ -43,23 +43,39 @@ typedef enum {
     GOSSAMER_GUARD_LOCKED = 11,
 } GossamerResult;
 
-// Guard mode
+// Guard mode (matches Gossamer.ABI.Types.GuardMode & main.zig GuardMode)
 typedef enum {
+    GOSSAMER_GUARD_MODE_FREE = 0,
+    GOSSAMER_GUARD_MODE_LOCKED = 1,
+    GOSSAMER_GUARD_MODE_READ_ONLY = 2,
+    // Legacy aliases (GOSSAMER_GUARD_LOCKED is Result code 11)
     GOSSAMER_GUARD_FREE = 0,
-    GOSSAMER_GUARD_LOCKED = 1,
     GOSSAMER_GUARD_READ_ONLY = 2,
 } GossamerGuardMode;
 
-// Transmute mode
+// Transmute mode (matches main.zig TransmuteMode & TransmuteStateMachine.idr)
 typedef enum {
+    GOSSAMER_TRANSMUTE_GUI = 0,
+    GOSSAMER_TRANSMUTE_TUI = 1,
+    GOSSAMER_TRANSMUTE_CLI = 2,
+    GOSSAMER_TRANSMUTE_TERMINAL_EXPORT = 3,
+    GOSSAMER_TRANSMUTE_PANLL_ATTACH = 4,
+    GOSSAMER_TRANSMUTE_PANLL_DETACH = 5,
+    // Legacy aliases preserved for source compatibility
     GOSSAMER_TRANSMUTE_NONE = 0,
     GOSSAMER_TRANSMUTE_VERTICAL = 1,
     GOSSAMER_TRANSMUTE_HORIZONTAL = 2,
     GOSSAMER_TRANSMUTE_TABS = 3,
 } GossamerTransmuteMode;
 
-// Activity level
+// Activity level (matches main.zig ActivityLevel & ResourceAlgebra.idr)
 typedef enum {
+    GOSSAMER_ACTIVITY_PAUSED = 0,
+    GOSSAMER_ACTIVITY_LOW = 1,
+    GOSSAMER_ACTIVITY_MID = 2,
+    GOSSAMER_ACTIVITY_HIGH = 3,
+    GOSSAMER_ACTIVITY_REALTIME = 4,
+    // Legacy aliases preserved for source compatibility
     GOSSAMER_ACTIVITY_IDLE = 0,
     GOSSAMER_ACTIVITY_NORMAL = 1,
     GOSSAMER_ACTIVITY_BUSY = 2,
@@ -212,6 +228,14 @@ ChannelHandle gossamer_channel_open(GossamerHandle handle);
 /// Close an IPC channel.
 void gossamer_channel_close(ChannelHandle channel);
 
+/// Close dispatch and call cleanup once this channel's queued/running callbacks finish.
+/// Cleanup may run immediately or on the last worker thread; it must not unwind.
+void gossamer_channel_close_with_cleanup(
+    ChannelHandle channel,
+    void (*cleanup)(void* user_data),
+    void* user_data
+);
+
 /// Bind a synchronous IPC command handler.
 /// The callback receives a JSON-encoded request string and optional user data.
 /// It must return a JSON-encoded response string (will be copied before return).
@@ -266,7 +290,9 @@ GossamerResult gossamer_group_remove(uint32_t group_id, uint32_t window_id);
 void gossamer_group_destroy(uint32_t group_id);
 
 /// Apply an operation to all windows in a group.
-/// Operations: 0=show, 1=hide, 2=minimize, 3=maximize, 4=restore, 5=close
+/// Operations: 0=minimize, 1=maximize, 2=restore, 3=show, 4=hide, 5=close.
+/// Returns invalid_param for an unknown group. Missing windows and individual
+/// operation failures are ignored; other op values perform no action.
 GossamerResult gossamer_group_apply(uint32_t group_id, uint32_t op);
 
 // ===========================================================================
@@ -521,6 +547,74 @@ const char* gossamer_updater_get_latest_version(GossamerHandle handle);
 /// Returns a C string that the caller must free with gossamer_free().
 /// Returns NULL if no update is available.
 const char* gossamer_updater_get_update_version(GossamerHandle handle);
+
+// ===========================================================================
+// Window Registry, Grouping, Z-Order, & Cross-Window Bus
+// ===========================================================================
+
+uint32_t gossamer_registry_add(GossamerHandle handle);
+void gossamer_registry_remove(GossamerHandle handle);
+uint32_t gossamer_registry_count(void);
+
+uint32_t gossamer_group_create(const char* label);
+GossamerResult gossamer_group_add(uint32_t group_id, uint32_t window_id);
+GossamerResult gossamer_group_remove(uint32_t group_id, uint32_t window_id);
+GossamerResult gossamer_group_apply(uint32_t group_id, uint32_t op);
+
+GossamerResult gossamer_raise(GossamerHandle handle);
+GossamerResult gossamer_lower(GossamerHandle handle);
+/// Arrange open registered windows: 0=tile horizontally, 1=tile vertically,
+/// 2=cascade, 3=grid. Returns invalid_param for other values when windows exist;
+/// returns ok if there are no windows. Individual resize/move failures are ignored.
+GossamerResult gossamer_arrange(uint32_t strategy);
+
+uint32_t gossamer_broadcast(const char* event_name, const char* payload_json);
+GossamerResult gossamer_send_to(uint32_t target_id, const char* event_name, const char* payload_json);
+
+// ===========================================================================
+// Platform Detection, Hot-Reload Watcher, & Built-in IPC Defaults
+// ===========================================================================
+
+/// Return a borrowed static OS identifier; Android targets report "linux".
+const char* gossamer_platform(void);
+/// Return a borrowed static CPU identifier: x86_64, aarch64, riscv64, wasm32, or unknown.
+const char* gossamer_arch(void);
+/// Return a borrowed static engine name: webkitgtk, wkwebview, webview2, or none.
+const char* gossamer_webview_engine(void);
+/// Return 1 for Linux, macOS, Windows, or BSD OS targets; 0 otherwise.
+/// Android targets also report 1 because this query uses the OS tag.
+uint8_t gossamer_is_desktop(void);
+/// Return borrowed static JSON with platform, arch, engine, version, and desktop fields.
+const char* gossamer_platform_json(void);
+
+/// Bind the built-in window/group handlers using handle_ptr as callback user data,
+/// and bind opsm_runtime for async dispatch. Individual binding failures are ignored.
+void gossamer_channel_register_defaults(ChannelHandle channel, void* handle_ptr);
+/// Set the global async IPC limit before dispatching calls; clamp to [1, 16384]
+/// and return the resulting limit. The default is 256.
+uint32_t gossamer_set_max_inflight(uint32_t max);
+/// Return the configured global async IPC limit.
+uint32_t gossamer_get_max_inflight(void);
+
+/// Return the active token's resource-kind ordinal, or UINT32_MAX if no active entry matches.
+uint32_t gossamer_cap_resource_kind(uint64_t token);
+/// Set the global active-capability limit, clamped to [1, 4096], and return it.
+/// Call before granting capabilities; the default is 256. Also resizes the revocation limit.
+uint32_t gossamer_cap_set_max(uint32_t max);
+/// Return the configured global active-capability limit.
+uint32_t gossamer_cap_get_max(void);
+
+/// Start a polling watcher for handle. Copy config_json and frontend_dist so
+/// the caller may release them after return; config_json supplies the optional
+/// watch settings and frontend_dist supplies the fallback path. Return an opaque
+/// handle for gossamer_watcher_stop, or NULL on allocation/thread-start failure.
+void* gossamer_watcher_start(
+    GossamerHandle handle,
+    const char* config_json,
+    const char* frontend_dist
+);
+/// Stop and join the watcher thread and free its resources. NULL is a no-op.
+void gossamer_watcher_stop(void* opaque_handle);
 
 // ===========================================================================
 // Memory Management

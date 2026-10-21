@@ -94,6 +94,11 @@ extern "C" {
         user_data: *mut c_void,
     ) -> c_int;
     fn gossamer_channel_close(channel: u64);
+    fn gossamer_channel_close_with_cleanup(
+        channel: u64,
+        cleanup: Option<extern "C" fn(*mut c_void)>,
+        user_data: *mut c_void,
+    );
     fn gossamer_async_inflight_count() -> u32;
 
     fn gossamer_cap_grant(resource_kind: u32) -> u64;
@@ -203,14 +208,31 @@ struct CommandContext {
     handler: CommandHandler,
 }
 
+/// Called once by Zig after the closed channel's final callback has returned.
+extern "C" fn reclaim_command_contexts(user_data: *mut c_void) {
+    // SAFETY: App::drop transfers this allocation to the channel cleanup callback.
+    let contexts = unsafe { Box::from_raw(user_data as *mut Vec<*mut CommandContext>) };
+    for ctx in *contexts {
+        // SAFETY: dispatch is closed and no callback can still access this context.
+        unsafe { drop(Box::from_raw(ctx)) };
+    }
+}
+
+thread_local! {
+    static LAST_IPC_RESPONSE: std::cell::RefCell<CString> = std::cell::RefCell::new(
+        CString::new("{}").expect("the literal \"{}\" contains no interior NUL byte"),
+    );
+}
+
 /// The C-ABI trampoline called by Gossamer's IPC dispatcher.
 /// Receives the JSON payload string and the user_data pointer (a *CommandContext).
-/// Returns a heap-allocated, null-terminated JSON response that Zig copies.
-/// The allocation is intentionally leaked because the callback ABI has no
-/// response-free hook. Invalid payloads and serialization failures fall back to
-/// an empty JSON object; handler errors become JSON error objects.
+/// Returns a borrowed, thread-local, null-terminated JSON response that Zig copies immediately.
+/// The pointer remains valid until the next call on the same thread or thread exit;
+/// the caller must not free it.
+/// Invalid payloads and serialization failures fall back to an empty JSON object;
+/// handler errors become JSON error objects.
 extern "C" fn command_trampoline(payload: *const c_char, user_data: *mut c_void) -> *const c_char {
-    // SAFETY: user_data is a Box<CommandContext> that we leaked in App::command().
+    // SAFETY: user_data is a Box<CommandContext> that we allocated in App::command().
     // We borrow it here (not consume) — the pointer remains valid.
     let ctx = unsafe { &*(user_data as *const CommandContext) };
 
@@ -227,16 +249,17 @@ extern "C" fn command_trampoline(payload: *const c_char, user_data: *mut c_void)
         Err(e) => serde_json::json!({ "error": e }),
     };
 
-    // Serialize the response to a C string
+    // Serialize the response to a C string stored in thread-local storage
+    // so Zig can copy it via std.mem.span without leaking on every IPC call.
     let response = serde_json::to_string(&result).unwrap_or_else(|_| "{}".to_string());
     let c_response = CString::new(response).unwrap_or_else(|_| {
         CString::new("{}").expect("the literal \"{}\" contains no interior NUL byte")
     });
 
-    // Leak the CString — Zig copies it via std.mem.span, so this is safe.
-    // The leaked memory is small and bounded by the number of IPC calls.
-    // In a production version, Zig would call a free function.
-    c_response.into_raw() as *const c_char
+    LAST_IPC_RESPONSE.with(|slot| {
+        *slot.borrow_mut() = c_response;
+        slot.borrow().as_ptr()
+    })
 }
 
 // =============================================================================
@@ -347,8 +370,7 @@ impl Default for WindowConfig {
 pub struct App {
     handle: u64,
     channel: u64,
-    /// Leaked CommandContext pointers — kept so we can free them on drop.
-    /// (In practice, the app runs until process exit, so this is belt-and-suspenders.)
+    /// CommandContext pointers reclaimed once this channel's callbacks finish.
     _contexts: Vec<*mut CommandContext>,
 }
 
@@ -728,33 +750,39 @@ impl App {
     }
 
     /// Run the webview event loop. Blocks until the window is closed.
-    /// Consumes the App — the window is destroyed after this returns.
-    pub fn run(self) {
-        // SAFETY: handle is valid, event loop takes ownership
+    /// Consumes the App — the window is destroyed before this returns and its IPC
+    /// channel is closed. Command contexts are freed after this channel's final
+    /// callback returns, which may happen after run() returns.
+    pub fn run(mut self) {
+        // SAFETY: handle is valid, event loop takes ownership and cleans up handle.
         unsafe { gossamer_run(self.handle) };
-        // Note: self is consumed. Drop will NOT double-free because
-        // gossamer_run already cleans up the handle internally.
-        // We use mem::forget to prevent the Drop impl from calling destroy.
-        std::mem::forget(self);
+        // Mark handle as consumed so Drop closes the channel and frees command
+        // contexts without calling gossamer_destroy a second time.
+        self.handle = 0;
     }
 }
 
 impl Drop for App {
+    /// Close the IPC channel and destroy any window not already consumed by run().
+    /// Defer command context cleanup until this channel's final callback returns.
     fn drop(&mut self) {
         // Close IPC channel if still open
         if self.channel != 0 {
-            // SAFETY: channel handle is valid or 0 (no-op)
-            unsafe { gossamer_channel_close(self.channel) };
+            let contexts = Box::into_raw(Box::new(std::mem::take(&mut self._contexts)));
+            // SAFETY: channel is valid. Zig takes ownership of contexts and calls
+            // the cleanup exactly once after all queued/running callbacks finish.
+            unsafe {
+                gossamer_channel_close_with_cleanup(
+                    self.channel,
+                    Some(reclaim_command_contexts),
+                    contexts.cast(),
+                )
+            };
         }
         // Destroy webview if not consumed by run()
         if self.handle != 0 {
             // SAFETY: handle is valid
             unsafe { gossamer_destroy(self.handle) };
-        }
-        // Free leaked command contexts
-        for ctx_ptr in &self._contexts {
-            // SAFETY: these were created by Box::into_raw in command()
-            unsafe { drop(Box::from_raw(*ctx_ptr)) };
         }
     }
 }
