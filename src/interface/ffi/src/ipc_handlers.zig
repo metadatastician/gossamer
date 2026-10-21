@@ -33,6 +33,8 @@ extern fn gossamer_resize(handle: u64, width: u32, height: u32) c_int;
 extern fn gossamer_request_close(handle: u64) c_int;
 extern fn gossamer_set_title(handle: u64, title: [*:0]const u8) c_int;
 extern fn gossamer_guard_set(handle: u64, mode: c_int) c_int;
+extern fn gossamer_cap_check(handle: u64, resource: [*:0]const u8, kind: c_int) c_int;
+extern fn gossamer_cap_resource_kind(name: [*:0]const u8) c_int;
 extern fn gossamer_guard_get(handle: u64) c_int;
 extern fn gossamer_group_create(label: ?[*:0]const u8) u32;
 extern fn gossamer_group_add(group_id: u32, window_id: u32) c_int;
@@ -79,15 +81,29 @@ threadlocal var group_resp_buf: [64]u8 = undefined;
 
 /// Execute an opsm-runtime command and return stdout as a JSON-escaped string.
 /// The payload is a JSON object: {"cmd":"list"} or {"cmd":"install","tool":"bun","version":"1.3.0"}
+fn isAllowedOpsmCommand(cmd: []const u8) bool {
+    return std.mem.eql(u8, cmd, "install") or
+        std.mem.eql(u8, cmd, "remove") or
+        std.mem.eql(u8, cmd, "update") or
+        std.mem.eql(u8, cmd, "list") or
+        std.mem.eql(u8, cmd, "search") or
+        std.mem.eql(u8, cmd, "info");
+}
+
 fn shellExecHandler(payload: [*:0]const u8, _: ?*anyopaque) callconv(.c) [*:0]const u8 {
     const allocator = std.heap.c_allocator;
     const payload_slice = std.mem.span(payload);
+
+    const cap_kind = gossamer_cap_resource_kind("opsm_runtime");
+    if (gossamer_cap_check(0, "opsm_runtime", cap_kind) != 1) {
+        return @ptrCast(@constCast("{\"error\":\"capability denied\"}"));
+    }
 
     // Minimal JSON parsing: extract "cmd" field
     const cmd_str = extractSimpleJsonField(payload_slice, "cmd") orelse {
         return @ptrCast(@constCast("{\"error\":\"missing cmd field\"}"));
     };
-    if (!isSafeOpsmToken(cmd_str)) {
+    if (!isSafeOpsmToken(cmd_str) or !isAllowedOpsmCommand(cmd_str)) {
         return @ptrCast(@constCast("{\"error\":\"invalid cmd field\"}"));
     }
 
