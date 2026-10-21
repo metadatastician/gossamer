@@ -338,6 +338,8 @@ export fn Java_io_gossamer_GossamerBridge_nativePostMessage(
     // Invoke the callback with the payload
     const payload_z = allocator.dupeZ(u8, payload) catch return;
     defer allocator.free(payload_z);
+    if (!entry.beginCall()) return;
+    defer entry.endCall();
     const response_ptr = entry.callback(payload_z, entry.user_data);
     if (@intFromPtr(response_ptr) == 0) {
         sendIPCError(handle, id, "Sync callback returned null");

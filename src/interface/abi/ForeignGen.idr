@@ -136,6 +136,10 @@ export
 prim__gossamer_channel_close : Bits64 -> PrimIO ()
 
 export
+%foreign "C:gossamer_channel_close_with_cleanup, libgossamer"
+prim__gossamer_channel_close_with_cleanup : Bits64 -> Bits64 -> Bits64 -> PrimIO ()
+
+export
 %foreign "C:gossamer_channel_open, libgossamer"
 prim__gossamer_channel_open : Bits64 -> PrimIO Bits64
 

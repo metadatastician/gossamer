@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
-# package.sh — Build a macOS universal binary and DMG/pkg for Gossamer.
+# package.sh — Package macOS native or universal binaries and DMG/pkg for Gossamer.
 #
 # Prerequisites:
 #   - Zig 0.14+ (cross-compilation from Linux is supported; native macOS build
@@ -15,7 +15,7 @@
 #   bash packaging/macos/package.sh
 #
 # Outputs:
-#   dist/macos/gossamer-0.3.0-universal.dmg
+#   dist/macos/gossamer-0.3.0-<architecture>.dmg
 #   dist/macos/gossamer-0.3.0.pkg
 
 set -euo pipefail
@@ -34,7 +34,7 @@ readonly CLI_X64="cli/zig-out/bin/gossamer-x86_64"
 readonly CLI_ARM="cli/zig-out/bin/gossamer-aarch64"
 
 # Universal binary output paths
-readonly LIB_UNIVERSAL="${DIST_DIR}/libgossamer.dylib"
+readonly LIB_UNIVERSAL="${DIST_DIR}/libgossamer.a"
 readonly CLI_UNIVERSAL="${DIST_DIR}/gossamer"
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -77,24 +77,35 @@ if [ -f "${LIB_X64}" ] && [ -f "${LIB_ARM}" ] && [ -f "${CLI_X64}" ] && [ -f "${
         "${CLI_X64}" \
         "${CLI_ARM}" \
         -output "${CLI_UNIVERSAL}"
+    PACKAGE_ARCH="universal"
 else
+    [ "$(uname -s)" = "Darwin" ] || die "Native macOS builds require a macOS host"
+    case "$(uname -m)" in
+        arm64|aarch64) PACKAGE_ARCH="arm64" ;;
+        x86_64) PACKAGE_ARCH="x86_64" ;;
+        *) die "Unsupported macOS host architecture: $(uname -m)" ;;
+    esac
     log "Building native macOS FFI library (ReleaseSafe)..."
     (cd src/interface/ffi && zig build -Dtarget=native -Doptimize=ReleaseSafe)
     log "Building native macOS CLI binary (ReleaseSafe)..."
-    (cd cli && zig build -Dtarget=native -Doptimize=ReleaseSafe)
+    (cd cli && zig build -Dtarget=native -Doptimize=ReleaseSafe -Dstatic-gossamer=true)
 
-    if [ -f "src/interface/ffi/zig-out/lib/libgossamer.dylib" ]; then
-        cp "src/interface/ffi/zig-out/lib/libgossamer.dylib" "${LIB_UNIVERSAL}"
-    else
-        cp "src/interface/ffi/zig-out/lib/libgossamer.a" "${LIB_UNIVERSAL}"
-    fi
+    cp "src/interface/ffi/zig-out/lib/libgossamer.a" "${LIB_UNIVERSAL}"
     cp "cli/zig-out/bin/gossamer" "${CLI_UNIVERSAL}"
 fi
 
 chmod +x "${CLI_UNIVERSAL}"
 
-lipo -info "${LIB_UNIVERSAL}" || true
-lipo -info "${CLI_UNIVERSAL}" || true
+if [ "${PACKAGE_ARCH}" = "universal" ]; then
+    lipo -verify_arch x86_64 arm64 "${LIB_UNIVERSAL}"
+    lipo -verify_arch x86_64 arm64 "${CLI_UNIVERSAL}"
+else
+    lipo -verify_arch "${PACKAGE_ARCH}" "${LIB_UNIVERSAL}"
+    lipo -verify_arch "${PACKAGE_ARCH}" "${CLI_UNIVERSAL}"
+fi
+
+# Reusing staging directories could retain binaries from a previous package.
+rm -rf "${STAGING_DIR}" "${DIST_DIR}/dmg-contents"
 
 # ── Step 3: Assemble staging tree ─────────────────────────────────────────────
 
@@ -104,7 +115,7 @@ mkdir -p "${STAGING_DIR}/usr/local/lib"
 mkdir -p "${STAGING_DIR}/usr/local/bin"
 mkdir -p "${STAGING_DIR}/usr/local/include/gossamer"
 
-install -m755 "${LIB_UNIVERSAL}"        "${STAGING_DIR}/usr/local/lib/libgossamer.dylib"
+install -m644 "${LIB_UNIVERSAL}"        "${STAGING_DIR}/usr/local/lib/libgossamer.a"
 install -m755 "${CLI_UNIVERSAL}"        "${STAGING_DIR}/usr/local/bin/gossamer"
 install -m644 generated/abi/gossamer.h  "${STAGING_DIR}/usr/local/include/gossamer/gossamer.h"
 
@@ -125,14 +136,14 @@ fi
 # ── Step 5: Build .dmg (macOS only) ───────────────────────────────────────────
 
 if "${HAVE_HDIUTIL}"; then
-    readonly DMG_OUTPUT="${DIST_DIR}/${PACKAGE_NAME}-${VERSION}-universal.dmg"
+    readonly DMG_OUTPUT="${DIST_DIR}/${PACKAGE_NAME}-${VERSION}-${PACKAGE_ARCH}.dmg"
     readonly DMG_STAGING="${DIST_DIR}/dmg-contents"
 
     log "Building .dmg → ${DMG_OUTPUT}"
 
     mkdir -p "${DMG_STAGING}"
-    # Copy the universal binaries directly into the DMG for drag-install use.
-    cp "${LIB_UNIVERSAL}"        "${DMG_STAGING}/libgossamer.dylib"
+    # Copy the matching library and CLI directly into the DMG for drag-install use.
+    cp "${LIB_UNIVERSAL}"        "${DMG_STAGING}/libgossamer.a"
     cp "${CLI_UNIVERSAL}"        "${DMG_STAGING}/gossamer"
     cp generated/abi/gossamer.h  "${DMG_STAGING}/gossamer.h"
     cp README.md                 "${DMG_STAGING}/README.md" 2>/dev/null || true

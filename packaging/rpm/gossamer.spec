@@ -62,7 +62,7 @@ building applications that embed the Gossamer webview shell framework.
 %setup -q
 
 %build
-if [ -n "%{?repo_root}" ] && [ -f "%{repo_root}/src/interface/ffi/zig-out/lib/libgossamer.so" ] && [ -f "%{repo_root}/cli/launcher/zig-out/bin/gossamer-launcher" ]; then
+if [ -n "%{?repo_root}" ] && [ -f "%{repo_root}/src/interface/ffi/zig-out/lib/libgossamer.so" ] && [ -f "%{repo_root}/src/interface/ffi/zig-out/lib/libgossamer.a" ] && [ -f "%{repo_root}/cli/launcher/zig-out/bin/gossamer-launcher" ] && [ -f "%{repo_root}/cli/launcher/zig-out/share/gossamer/cli.wasm" ]; then
     mkdir -p src/interface/ffi/zig-out/lib cli/launcher/zig-out/bin cli/launcher/zig-out/share/gossamer
     cp -Lf "%{repo_root}/src/interface/ffi/zig-out/lib/libgossamer.so" src/interface/ffi/zig-out/lib/libgossamer.so
     cp -Lf "%{repo_root}/src/interface/ffi/zig-out/lib/libgossamer.a" src/interface/ffi/zig-out/lib/libgossamer.a

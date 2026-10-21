@@ -88,6 +88,15 @@ tests =
            , assertEq seq12.drift 0
            ]
 
+  , test "estate/algebra: HWMGrade carries drift into the next peak" $
+      let step1 = MkHWM 4 2 (LTESucc (LTESucc LTEZero))
+          step2 = MkHWM 5 1 (LTESucc LTEZero)
+          seq12 = hwmSeq step1 step2
+      in allPass
+           [ assertEq seq12.peak  7
+           , assertEq seq12.drift 3
+           ]
+
   , test "estate/algebra: HWMGrade timelineGrade factors across cuts" $
       let xs = [MkHWM 2 0 LTEZero]
           ys = [MkHWM 3 0 LTEZero]
