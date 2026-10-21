@@ -501,6 +501,7 @@ const AsyncIPCContext = struct {
     callback: @import("main.zig").BindingCallback,
     /// User data to pass to the callback
     user_data: ?*anyopaque,
+    channel: ?*@import("main.zig").ChannelHandle,
     /// Inflight slot index for cleanup after completion
     inflight_slot: usize,
     /// Heap-copied response from the callback (allocated by worker, freed by idle callback)
@@ -639,12 +640,23 @@ fn onIPCMessage(
             .callback = entry.callback,
             .user_data = entry.user_data,
             .inflight_slot = slot,
+            .channel = entry.channel,
         };
+
+        // Reserve channel lifetime before spawning, including queued workers.
+        if (!entry.beginCall()) {
+            allocator.free(payload_duped);
+            allocator.free(id_duped);
+            allocator.destroy(ctx);
+            async_ipc.releaseSlot(slot);
+            return;
+        }
 
         // Spawn worker thread — the callback runs off the GTK main thread.
         // detach() so the OS reclaims the thread stack when the worker exits;
         // we never join (response arrives via g_idle_add instead).
         const t = std.Thread.spawn(.{}, asyncWorkerFn, .{ctx}) catch {
+            entry.endCall();
             allocator.free(payload_duped);
             allocator.free(id_duped);
             allocator.destroy(ctx);
@@ -669,6 +681,8 @@ fn onIPCMessage(
 
     // Invoke the callback with user data.
     // Guard against null returns: std.mem.span on a null sentinel pointer is UB.
+    if (!entry.beginCall()) return;
+    defer entry.endCall();
     const response_ptr = entry.callback(payload_z, entry.user_data);
     if (@intFromPtr(response_ptr) == 0) {
         sendIPCError(handle, id, "Sync callback returned null");
@@ -682,8 +696,13 @@ fn onIPCMessage(
 
 /// Worker function that runs on a spawned thread for async IPC dispatch.
 /// Invokes the registered callback, then schedules response delivery
-/// on the GTK main thread via g_idle_add.
+/// on the GTK main thread via g_idle_add. Copies the borrowed callback response
+/// before the worker exits. Null responses and copy-allocation failures are
+/// reported by the idle callback as JavaScript errors.
 fn asyncWorkerFn(ctx: *AsyncIPCContext) void {
+    // Cleanup does not depend on the UI loop delivering the response.
+    const channel = ctx.channel;
+    defer if (channel) |ch| ch.endCall();
     // Invoke the callback — this can block (I/O, HTTP, DB queries, etc.)
     // without affecting the GTK event loop.
     const response_ptr = ctx.callback(ctx.payload_z, ctx.user_data);
@@ -716,15 +735,15 @@ fn asyncIdleCallback(user_data: ?*anyopaque) callconv(.c) c_int {
     const ctx: *AsyncIPCContext = @ptrCast(@alignCast(user_data orelse return 0));
     const allocator = ctx.allocator;
 
-    // Deliver the response or error to JavaScript only if the window is still open
-    if (ctx.handle.initialized and !ctx.handle.closed) {
-        if (ctx.err_msg) |err_msg| {
-            sendIPCError(ctx.handle, ctx.id, err_msg);
-        } else if (ctx.response) |response| {
-            sendIPCResponse(ctx.handle, ctx.id, response);
-        } else {
-            sendIPCError(ctx.handle, ctx.id, "Async callback returned null");
-        }
+    // Deliver the response or error to JavaScript.
+    // Do not dereference handle liveness flags here: the window may have been
+    // closed and the handle freed while this async callback was in flight.
+    if (ctx.err_msg) |err_msg| {
+        sendIPCError(ctx.handle, ctx.id, err_msg);
+    } else if (ctx.response) |response| {
+        sendIPCResponse(ctx.handle, ctx.id, response);
+    } else {
+        sendIPCError(ctx.handle, ctx.id, "Async callback returned null");
     }
 
     // Release the inflight slot
@@ -741,6 +760,8 @@ fn asyncIdleCallback(user_data: ?*anyopaque) callconv(.c) c_int {
 }
 
 /// Send a success response back to the JavaScript IPC bridge.
+/// response must contain JSON text; the bridge parses it, resolves the callback
+/// identified by id, and removes it. Allocation/evaluation errors are ignored.
 fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8) void {
     const allocator = std.heap.c_allocator;
 
@@ -763,6 +784,8 @@ fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8
 }
 
 /// Send an error response back to the JavaScript IPC bridge.
+/// Reject the callback identified by id with the supplied message and remove it.
+/// Allocation/evaluation errors are ignored.
 fn sendIPCError(handle: *GossamerHandle, id: []const u8, msg: []const u8) void {
     const allocator = std.heap.c_allocator;
     const escaped_id = escapeForJS(allocator, id) catch return;

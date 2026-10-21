@@ -94,6 +94,11 @@ extern "C" {
         user_data: *mut c_void,
     ) -> c_int;
     fn gossamer_channel_close(channel: u64);
+    fn gossamer_channel_close_with_cleanup(
+        channel: u64,
+        cleanup: Option<extern "C" fn(*mut c_void)>,
+        user_data: *mut c_void,
+    );
     fn gossamer_async_inflight_count() -> u32;
 
     fn gossamer_cap_grant(resource_kind: u32) -> u64;
@@ -203,6 +208,16 @@ struct CommandContext {
     handler: CommandHandler,
 }
 
+/// Called once by Zig after the closed channel's final callback has returned.
+extern "C" fn reclaim_command_contexts(user_data: *mut c_void) {
+    // SAFETY: App::drop transfers this allocation to the channel cleanup callback.
+    let contexts = unsafe { Box::from_raw(user_data as *mut Vec<*mut CommandContext>) };
+    for ctx in *contexts {
+        // SAFETY: dispatch is closed and no callback can still access this context.
+        unsafe { drop(Box::from_raw(ctx)) };
+    }
+}
+
 thread_local! {
     static LAST_IPC_RESPONSE: std::cell::RefCell<CString> = std::cell::RefCell::new(
         CString::new("{}").expect("the literal \"{}\" contains no interior NUL byte"),
@@ -211,7 +226,9 @@ thread_local! {
 
 /// The C-ABI trampoline called by Gossamer's IPC dispatcher.
 /// Receives the JSON payload string and the user_data pointer (a *CommandContext).
-/// Returns a thread-local, null-terminated JSON response that Zig copies immediately.
+/// Returns a borrowed, thread-local, null-terminated JSON response that Zig copies immediately.
+/// The pointer remains valid until the next call on the same thread or thread exit;
+/// the caller must not free it.
 /// Invalid payloads and serialization failures fall back to an empty JSON object;
 /// handler errors become JSON error objects.
 extern "C" fn command_trampoline(payload: *const c_char, user_data: *mut c_void) -> *const c_char {
@@ -353,8 +370,7 @@ impl Default for WindowConfig {
 pub struct App {
     handle: u64,
     channel: u64,
-    /// Leaked CommandContext pointers — kept so we can free them on drop.
-    /// (In practice, the app runs until process exit, so this is belt-and-suspenders.)
+    /// CommandContext pointers reclaimed once this channel's callbacks finish.
     _contexts: Vec<*mut CommandContext>,
 }
 
@@ -734,7 +750,9 @@ impl App {
     }
 
     /// Run the webview event loop. Blocks until the window is closed.
-    /// Consumes the App — the window is destroyed after this returns.
+    /// Consumes the App — the window is destroyed before this returns and its IPC
+    /// channel is closed. Command contexts are freed after this channel's final
+    /// callback returns, which may happen after run() returns.
     pub fn run(mut self) {
         // SAFETY: handle is valid, event loop takes ownership and cleans up handle.
         unsafe { gossamer_run(self.handle) };
@@ -745,11 +763,21 @@ impl App {
 }
 
 impl Drop for App {
+    /// Close the IPC channel and destroy any window not already consumed by run().
+    /// Defer command context cleanup until this channel's final callback returns.
     fn drop(&mut self) {
         // Close IPC channel if still open
         if self.channel != 0 {
-            // SAFETY: channel handle is valid or 0 (no-op)
-            unsafe { gossamer_channel_close(self.channel) };
+            let contexts = Box::into_raw(Box::new(std::mem::take(&mut self._contexts)));
+            // SAFETY: channel is valid. Zig takes ownership of contexts and calls
+            // the cleanup exactly once after all queued/running callbacks finish.
+            unsafe {
+                gossamer_channel_close_with_cleanup(
+                    self.channel,
+                    Some(reclaim_command_contexts),
+                    contexts.cast(),
+                )
+            };
         }
         // Destroy webview if not consumed by run()
         if self.handle != 0 {

@@ -13,16 +13,25 @@
 const std = @import("std");
 const main = @import("main.zig");
 
+/// Accept absolute paths with no `..` component when split on `/` or `\`.
+/// Names containing `..` within a larger component are allowed.
 fn isValidFsPath(path_slice: []const u8) bool {
-    return std.fs.path.isAbsolute(path_slice) and std.mem.indexOf(u8, path_slice, "..") == null;
+    if (!std.fs.path.isAbsolute(path_slice)) return false;
+    var it = std.mem.tokenizeAny(u8, path_slice, "/\\");
+    while (it.next()) |part| {
+        if (std.mem.eql(u8, part, "..")) return false;
+    }
+    return true;
 }
 
-/// Read a text file and return its contents as a C string.
+/// Read at most 64 MiB from a text file and return its contents as a C string.
 /// The caller is responsible for freeing the returned string via std.heap.c_allocator.
 ///
 /// Validates the capability token is active and of type FileSystem (kind=0).
 ///
-/// Returns null on error (check gossamer_last_error).
+/// The path must be absolute and have no `..` component when split on `/` or `\`.
+/// Returns null for capability, path, I/O, size-limit, or allocation errors
+/// (check gossamer_last_error).
 pub export fn gossamer_fs_read_text(
     path: [*:0]const u8,
     cap_token: u64,
@@ -73,7 +82,10 @@ pub export fn gossamer_fs_read_text(
 ///
 /// Validates the capability token is active and of type FileSystem (kind=0).
 ///
-/// Returns Result (0=ok, 1=error, 10=capability_denied).
+/// The path must be absolute and have no `..` component when split on `/` or `\`.
+/// Returns ok, capability_denied for an inactive or wrong-kind token,
+/// invalid_param for a rejected path, or error for create/write failures.
+/// Failures set gossamer_last_error; a write failure may leave a partial file.
 pub export fn gossamer_fs_write_text(
     path: [*:0]const u8,
     contents: [*:0]const u8,
@@ -115,7 +127,10 @@ pub export fn gossamer_fs_write_text(
 ///
 /// Validates the capability token is active and of type FileSystem (kind=0).
 ///
-/// Returns 1 (exists), 0 (does not exist), or 0xFFFFFFFF on error.
+/// The path must be absolute and have no `..` component when split on `/` or `\`.
+/// Returns 1 when accessible, 0 on any filesystem access failure (including
+/// absence or permission denial), or 0xFFFFFFFF for a rejected token or path.
+/// Only token and path failures set gossamer_last_error.
 pub export fn gossamer_fs_exists(
     path: [*:0]const u8,
     cap_token: u64,
@@ -145,7 +160,11 @@ pub export fn gossamer_fs_exists(
 }
 
 /// List directory contents as a JSON array of filenames.
-/// Returns a null-terminated C string (caller frees), or null on error.
+/// Returns a null-terminated C string (caller frees with std.heap.c_allocator),
+/// or null for token, path, directory-open, or allocation failures.
+/// The path must be absolute and have no `..` component when split on `/` or `\`. An iteration
+/// error ends the listing and returns the filenames collected so far.
+/// Allocation failures return null without setting a new last error.
 ///
 /// Validates the capability token is active and of type FileSystem (kind=0).
 pub export fn gossamer_fs_list_dir(
@@ -205,9 +224,13 @@ pub export fn gossamer_fs_list_dir(
     return result.ptr;
 }
 
-/// Remove a file. Directories are not removed (use gossamer_fs_remove_dir).
+/// Remove a file. Directories are not removed.
 ///
 /// Validates the capability token is active and of type FileSystem (kind=0).
+/// Paths must be absolute and have no `..` component when split on `/` or `\`.
+/// Returns ok, capability_denied for an inactive or wrong-kind token,
+/// invalid_param for a rejected path, or error for filesystem failures.
+/// Failures set gossamer_last_error.
 pub export fn gossamer_fs_remove(
     path: [*:0]const u8,
     cap_token: u64,
@@ -241,6 +264,10 @@ pub export fn gossamer_fs_remove(
 /// Succeeds when the directory already exists.
 ///
 /// Validates the capability token is active and of type FileSystem (kind=0).
+/// Paths must be absolute and have no `..` component when split on `/` or `\`.
+/// Returns ok, capability_denied for an inactive or wrong-kind token,
+/// invalid_param for a rejected path, or error for filesystem failures.
+/// Failures set gossamer_last_error.
 pub export fn gossamer_fs_mkdir_p(
     path: [*:0]const u8,
     cap_token: u64,
@@ -282,6 +309,10 @@ pub export fn gossamer_fs_mkdir_p(
 /// gossamer_fs_mkdir_p first if needed.
 ///
 /// Validates the capability token is active and of type FileSystem (kind=0).
+/// Paths must be absolute and have no `..` component when split on `/` or `\`.
+/// Returns ok, capability_denied for an inactive or wrong-kind token,
+/// invalid_param for a rejected path, or error for filesystem failures.
+/// Failures set gossamer_last_error.
 pub export fn gossamer_fs_copy_file(
     src: [*:0]const u8,
     dst: [*:0]const u8,

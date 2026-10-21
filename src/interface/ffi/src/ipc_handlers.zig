@@ -33,6 +33,8 @@ extern fn gossamer_resize(handle: u64, width: u32, height: u32) c_int;
 extern fn gossamer_request_close(handle: u64) c_int;
 extern fn gossamer_set_title(handle: u64, title: [*:0]const u8) c_int;
 extern fn gossamer_guard_set(handle: u64, mode: c_int) c_int;
+extern fn gossamer_cap_check(handle: u64, resource: [*:0]const u8, kind: c_int) c_int;
+extern fn gossamer_cap_resource_kind(name: [*:0]const u8) c_int;
 extern fn gossamer_guard_get(handle: u64) c_int;
 extern fn gossamer_group_create(label: ?[*:0]const u8) u32;
 extern fn gossamer_group_add(group_id: u32, window_id: u32) c_int;
@@ -59,7 +61,7 @@ extern fn gossamer_groove_undock(handle: u64) c_int;
 
 /// Validate that an OPSM argument token contains only safe characters
 /// (`[A-Za-z0-9._:@/-]`), does not start with `-` (no flag injection), and
-/// contains no `..` traversal sequence.
+/// contains no `..` traversal sequence. Tokens must contain 1–256 bytes.
 fn isSafeOpsmToken(tok: []const u8) bool {
     if (tok.len == 0 or tok.len > 256) return false;
     if (tok[0] == '-') return false;
@@ -77,17 +79,38 @@ fn isSafeOpsmToken(tok: []const u8) bool {
 threadlocal var shell_resp_buf: [65536]u8 = undefined;
 threadlocal var group_resp_buf: [64]u8 = undefined;
 
+/// Accept exactly install, remove, update, list, search, or info as command names.
+fn isAllowedOpsmCommand(cmd: []const u8) bool {
+    return std.mem.eql(u8, cmd, "install") or
+        std.mem.eql(u8, cmd, "remove") or
+        std.mem.eql(u8, cmd, "update") or
+        std.mem.eql(u8, cmd, "list") or
+        std.mem.eql(u8, cmd, "search") or
+        std.mem.eql(u8, cmd, "info");
+}
+
 /// Execute an opsm-runtime command and return stdout as a JSON-escaped string.
 /// The payload is a JSON object: {"cmd":"list"} or {"cmd":"install","tool":"bun","version":"1.3.0"}
+/// Returns an error object when the capability gate denies the call, cmd is
+/// missing or not allowed, a cmd/tool/version token is invalid, or execution fails.
+/// Commands are limited to install, remove, update, list, search, and info.
+/// Otherwise returns output (truncated to fit a 64 KiB response buffer) and
+/// exit_code, normalized to 0 for successful exit and 1 for all other terminations.
+/// The result is borrowed; copy it before the next call on the same thread.
 fn shellExecHandler(payload: [*:0]const u8, _: ?*anyopaque) callconv(.c) [*:0]const u8 {
     const allocator = std.heap.c_allocator;
     const payload_slice = std.mem.span(payload);
+
+    const cap_kind = gossamer_cap_resource_kind("opsm_runtime");
+    if (gossamer_cap_check(0, "opsm_runtime", cap_kind) != 1) {
+        return @ptrCast(@constCast("{\"error\":\"capability denied\"}"));
+    }
 
     // Minimal JSON parsing: extract "cmd" field
     const cmd_str = extractSimpleJsonField(payload_slice, "cmd") orelse {
         return @ptrCast(@constCast("{\"error\":\"missing cmd field\"}"));
     };
-    if (!isSafeOpsmToken(cmd_str)) {
+    if (!isSafeOpsmToken(cmd_str) or !isAllowedOpsmCommand(cmd_str)) {
         return @ptrCast(@constCast("{\"error\":\"invalid cmd field\"}"));
     }
 
@@ -165,7 +188,10 @@ fn shellExecHandler(payload: [*:0]const u8, _: ?*anyopaque) callconv(.c) [*:0]co
 }
 
 /// Extract a simple string or primitive value from JSON like {"key":"value"} or {"key":1024}.
-/// Stack-only, no allocations. Returns null if not found.
+/// Returns a borrowed slice without unescaping strings or validating JSON structure.
+/// Unquoted values end at whitespace, a comma, or a closing brace/bracket;
+/// an unterminated quoted value extends to the end of the input.
+/// Returns null when no field value is found; performs no allocations.
 fn extractSimpleJsonField(json: []const u8, key: []const u8) ?[]const u8 {
     // Search for "key":
     var i: usize = 0;
@@ -377,6 +403,9 @@ fn windowLowerHandler(_: [*:0]const u8, user_data: ?*anyopaque) callconv(.c) [*:
 
 /// IPC handler: create a window group.
 /// JS: gossamer.group_create({label: "My Group"})
+/// The optional label is truncated to 63 bytes. Returns an ok object with
+/// group_id, or an error object if the group limit is reached.
+/// The success response is borrowed until the next call on the same thread.
 fn groupCreateHandler(payload: [*:0]const u8, _: ?*anyopaque) callconv(.c) [*:0]const u8 {
     const payload_slice = std.mem.span(payload);
     const label = extractSimpleJsonField(payload_slice, "label");

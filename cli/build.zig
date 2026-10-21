@@ -23,7 +23,11 @@ pub fn build(b: *std.Build) void {
     // Link against libgossamer (built from ../src/interface/ffi/)
     exe_module.addLibraryPath(b.path("../src/interface/ffi/zig-out/lib"));
     exe_module.addRPath(b.path("../src/interface/ffi/zig-out/lib"));
-    exe_module.linkSystemLibrary("gossamer", .{});
+    if (b.option(bool, "static-gossamer", "Link libgossamer.a directly") orelse false) {
+        exe_module.addObjectFile(b.path("../src/interface/ffi/zig-out/lib/libgossamer.a"));
+    } else {
+        exe_module.linkSystemLibrary("gossamer", .{});
+    }
 
     // Platform-specific libraries (same as libgossamer itself needs)
     switch (os) {
@@ -35,6 +39,7 @@ pub fn build(b: *std.Build) void {
         .macos => {
             exe_module.linkFramework("Cocoa", .{});
             exe_module.linkFramework("WebKit", .{});
+            exe_module.linkSystemLibrary("objc", .{});
         },
         .windows => {
             exe_module.linkSystemLibrary("ole32", .{});

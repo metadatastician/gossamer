@@ -146,6 +146,7 @@ data Evidence : (spec : TransportSpec) -> Mode -> spec.artifact -> spec.claim ->
   ReceiptEv    : {a : spec.artifact} -> {c : spec.claim} ->
                  spec.payload a c -> Evidence spec OpaqueReceipt a c
 
+||| Unwrap the wire payload from any evidence mode without checking its validity.
 public export
 evidencePayload : {spec : TransportSpec} -> {m : Mode} ->
                   {a : spec.artifact} -> {c : spec.claim} ->
@@ -287,7 +288,8 @@ decideBool : (b : Bool) -> Either (b = False) (b = True)
 decideBool False = Left Refl
 decideBool True  = Right Refl
 
-||| Verify certifying evidence with a local checker to upgrade `AsData` to `AsProof`.
+||| Verify certifying evidence with a local checker, returning `Right` with an
+||| `AsProof` view on acceptance or `Left InvalidEvidence` on rejection.
 public export
 verifyCertifying : {spec : TransportSpec} -> {holder : Standpoint} ->
                    {a : spec.artifact} -> {m : Mode} -> {c : spec.claim} ->
@@ -301,6 +303,7 @@ verifyCertifying cert ck ev =
     Left  _  => Left InvalidEvidence
 
 ||| Verify evidence at `holder`. `ReceiptCheck` always fails with `Left OpaqueGap`.
+||| Other checkers return `Left InvalidEvidence` on rejection and an `AsProof` view on acceptance.
 public export
 verify : {spec : TransportSpec} -> {holder : Standpoint} ->
          {a : spec.artifact} -> {m : Mode} -> {c : spec.claim} ->
@@ -470,6 +473,7 @@ joinLowLeft {x = PluginMid} {y = PluginMid} Refl impossible
 joinLowLeft {x = PluginMid} {y = HostHigh}  Refl impossible
 joinLowLeft {x = HostHigh}  Refl impossible
 
+||| Prove that a public join requires its right input to be public.
 public export
 joinLowRight : {x, y : SecLabel} -> secJoin x y = PublicLow -> y = PublicLow
 joinLowRight {x = PublicLow} e = e

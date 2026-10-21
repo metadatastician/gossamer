@@ -354,6 +354,9 @@ fn createIPCHandlerDelegate(handle: *GossamerHandle) ?*anyopaque {
     return msgSend(raw, init_sel);
 }
 
+/// Dispatch a WebKit script-message envelope synchronously to its bound callback.
+/// Malformed messages are dropped; missing/unloaded handlers and null callback
+/// responses are reported as JavaScript errors. Payload allocation failure drops the call.
 fn onIPCMessage(
     _: ?*anyopaque,
     _: c.SEL,
@@ -390,6 +393,8 @@ fn onIPCMessage(
 
     const payload_z = allocator.dupeZ(u8, payload) catch return;
     defer allocator.free(payload_z);
+    if (!entry.beginCall()) return;
+    defer entry.endCall();
     const response_ptr = entry.callback(payload_z, entry.user_data);
     if (@intFromPtr(response_ptr) == 0) {
         sendIPCError(handle, id, "Sync callback returned null");
@@ -401,6 +406,8 @@ fn onIPCMessage(
 
 // Shared IPC helpers — identical to macOS/GTK implementations
 
+/// Resolve and remove the JavaScript callback identified by id using JSON text
+/// from response. Allocation/evaluation errors are ignored.
 fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8) void {
     const allocator = std.heap.c_allocator;
     const escaped_id = escapeForJS(allocator, id) catch return;
@@ -417,6 +424,8 @@ fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8
     eval(&handle.webview, js) catch {};
 }
 
+/// Reject and remove the JavaScript callback identified by id with the supplied
+/// message. Allocation/evaluation errors are ignored.
 fn sendIPCError(handle: *GossamerHandle, id: []const u8, msg_text: []const u8) void {
     const allocator = std.heap.c_allocator;
     const escaped_id = escapeForJS(allocator, id) catch return;

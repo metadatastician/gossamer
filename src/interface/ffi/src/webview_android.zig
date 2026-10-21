@@ -301,7 +301,9 @@ var ipc_handle: ?*GossamerHandle = null;
 
 /// Called from Java GossamerBridge.postMessage (@JavascriptInterface).
 /// Parses the JSON IPC message, dispatches to the bound callback, and sends the
-/// response back via evaluateJavascript.
+/// response back via evaluateJavascript. Missing/unloaded handlers and null
+/// callback responses are reported as JavaScript errors. Malformed messages
+/// and payload allocation failures are dropped.
 export fn Java_io_gossamer_GossamerBridge_nativePostMessage(
     env: jni.JNIEnv,
     _: jni.jobject, // this (GossamerBridge instance)
@@ -336,6 +338,8 @@ export fn Java_io_gossamer_GossamerBridge_nativePostMessage(
     // Invoke the callback with the payload
     const payload_z = allocator.dupeZ(u8, payload) catch return;
     defer allocator.free(payload_z);
+    if (!entry.beginCall()) return;
+    defer entry.endCall();
     const response_ptr = entry.callback(payload_z, entry.user_data);
     if (@intFromPtr(response_ptr) == 0) {
         sendIPCError(handle, id, "Sync callback returned null");
@@ -349,6 +353,8 @@ export fn Java_io_gossamer_GossamerBridge_nativePostMessage(
 // IPC Response Helpers
 //==============================================================================
 
+/// Resolve and remove the JavaScript callback identified by id using JSON text
+/// from response. Allocation/evaluation errors are ignored.
 fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8) void {
     const allocator = std.heap.c_allocator;
     const escaped_id = escapeForJS(allocator, id) catch return;
@@ -365,6 +371,8 @@ fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8
     eval(&handle.webview, js) catch {};
 }
 
+/// Reject and remove the JavaScript callback identified by id with the supplied
+/// message. Allocation/evaluation errors are ignored.
 fn sendIPCError(handle: *GossamerHandle, id: []const u8, msg_text: []const u8) void {
     const allocator = std.heap.c_allocator;
     const escaped_id = escapeForJS(allocator, id) catch return;
