@@ -12,7 +12,7 @@ mkdir -p "$topdir"/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
 
 git archive --format=tar --prefix="gossamer-${version}/" HEAD \
   | gzip -n > "$topdir/SOURCES/gossamer-${version}.tar.gz"
-rpmbuild -bb --nodeps \
+if ! rpmbuild -bb --nodeps \
   --define "_topdir $topdir" \
   --define "repo_root $repo_root" \
   --define "debug_package %{nil}" \
