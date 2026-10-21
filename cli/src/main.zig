@@ -144,8 +144,41 @@ fn parseConfig(json_str: []const u8) Config {
     // Parse security.csp — the field is "csp":"..." inside the "security" block.
     // extractStringField finds the first match, which works since "csp" only appears in security.
     config.csp = extractStringField(json_str, "csp");
-    config.allow_shell = std.mem.indexOf(u8, json_str, "\"shell\"") != null;
+    config.allow_shell = extractCapabilitiesHasShell(json_str);
     return config;
+}
+
+fn extractCapabilitiesHasShell(json: []const u8) bool {
+    const key = "\"capabilities\":";
+    const key_pos = std.mem.indexOf(u8, json, key) orelse return false;
+    const after_key = json[key_pos + key.len ..];
+
+    var i: usize = 0;
+    while (i < after_key.len and (after_key[i] == ' ' or after_key[i] == '\t' or after_key[i] == '\n' or after_key[i] == '\r')) : (i += 1) {}
+    if (i >= after_key.len or after_key[i] != '[') return false;
+    i += 1;
+
+    while (i < after_key.len) {
+        while (i < after_key.len and (after_key[i] == ' ' or after_key[i] == '\t' or after_key[i] == '\n' or after_key[i] == '\r' or after_key[i] == ',')) : (i += 1) {}
+        if (i >= after_key.len) return false;
+        if (after_key[i] == ']') return false;
+        if (after_key[i] != '"') return false;
+
+        i += 1;
+        const value_start = i;
+        while (i < after_key.len) : (i += 1) {
+            if (after_key[i] == '"' and (i == value_start or after_key[i - 1] != '\\')) {
+                const value = after_key[value_start..i];
+                if (std.mem.eql(u8, value, "shell")) return true;
+                i += 1;
+                break;
+            }
+        }
+
+        if (i >= after_key.len) return false;
+    }
+
+    return false;
 }
 
 fn extractStringField(json: []const u8, key: []const u8) ?[]const u8 {
