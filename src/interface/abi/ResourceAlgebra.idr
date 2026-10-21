@@ -543,10 +543,12 @@ public export
 finiteNotInfinity : {n : Nat} -> Not (Finite n = Infinity)
 finiteNotInfinity Refl impossible
 
+||| Convert a natural-number bound to the reversed order induced by minimum loss.
 public export
 lossLeOfLTE : {k, n : Nat} -> LTE k n -> LeG (Finite n) (Finite k)
 lossLeOfLTE le = cong Finite (minimumOfLTE le)
 
+||| Recover the reversed natural-number bound from the order on finite loss grades.
 public export
 lteOfLossLe : (n, k : Nat) -> LeG (Finite n) (Finite k) -> LTE k n
 lteOfLossLe n k prf = lteOfMinimum n k (finiteInjective prf)
@@ -577,12 +579,14 @@ Show MaxPlusGrade where
   show (Val n) = "Val(" ++ show n ++ ")"
   show Bot     = "Bot"
 
+||| Choose the larger finite cost; `Bot` is the identity for alternatives.
 public export
 maxPlusAlt : MaxPlusGrade -> MaxPlusGrade -> MaxPlusGrade
 maxPlusAlt Bot     b       = b
 maxPlusAlt (Val m) Bot     = Val m
 maxPlusAlt (Val m) (Val n) = Val (maximum m n)
 
+||| Add finite costs in sequence; `Bot` absorbs either argument.
 public export
 maxPlusSeq : MaxPlusGrade -> MaxPlusGrade -> MaxPlusGrade
 maxPlusSeq Bot     _       = Bot
@@ -744,13 +748,14 @@ minMaxDistribR (Finite a) Infinity   (Finite c) = Refl
 minMaxDistribR (Finite a) Infinity   Infinity   = Refl
 minMaxDistribR Infinity   b          c          = Refl
 
-||| Bottleneck of a path of confinement/adapter gates.
+||| Return the maximum gate grade along a path, or `Finite 0` for an empty path.
+||| Any `Infinity` gate makes the result `Infinity`.
 public export
 pathBottleneck : List LossGrade -> LossGrade
 pathBottleneck []        = Finite 0
 pathBottleneck (e :: xs) = minMaxSeq e (pathBottleneck xs)
 
-||| Left upper bound for `minMaxSeq` in the `LossGrade` order (`LeG b (minMaxSeq a b)`).
+||| The sequence maximum lies below its left input in the reversed `LossGrade` order.
 public export
 minMaxUpperL : (a, b : LossGrade) -> LeG (minMaxSeq a b) a
 minMaxUpperL Infinity   _          = Refl
@@ -758,7 +763,7 @@ minMaxUpperL (Finite m) Infinity   = Refl
 minMaxUpperL (Finite m) (Finite n) =
   cong Finite (minimumOfLTE (maxLeftUpperBound m n))
 
-||| Right upper bound for `minMaxSeq` in the `LossGrade` order.
+||| The sequence maximum lies below its right input in the reversed `LossGrade` order.
 public export
 minMaxUpperR : (a, b : LossGrade) -> LeG (minMaxSeq a b) b
 minMaxUpperR Infinity   _          = Refl
@@ -797,6 +802,7 @@ public export
 Show HWMGrade where
   show (MkHWM p d _) = "HWM(peak=" ++ show p ++ ", drift=" ++ show d ++ ")"
 
+||| Prove occupancy grades equal from equal peak and drift values, regardless of their bound witnesses.
 public export
 hwmEq : {p, p', n, n' : Nat} -> {b : LTE n p} -> {b' : LTE n' p'} ->
         p = p' -> n = n' -> MkHWM p n b = MkHWM p' n' b'

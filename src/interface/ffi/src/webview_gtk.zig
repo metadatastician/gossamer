@@ -682,7 +682,9 @@ fn onIPCMessage(
 
 /// Worker function that runs on a spawned thread for async IPC dispatch.
 /// Invokes the registered callback, then schedules response delivery
-/// on the GTK main thread via g_idle_add.
+/// on the GTK main thread via g_idle_add. Copies the borrowed callback response
+/// before the worker exits. Null responses and copy-allocation failures are
+/// reported by the idle callback as JavaScript errors.
 fn asyncWorkerFn(ctx: *AsyncIPCContext) void {
     // Invoke the callback — this can block (I/O, HTTP, DB queries, etc.)
     // without affecting the GTK event loop.
@@ -741,6 +743,8 @@ fn asyncIdleCallback(user_data: ?*anyopaque) callconv(.c) c_int {
 }
 
 /// Send a success response back to the JavaScript IPC bridge.
+/// response must contain JSON text; the bridge parses it, resolves the callback
+/// identified by id, and removes it. Allocation/evaluation errors are ignored.
 fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8) void {
     const allocator = std.heap.c_allocator;
 
@@ -763,6 +767,8 @@ fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8
 }
 
 /// Send an error response back to the JavaScript IPC bridge.
+/// Reject the callback identified by id with the supplied message and remove it.
+/// Allocation/evaluation errors are ignored.
 fn sendIPCError(handle: *GossamerHandle, id: []const u8, msg: []const u8) void {
     const allocator = std.heap.c_allocator;
     const escaped_id = escapeForJS(allocator, id) catch return;

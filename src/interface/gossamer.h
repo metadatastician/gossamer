@@ -282,7 +282,9 @@ GossamerResult gossamer_group_remove(uint32_t group_id, uint32_t window_id);
 void gossamer_group_destroy(uint32_t group_id);
 
 /// Apply an operation to all windows in a group.
-/// Operations: 0=show, 1=hide, 2=minimize, 3=maximize, 4=restore, 5=close
+/// Operations: 0=minimize, 1=maximize, 2=restore, 3=show, 4=hide, 5=close.
+/// Returns invalid_param for an unknown group. Missing windows and individual
+/// operation failures are ignored; other op values perform no action.
 GossamerResult gossamer_group_apply(uint32_t group_id, uint32_t op);
 
 // ===========================================================================
@@ -553,6 +555,9 @@ GossamerResult gossamer_group_apply(uint32_t group_id, uint32_t op);
 
 GossamerResult gossamer_raise(GossamerHandle handle);
 GossamerResult gossamer_lower(GossamerHandle handle);
+/// Arrange open registered windows: 0=tile horizontally, 1=tile vertically,
+/// 2=cascade, 3=grid. Returns invalid_param for other values when windows exist;
+/// returns ok if there are no windows. Individual resize/move failures are ignored.
 GossamerResult gossamer_arrange(uint32_t strategy);
 
 uint32_t gossamer_broadcast(const char* event_name, const char* payload_json);
@@ -562,25 +567,45 @@ GossamerResult gossamer_send_to(uint32_t target_id, const char* event_name, cons
 // Platform Detection, Hot-Reload Watcher, & Built-in IPC Defaults
 // ===========================================================================
 
+/// Return a borrowed static OS identifier; Android targets report "linux".
 const char* gossamer_platform(void);
+/// Return a borrowed static CPU identifier: x86_64, aarch64, riscv64, wasm32, or unknown.
 const char* gossamer_arch(void);
+/// Return a borrowed static engine name: webkitgtk, wkwebview, webview2, or none.
 const char* gossamer_webview_engine(void);
+/// Return 1 for Linux, macOS, Windows, or BSD OS targets; 0 otherwise.
+/// Android targets also report 1 because this query uses the OS tag.
 uint8_t gossamer_is_desktop(void);
+/// Return borrowed static JSON with platform, arch, engine, version, and desktop fields.
 const char* gossamer_platform_json(void);
 
+/// Bind the built-in window/group handlers using handle_ptr as callback user data,
+/// and bind opsm_runtime for async dispatch. Individual binding failures are ignored.
 void gossamer_channel_register_defaults(ChannelHandle channel, void* handle_ptr);
+/// Set the global async IPC limit before dispatching calls; clamp to [1, 16384]
+/// and return the resulting limit. The default is 256.
 uint32_t gossamer_set_max_inflight(uint32_t max);
+/// Return the configured global async IPC limit.
 uint32_t gossamer_get_max_inflight(void);
 
+/// Return the active token's resource-kind ordinal, or UINT32_MAX if no active entry matches.
 uint32_t gossamer_cap_resource_kind(uint64_t token);
+/// Set the global active-capability limit, clamped to [1, 4096], and return it.
+/// Call before granting capabilities; the default is 256. Also resizes the revocation limit.
 uint32_t gossamer_cap_set_max(uint32_t max);
+/// Return the configured global active-capability limit.
 uint32_t gossamer_cap_get_max(void);
 
+/// Start a polling watcher for handle. Copy config_json and frontend_dist so
+/// the caller may release them after return; config_json supplies the optional
+/// watch settings and frontend_dist supplies the fallback path. Return an opaque
+/// handle for gossamer_watcher_stop, or NULL on allocation/thread-start failure.
 void* gossamer_watcher_start(
     GossamerHandle handle,
     const char* config_json,
     const char* frontend_dist
 );
+/// Stop and join the watcher thread and free its resources. NULL is a no-op.
 void gossamer_watcher_stop(void* opaque_handle);
 
 // ===========================================================================

@@ -518,6 +518,9 @@ fn createIPCHandlerDelegate(handle: *GossamerHandle) ?*anyopaque {
 }
 
 /// Objective-C method implementation for userContentController:didReceiveScriptMessage:
+/// Dispatches synchronous bindings and rejects missing/unloaded handlers, async
+/// bindings, and null callback responses through the JavaScript bridge.
+/// Malformed messages and payload allocation failures are dropped.
 fn onIPCMessage(
     _: ?*anyopaque, // self
     _: c.SEL, // _cmd
@@ -576,6 +579,8 @@ fn onIPCMessage(
 
 // Shared IPC helpers — identical to webview_gtk.zig
 
+/// Resolve and remove the JavaScript callback identified by id using JSON text
+/// from response. Allocation/evaluation errors are ignored.
 fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8) void {
     const allocator = std.heap.c_allocator;
     const escaped_id = escapeForJS(allocator, id) catch return;
@@ -592,6 +597,8 @@ fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8
     eval(&handle.webview, js) catch {};
 }
 
+/// Reject and remove the JavaScript callback identified by id with the supplied
+/// message. Allocation/evaluation errors are ignored.
 fn sendIPCError(handle: *GossamerHandle, id: []const u8, msg_text: []const u8) void {
     const allocator = std.heap.c_allocator;
     const escaped_id = escapeForJS(allocator, id) catch return;

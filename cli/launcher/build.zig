@@ -25,6 +25,9 @@
 
 const std = @import("std");
 
+/// Configure the launcher and cli.wasm installation plus the run step.
+/// Uses EPHAPAX (or ephapax on PATH) to compile the CLI and links the launcher
+/// against static Wasmtime, system unwind, and the previously built Gossamer library.
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});

@@ -282,9 +282,12 @@ fn readVersionFromFile(path: [*:0]const u8) ?SemVer {
 
 /// Configure the update source.
 /// source_type: 0 = http_json, 1 = github_releases, 2 = local_file
-/// For http_json: url is the API endpoint
-/// For github_releases: github_repo is "owner/repo"
-/// For local_file: local_path is the path to the version file
+/// param1 is the API endpoint, "owner/repo", or version-file path, respectively.
+/// Copies 1–511 bytes into global storage, replacing the source for all handles.
+/// The caller may release param1 after return.
+/// Returns null_pointer for a zero handle or invalid_param for an unsupported
+/// source type or empty/oversized parameter, leaving the prior source unchanged.
+/// These failures set gossamer_last_error; success returns ok.
 pub export fn gossamer_updater_configure(handle_ptr: u64, source_type: u32, param1: [*:0]const u8) Result {
     if (main.ptrFromU64(handle_ptr) == null) {
         setError("Updater configure: null handle");
