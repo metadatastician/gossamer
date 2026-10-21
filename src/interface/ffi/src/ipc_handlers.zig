@@ -35,8 +35,6 @@ extern fn gossamer_set_title(handle: u64, title: [*:0]const u8) c_int;
 extern fn gossamer_guard_set(handle: u64, mode: c_int) c_int;
 extern fn gossamer_cap_check(token: u64) c_int;
 extern fn gossamer_cap_resource_kind(token: u64) u32;
-extern fn gossamer_cap_check(handle: u64, resource: [*:0]const u8, kind: c_int) c_int;
-extern fn gossamer_cap_resource_kind(name: [*:0]const u8) c_int;
 extern fn gossamer_guard_get(handle: u64) c_int;
 extern fn gossamer_group_create(label: ?[*:0]const u8) u32;
 extern fn gossamer_group_add(group_id: u32, window_id: u32) c_int;
