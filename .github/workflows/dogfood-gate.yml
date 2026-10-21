@@ -62,7 +62,8 @@ jobs:
       - name: Lint committed .deed files and enforce .a2ml retirement
         run: |
           set -euo pipefail
-          LINTER="$PWD/.standards-deed/1-formats/deed/tools/deed_lint.js"
+          cp .standards-deed/1-formats/deed/tools/deed_lint.js "$RUNNER_TEMP/deed_lint.js"
+          LINTER="$RUNNER_TEMP/deed_lint.js"
           rm -rf .standards-deed
 
           a2ml_count=$(find . -type f -name '*.a2ml' -not -path './.git/*' | wc -l)
