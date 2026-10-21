@@ -103,12 +103,7 @@ fn shellExecHandler(payload: [*:0]const u8, user_data: ?*anyopaque) callconv(.c)
     const allocator = std.heap.c_allocator;
     const payload_slice = std.mem.span(payload);
 
-    var token: u64 = if (user_data) |ud| @as(u64, @intFromPtr(ud)) else 0;
-    if (token == 0) {
-        if (extractSimpleJsonField(payload_slice, "cap_token")) |tok_str| {
-            token = std.fmt.parseInt(u64, tok_str, 10) catch 0;
-        }
-    }
+    const token: u64 = if (user_data) |ud| @as(u64, @intFromPtr(ud)) else 0;
     if (token == 0 or gossamer_cap_check(token) != 0 or gossamer_cap_resource_kind(token) != 2) {
         return @ptrCast(@constCast("{\"error\":\"capability denied\"}"));
     }
