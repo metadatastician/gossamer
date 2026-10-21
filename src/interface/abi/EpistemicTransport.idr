@@ -50,30 +50,30 @@ Eq Standpoint where
   _             == _             = False
 
 ||| A proof-relevant warrant at standpoint `k` for proposition `a` (`Warrant.agda`).
-||| Deliberately carries no `Evidence -> a` field: warrants are not automatically factive.
+||| Deliberately carries no `warrantEv -> a` field: warrants are not automatically factive.
 public export
 record Warrant (k : Standpoint) (0 a : Type) where
   constructor MkWarrant
-  Evidence : Type
+  warrantEv : Type
 
 ||| Standpoint-indexed epistemic claim (`Epi.agda`): packages a warrant with a token.
 public export
 record Epi (k : Standpoint) (0 a : Type) where
   constructor MkEpi
   warrant  : Warrant k a
-  evidence : warrant.Evidence
+  evidence : warrant.warrantEv
 
-||| A sound (factive) warrant adds an explicit soundness map `Evidence -> a`.
+||| A sound (factive) warrant adds an explicit soundness map `warrantEv -> a`.
 public export
 record SoundWarrant (k : Standpoint) (a : Type) where
   constructor MkSoundWarrant
   warrant : Warrant k a
-  sound   : warrant.Evidence -> a
+  sound   : warrant.warrantEv -> a
 
 ||| Factive reflection (`sound-epi`): only a `SoundWarrant` extracts `a`.
 public export
 soundEpi : {k : Standpoint} -> {a : Type} ->
-           (sw : SoundWarrant k a) -> sw.warrant.Evidence -> a
+           (sw : SoundWarrant k a) -> sw.warrant.warrantEv -> a
 soundEpi sw tok = sw.sound tok
 
 --------------------------------------------------------------------------------
@@ -127,29 +127,29 @@ Show Gap where
 public export
 record TransportSpec where
   constructor MkTransportSpec
-  Artifact : Type
-  Claim    : Type
-  Payload  : Artifact -> Claim -> Type
-  Meaning  : Standpoint -> Artifact -> Claim -> Type
+  artifact : Type
+  claim    : Type
+  payload  : artifact -> claim -> Type
+  meaning  : Standpoint -> artifact -> claim -> Type
 
 ||| Mode-tagged evidence wrapping a wire payload.
 public export
-data Evidence : (spec : TransportSpec) -> Mode -> spec.Artifact -> spec.Claim -> Type where
-  PublicEv     : {a : spec.Artifact} -> {c : spec.Claim} ->
-                 spec.Payload a c -> Evidence spec PublicMode a c
-  DesignatedEv : {a : spec.Artifact} -> {c : spec.Claim} -> (d : Standpoint) ->
-                 spec.Payload a c -> Evidence spec (Designated d) a c
-  IssuerEv     : {a : spec.Artifact} -> {c : spec.Claim} ->
-                 spec.Payload a c -> Evidence spec IssuerMediated a c
-  EnvEv        : {a : spec.Artifact} -> {c : spec.Claim} ->
-                 spec.Payload a c -> Evidence spec EnvMediated a c
-  ReceiptEv    : {a : spec.Artifact} -> {c : spec.Claim} ->
-                 spec.Payload a c -> Evidence spec OpaqueReceipt a c
+data Evidence : (spec : TransportSpec) -> Mode -> spec.artifact -> spec.claim -> Type where
+  PublicEv     : {a : spec.artifact} -> {c : spec.claim} ->
+                 spec.payload a c -> Evidence spec PublicMode a c
+  DesignatedEv : {a : spec.artifact} -> {c : spec.claim} -> (d : Standpoint) ->
+                 spec.payload a c -> Evidence spec (Designated d) a c
+  IssuerEv     : {a : spec.artifact} -> {c : spec.claim} ->
+                 spec.payload a c -> Evidence spec IssuerMediated a c
+  EnvEv        : {a : spec.artifact} -> {c : spec.claim} ->
+                 spec.payload a c -> Evidence spec EnvMediated a c
+  ReceiptEv    : {a : spec.artifact} -> {c : spec.claim} ->
+                 spec.payload a c -> Evidence spec OpaqueReceipt a c
 
 public export
 evidencePayload : {spec : TransportSpec} -> {m : Mode} ->
-                  {a : spec.Artifact} -> {c : spec.Claim} ->
-                  Evidence spec m a c -> spec.Payload a c
+                  {a : spec.artifact} -> {c : spec.claim} ->
+                  Evidence spec m a c -> spec.payload a c
 evidencePayload (PublicEv p)       = p
 evidencePayload (DesignatedEv _ p) = p
 evidencePayload (IssuerEv p)       = p
@@ -159,28 +159,28 @@ evidencePayload (ReceiptEv p)      = p
 ||| Executable boolean check paired with its soundness proof for `holder`.
 public export
 record CertificateCheck (spec : TransportSpec) (holder : Standpoint)
-                        (a : spec.Artifact) (c : spec.Claim) where
+                        (a : spec.artifact) (c : spec.claim) where
   constructor MkCertCheck
-  check : spec.Payload a c -> Bool
-  sound : (p : spec.Payload a c) -> check p = True -> spec.Meaning holder a c
+  check : spec.payload a c -> Bool
+  sound : (p : spec.payload a c) -> check p = True -> spec.meaning holder a c
 
 ||| Standpoint-scoped checker (`ProofTransport.Checker`).
 public export
 data Checker : (spec : TransportSpec) -> (holder : Standpoint) ->
-               Mode -> spec.Artifact -> spec.Claim -> Type where
-  PublicCheck     : {a : spec.Artifact} -> {c : spec.Claim} ->
+               Mode -> spec.artifact -> spec.claim -> Type where
+  PublicCheck     : {a : spec.artifact} -> {c : spec.claim} ->
                     CertificateCheck spec holder a c ->
                     Checker spec holder PublicMode a c
-  DesignatedCheck : {a : spec.Artifact} -> {c : spec.Claim} ->
+  DesignatedCheck : {a : spec.artifact} -> {c : spec.claim} ->
                     CertificateCheck spec holder a c ->
                     Checker spec holder (Designated holder) a c
-  IssuerCheck     : {a : spec.Artifact} -> {c : spec.Claim} ->
+  IssuerCheck     : {a : spec.artifact} -> {c : spec.claim} ->
                     CertificateCheck spec holder a c ->
                     Checker spec holder IssuerMediated a c
-  EnvCheck        : {a : spec.Artifact} -> {c : spec.Claim} ->
+  EnvCheck        : {a : spec.artifact} -> {c : spec.claim} ->
                     CertificateCheck spec holder a c ->
                     Checker spec holder EnvMediated a c
-  ReceiptCheck    : {a : spec.Artifact} -> {c : spec.Claim} ->
+  ReceiptCheck    : {a : spec.artifact} -> {c : spec.claim} ->
                     Checker spec holder OpaqueReceipt a c
 
 ||| Predicate witnessing that a mode is certifying (`OpaqueReceipt` is excluded).
@@ -202,7 +202,7 @@ opaqueNotCertifying CertEnv impossible
 ||| Run a checker on mode-matched evidence. `ReceiptCheck` always returns `False`.
 public export
 runChecker : {spec : TransportSpec} -> {holder : Standpoint} ->
-             {a : spec.Artifact} -> {m : Mode} -> {c : spec.Claim} ->
+             {a : spec.artifact} -> {m : Mode} -> {c : spec.claim} ->
              Checker spec holder m a c -> Evidence spec m a c -> Bool
 runChecker (PublicCheck v)     ev = v.check (evidencePayload ev)
 runChecker (DesignatedCheck v) ev = v.check (evidencePayload ev)
@@ -213,12 +213,12 @@ runChecker ReceiptCheck        _  = False
 ||| Soundness of `runChecker` on certifying modes.
 public export
 checkerSound : {spec : TransportSpec} -> {holder : Standpoint} ->
-               {a : spec.Artifact} -> {m : Mode} -> {c : spec.Claim} ->
+               {a : spec.artifact} -> {m : Mode} -> {c : spec.claim} ->
                Certifying m ->
                (ck : Checker spec holder m a c) ->
                (ev : Evidence spec m a c) ->
                runChecker ck ev = True ->
-               spec.Meaning holder a c
+               spec.meaning holder a c
 checkerSound CertPublic     (PublicCheck v)     ev ok = v.sound (evidencePayload ev) ok
 checkerSound CertDesignated (DesignatedCheck v) ev ok = v.sound (evidencePayload ev) ok
 checkerSound CertIssuer     (IssuerCheck v)     ev ok = v.sound (evidencePayload ev) ok
@@ -227,38 +227,38 @@ checkerSound CertEnv        (EnvCheck v)        ev ok = v.sound (evidencePayload
 ||| Standpoint-indexed view of an artifact (`ProofTransport.View`).
 public export
 data View : (spec : TransportSpec) -> (holder : Standpoint) ->
-            spec.Artifact -> Status -> spec.Claim -> Type where
-  ViewData       : {a : spec.Artifact} -> {c : spec.Claim} ->
+            spec.artifact -> Status -> spec.claim -> Type where
+  ViewData       : {a : spec.artifact} -> {c : spec.claim} ->
                    View spec holder a AsData c
-  ViewCode       : {a : spec.Artifact} -> {c : spec.Claim} ->
+  ViewCode       : {a : spec.artifact} -> {c : spec.claim} ->
                    View spec holder a AsCode c
-  ViewClaimed    : {a : spec.Artifact} -> {c : spec.Claim} ->
+  ViewClaimed    : {a : spec.artifact} -> {c : spec.claim} ->
                    View spec holder a AsClaimed c
-  ViewReceipt    : {a : spec.Artifact} -> {c : spec.Claim} ->
+  ViewReceipt    : {a : spec.artifact} -> {c : spec.claim} ->
                    View spec holder a AsReceipt c
-  ViewProofUnder : {a : spec.Artifact} -> {m : Mode} -> {c : spec.Claim} ->
+  ViewProofUnder : {a : spec.artifact} -> {m : Mode} -> {c : spec.claim} ->
                    Certifying m ->
                    (ck : Checker spec holder m a c) ->
                    (ev : Evidence spec m a c) ->
                    runChecker ck ev = True ->
                    View spec holder a (AsProofUnder m) c
-  ForgetMode     : {a : spec.Artifact} -> {m : Mode} -> {c : spec.Claim} ->
+  ForgetMode     : {a : spec.artifact} -> {m : Mode} -> {c : spec.claim} ->
                    View spec holder a (AsProofUnder m) c ->
                    View spec holder a AsProof c
 
 ||| Theorem (`proofSound`): Every `AsProof` view at `holder` entails the
-||| semantic meaning `spec.Meaning holder a c`. No token-only forgery is possible.
+||| semantic meaning `spec.meaning holder a c`. No token-only forgery is possible.
 public export
 proofSound : {spec : TransportSpec} -> {holder : Standpoint} ->
-             {a : spec.Artifact} -> {c : spec.Claim} ->
-             View spec holder a AsProof c -> spec.Meaning holder a c
+             {a : spec.artifact} -> {c : spec.claim} ->
+             View spec holder a AsProof c -> spec.meaning holder a c
 proofSound (ForgetMode (ViewProofUnder cert ck ev ok)) = checkerSound cert ck ev ok
 
 ||| Theorem (`proofCannotSupportFalse`): A false claim cannot have an `AsProof` view.
 public export
 proofCannotSupportFalse : {spec : TransportSpec} -> {holder : Standpoint} ->
-                          {a : spec.Artifact} -> {c : spec.Claim} ->
-                          Not (spec.Meaning holder a c) ->
+                          {a : spec.artifact} -> {c : spec.claim} ->
+                          Not (spec.meaning holder a c) ->
                           Not (View spec holder a AsProof c)
 proofCannotSupportFalse notMeaning prf = notMeaning (proofSound prf)
 
@@ -277,7 +277,7 @@ webviewToHost = MkTrustBoundary WebViewGuest HostFFI
 ||| Boundary transmission (`transmit`): crossing a trust boundary demotes
 ||| `AsProof` at `b.from` to `AsReceipt` at `b.to` (no-smuggling guarantee).
 public export
-transmit : {spec : TransportSpec} -> {a : spec.Artifact} -> {c : spec.Claim} ->
+transmit : {spec : TransportSpec} -> {a : spec.artifact} -> {c : spec.claim} ->
            (b : TrustBoundary) ->
            View spec b.from a AsProof c ->
            View spec b.to a AsReceipt c
@@ -290,7 +290,7 @@ decideBool True  = Right Refl
 ||| Verify certifying evidence with a local checker to upgrade `AsData` to `AsProof`.
 public export
 verifyCertifying : {spec : TransportSpec} -> {holder : Standpoint} ->
-                   {a : spec.Artifact} -> {m : Mode} -> {c : spec.Claim} ->
+                   {a : spec.artifact} -> {m : Mode} -> {c : spec.claim} ->
                    Certifying m ->
                    (ck : Checker spec holder m a c) ->
                    (ev : Evidence spec m a c) ->
@@ -303,7 +303,7 @@ verifyCertifying cert ck ev =
 ||| Verify evidence at `holder`. `ReceiptCheck` always fails with `Left OpaqueGap`.
 public export
 verify : {spec : TransportSpec} -> {holder : Standpoint} ->
-         {a : spec.Artifact} -> {m : Mode} -> {c : spec.Claim} ->
+         {a : spec.artifact} -> {m : Mode} -> {c : spec.claim} ->
          Checker spec holder m a c ->
          Evidence spec m a c ->
          View spec holder a AsData c ->
@@ -318,7 +318,7 @@ verify ReceiptCheck        _  _ = Left OpaqueGap
 ||| always returns `Left OpaqueGap`.
 public export
 verifyReceiptIsGap : {spec : TransportSpec} -> {holder : Standpoint} ->
-                     {a : spec.Artifact} -> {c : spec.Claim} ->
+                     {a : spec.artifact} -> {c : spec.claim} ->
                      (ev : Evidence spec OpaqueReceipt a c) ->
                      (v : View spec holder a AsData c) ->
                      verify {spec} {holder} ReceiptCheck ev v = Left OpaqueGap
@@ -328,7 +328,7 @@ verifyReceiptIsGap _ _ = Refl
 ||| forces `d = holder`.
 public export
 designatedBindsHolder : {spec : TransportSpec} -> {holder, d : Standpoint} ->
-                        {a : spec.Artifact} -> {c : spec.Claim} ->
+                        {a : spec.artifact} -> {c : spec.claim} ->
                         Checker spec holder (Designated d) a c -> d = holder
 designatedBindsHolder (DesignatedCheck _) = Refl
 
@@ -337,7 +337,7 @@ designatedBindsHolder (DesignatedCheck _) = Refl
 public export
 proofHasSuccessfulCheck :
      {spec : TransportSpec} -> {holder : Standpoint} ->
-     {a : spec.Artifact} -> {c : spec.Claim} ->
+     {a : spec.artifact} -> {c : spec.claim} ->
      View spec holder a AsProof c ->
      (m : Mode ** (ck : Checker spec holder m a c ** (ev : Evidence spec m a c **
        runChecker ck ev = True)))

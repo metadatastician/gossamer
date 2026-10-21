@@ -328,6 +328,10 @@ export fn Java_io_gossamer_GossamerBridge_nativePostMessage(
         sendIPCError(handle, id, "No handler bound for command");
         return;
     };
+    if (!@import("plugin.zig").isPluginLoaded(entry.plugin_id)) {
+        sendIPCError(handle, id, "Plugin unloaded — handler no longer available");
+        return;
+    }
 
     // Invoke the callback with the payload
     const payload_z = allocator.dupeZ(u8, payload) catch return;

@@ -31,18 +31,22 @@ import Gossamer.ABI.Types
 
 %auto_implicits off
 
-||| A grade algebra: alternatives form an idempotent commutative monoid
+||| Grade algebra operations: alternatives (`oplus`, `zeroG`) and sequence (`otimes`, `oneG`).
+public export
+interface ResourceOps (0 g : Type) where
+  ||| Alternatives (⊕).
+  oplus  : g -> g -> g
+  ||| Sequence (⊗).
+  otimes : g -> g -> g
+  ||| Unit of alternatives (𝟘).
+  zeroG  : g
+  ||| Unit of sequence (𝟙).
+  oneG   : g
+
+||| A verified grade algebra: alternatives form an idempotent commutative monoid
 ||| (`oplus`, `zeroG`); sequence forms a monoid (`otimes`, `oneG`).
 public export
-interface ResourceAlgebra (0 g : Type) where
-  ||| Alternatives (⊕).
-  oplus    : g -> g -> g
-  ||| Sequence (⊗).
-  otimes   : g -> g -> g
-  ||| Unit of alternatives (𝟘).
-  zeroG    : g
-  ||| Unit of sequence (𝟙).
-  oneG     : g
+interface ResourceOps g => ResourceAlgebra (0 g : Type) where
   -- IsAltMonoid oplus zeroG
   altAssoc : (a, b, c : g) -> oplus (oplus a b) c = oplus a (oplus b c)
   altComm  : (a, b : g) -> oplus a b = oplus b a
@@ -486,11 +490,14 @@ lossSeqUnitR (Finite a) = cong Finite (plusZeroR a)
 lossSeqUnitR Infinity   = Refl
 
 public export
+ResourceOps LossGrade where
+  oplus  = lossAlt
+  otimes = lossSeq
+  zeroG  = Infinity
+  oneG   = Finite 0
+
+public export
 ResourceAlgebra LossGrade where
-  oplus    = lossAlt
-  otimes   = lossSeq
-  zeroG    = Infinity
-  oneG     = Finite 0
   altAssoc = lossAltAssoc
   altComm  = lossAltComm
   altIdem  = lossAltIdem
@@ -629,11 +636,14 @@ maxPlusSeqUnitR (Val a) = cong Val (plusZeroR a)
 maxPlusSeqUnitR Bot     = Refl
 
 public export
+ResourceOps MaxPlusGrade where
+  oplus  = maxPlusAlt
+  otimes = maxPlusSeq
+  zeroG  = Bot
+  oneG   = Val 0
+
+public export
 ResourceAlgebra MaxPlusGrade where
-  oplus    = maxPlusAlt
-  otimes   = maxPlusSeq
-  zeroG    = Bot
-  oneG     = Val 0
   altAssoc = maxPlusAltAssoc
   altComm  = maxPlusAltComm
   altIdem  = maxPlusAltIdem
@@ -856,11 +866,14 @@ hwmSeqUnitR (MkHWM p n b) =
 %auto_implicits on
 
 public export
+ResourceOps HWMGrade where
+  oplus  = hwmAlt
+  otimes = hwmSeq
+  zeroG  = hwmZero
+  oneG   = hwmZero
+
+public export
 ResourceAlgebra HWMGrade where
-  oplus    = hwmAlt
-  otimes   = hwmSeq
-  zeroG    = hwmZero
-  oneG     = hwmZero
   altAssoc = hwmAltAssoc
   altComm  = hwmAltComm
   altIdem  = hwmAltIdem

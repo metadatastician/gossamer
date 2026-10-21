@@ -79,9 +79,9 @@ validatePath s with (choose (isNonEmptyChars (unpack s)), choose (hasNoNullChars
 ||| state-restoration inverses (`unwrap (wrap st) = st`) are carried by
 ||| `ReversiblePair` in Section 3 below.
 public export
-record Step (S : Type) where
+record Step (stType : Type) where
   constructor MkStep
-  runStep   : S -> S
+  runStep   : stType -> stType
   stepGrade : LossGrade
 
 ||| A trace of steps over state `S`.
@@ -181,11 +181,11 @@ obliteratedNotLossless ts ob el prf =
 ||| A certified reversible pair (`ReversiblePair`): `wrap` (execute) and `unwrap`
 ||| (undo/rollback) with a cancellation proof.
 public export
-record ReversiblePair (S : Type) where
+record ReversiblePair (stType : Type) where
   constructor MkReversiblePair
-  wrap    : S -> S
-  unwrap  : S -> S
-  cancels : (st : S) -> unwrap (wrap st) = st
+  wrap    : stType -> stType
+  unwrap  : stType -> stType
+  cancels : (st : stType) -> unwrap (wrap st) = st
 
 public export
 wrapStep : ReversiblePair s -> Step s
@@ -263,13 +263,15 @@ data ContainedIn : (required : CapabilitySet) -> (declared : CapabilitySet) -> T
                   ContainedIn (c :: restReq) declared
 
 public export
+weakenContained : {x : CapabilityName} -> {cs, xs : CapabilitySet} ->
+                  ContainedIn cs xs -> ContainedIn cs (x :: xs)
+weakenContained ContainedNil        = ContainedNil
+weakenContained (ContainedCons h r) = ContainedCons (There h) (weakenContained r)
+
+public export
 containedRefl : (cs : CapabilitySet) -> ContainedIn cs cs
 containedRefl []        = ContainedNil
-containedRefl (x :: xs) = ContainedCons Here (weaken (containedRefl xs))
-  where
-    weaken : ContainedIn cs xs -> ContainedIn cs (x :: xs)
-    weaken ContainedNil        = ContainedNil
-    weaken (ContainedCons h r) = ContainedCons (There h) (weaken r)
+containedRefl (x :: xs) = ContainedCons Here (weakenContained (containedRefl xs))
 
 public export
 elemContained : {c : CapabilityName} -> {ys, zs : CapabilitySet} ->

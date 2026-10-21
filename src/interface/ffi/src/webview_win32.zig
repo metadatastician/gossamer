@@ -1016,6 +1016,10 @@ const WebMessageHandler = extern struct {
             sendIPCError(handle, id, "No handler bound for command");
             return S_OK;
         };
+        if (!@import("plugin.zig").isPluginLoaded(callback.plugin_id)) {
+            sendIPCError(handle, id, "Plugin unloaded — handler no longer available");
+            return S_OK;
+        }
 
         // Invoke the callback
         const payload_z = allocator.dupeZ(u8, payload) catch return S_OK;
