@@ -1021,6 +1021,11 @@ const WebMessageHandler = extern struct {
             return S_OK;
         }
 
+        if (!isPluginLoaded(callback.plugin_id)) {
+            sendIPCError(handle, id, "Handler plugin is not loaded");
+            return S_OK;
+        }
+
         // Invoke the callback
         const payload_z = allocator.dupeZ(u8, payload) catch return S_OK;
         defer allocator.free(payload_z);
