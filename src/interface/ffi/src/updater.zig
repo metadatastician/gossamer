@@ -135,8 +135,10 @@ pub const UpdateSource = struct {
     local_path: ?[*:0]const u8,
 };
 
-/// Global update source (set at initialization).
+/// Global update source (set at initialization) and owned parameter storage
+/// so the configured URL/repo/path never dangles after the caller frees its buffer.
 var update_source: ?UpdateSource = null;
+var update_param_buf: [512]u8 = [_]u8{0} ** 512;
 
 // ===========================================================================
 // Current Version
@@ -289,6 +291,15 @@ pub export fn gossamer_updater_configure(handle_ptr: u64, source_type: u32, para
         return .null_pointer;
     }
 
+    const param_slice = std.mem.span(param1);
+    if (param_slice.len == 0 or param_slice.len >= update_param_buf.len) {
+        setError("Updater configure: parameter empty or too long");
+        return .invalid_param;
+    }
+    @memcpy(update_param_buf[0..param_slice.len], param_slice);
+    update_param_buf[param_slice.len] = 0;
+    const owned_param: [*:0]const u8 = update_param_buf[0..param_slice.len :0].ptr;
+
     const source = UpdateSource{
         .source_type = switch (source_type) {
             0 => .http_json,
@@ -299,11 +310,11 @@ pub export fn gossamer_updater_configure(handle_ptr: u64, source_type: u32, para
                 return .invalid_param;
             },
         },
-        .url = if (source_type == 0) param1 else null,
-        .github_repo = if (source_type == 1) param1 else null,
-        .local_path = if (source_type == 2) param1 else null,
+        .url = if (source_type == 0) owned_param else null,
+        .github_repo = if (source_type == 1) owned_param else null,
+        .local_path = if (source_type == 2) owned_param else null,
     };
-    
+
     update_source = source;
     clearError();
     return .ok;

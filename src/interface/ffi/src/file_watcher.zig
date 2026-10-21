@@ -327,13 +327,16 @@ fn scanDirectory(state: *WatcherState, path: []const u8, check: bool) bool {
                     any_changed = true;
                 }
             } else {
-                // New file appeared — track it and report as changed.
-                addTrackedFile(state, path_hash, mtime_ns);
-                any_changed = true;
+                // New file appeared — track it and report as changed only if
+                // capacity remains (avoids an infinite reload loop when a
+                // watched directory has more than MAX_TRACKED_FILES entries).
+                if (addTrackedFile(state, path_hash, mtime_ns)) {
+                    any_changed = true;
+                }
             }
         } else {
             // Initial population — just add without flagging as changed.
-            addTrackedFile(state, path_hash, mtime_ns);
+            _ = addTrackedFile(state, path_hash, mtime_ns);
         }
     }
 
@@ -368,17 +371,19 @@ fn findTrackedFile(state: *WatcherState, path_hash: u64) ?usize {
     return null;
 }
 
-/// Add a new tracked file entry. If the table is full, wraps around
-/// (evicts oldest entry). This is a simple bounded ring buffer.
-fn addTrackedFile(state: *WatcherState, path_hash: u64, mtime_ns: i128) void {
+/// Add a new tracked file entry. Returns true if tracked, false if the table
+/// is already at capacity (MAX_TRACKED_FILES).
+fn addTrackedFile(state: *WatcherState, path_hash: u64, mtime_ns: i128) bool {
     if (state.file_count < MAX_TRACKED_FILES) {
         state.files[state.file_count] = .{
             .path_hash = path_hash,
             .mtime_ns = mtime_ns,
         };
         state.file_count += 1;
+        return true;
     }
     // If full, silently drop — bounded by MAX_TRACKED_FILES.
+    return false;
 }
 
 //==============================================================================

@@ -32,6 +32,7 @@ depends = base
 modules = Gossamer.ABI.Groove
         , Gossamer.ABI.GrooveLinearity
         , Gossamer.ABI.GrooveResidue
+        , Gossamer.ABI.GrooveChoreography
 
 -- Groove-protocol proof modules relocated here from the shell (gossamer#95):
 --   * Groove                — capability types, manifests, handshake state machine

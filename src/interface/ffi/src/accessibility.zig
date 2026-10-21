@@ -111,6 +111,24 @@ pub export fn gossamer_a11y_announce(handle_ptr: u64, message: [*:0]const u8, po
                 escaped_politeness[j] = '"';
                 j += 1;
             },
+            '\'' => {
+                escaped_politeness[j] = '\\';
+                j += 1;
+                escaped_politeness[j] = '\'';
+                j += 1;
+            },
+            '\n' => {
+                escaped_politeness[j] = '\\';
+                j += 1;
+                escaped_politeness[j] = 'n';
+                j += 1;
+            },
+            '\r' => {
+                escaped_politeness[j] = '\\';
+                j += 1;
+                escaped_politeness[j] = 'r';
+                j += 1;
+            },
             else => {
                 escaped_politeness[j] = politeness[i];
                 j += 1;
@@ -190,6 +208,24 @@ pub export fn gossamer_a11y_set_politeness(handle_ptr: u64, politeness: [*:0]con
                 escaped[j] = '"';
                 j += 1;
             },
+            '\'' => {
+                escaped[j] = '\\';
+                j += 1;
+                escaped[j] = '\'';
+                j += 1;
+            },
+            '\n' => {
+                escaped[j] = '\\';
+                j += 1;
+                escaped[j] = 'n';
+                j += 1;
+            },
+            '\r' => {
+                escaped[j] = '\\';
+                j += 1;
+                escaped[j] = 'r';
+                j += 1;
+            },
             else => {
                 escaped[j] = politeness[i];
                 j += 1;
@@ -264,6 +300,18 @@ pub export fn gossamer_a11y_focus(handle_ptr: u64, selector: [*:0]const u8) Resu
                 escaped[j] = '\\';
                 j += 1;
                 escaped[j] = '\'';
+                j += 1;
+            },
+            '\n' => {
+                escaped[j] = '\\';
+                j += 1;
+                escaped[j] = 'n';
+                j += 1;
+            },
+            '\r' => {
+                escaped[j] = '\\';
+                j += 1;
+                escaped[j] = 'r';
                 j += 1;
             },
             else => {

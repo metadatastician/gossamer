@@ -710,13 +710,15 @@ fn asyncIdleCallback(user_data: ?*anyopaque) callconv(.c) c_int {
     const ctx: *AsyncIPCContext = @ptrCast(@alignCast(user_data orelse return 0));
     const allocator = ctx.allocator;
 
-    // Deliver the response or error to JavaScript
-    if (ctx.err_msg) |err_msg| {
-        sendIPCError(ctx.handle, ctx.id, err_msg);
-    } else if (ctx.response) |response| {
-        sendIPCResponse(ctx.handle, ctx.id, response);
-    } else {
-        sendIPCError(ctx.handle, ctx.id, "Async callback returned null");
+    // Deliver the response or error to JavaScript only if the window is still open
+    if (ctx.handle.initialized and !ctx.handle.closed) {
+        if (ctx.err_msg) |err_msg| {
+            sendIPCError(ctx.handle, ctx.id, err_msg);
+        } else if (ctx.response) |response| {
+            sendIPCResponse(ctx.handle, ctx.id, response);
+        } else {
+            sendIPCError(ctx.handle, ctx.id, "Async callback returned null");
+        }
     }
 
     // Release the inflight slot
@@ -736,14 +738,16 @@ fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8
     const allocator = std.heap.c_allocator;
 
     // Build JS: window.__gossamer_callbacks["id"].resolve(JSON.parse("response"));
-    // We need to escape the response for embedding in a JS string
+    // We need to escape the response and id for embedding in a JS string
+    const escaped_id = escapeForJS(allocator, id) catch return;
+    defer allocator.free(escaped_id);
     const escaped = escapeForJS(allocator, response) catch return;
     defer allocator.free(escaped);
 
     const js = std.fmt.allocPrintSentinel(
         allocator,
         "if (window.__gossamer_callbacks[\"{s}\"]) {{ window.__gossamer_callbacks[\"{s}\"].resolve(JSON.parse(\"{s}\")); delete window.__gossamer_callbacks[\"{s}\"]; }}",
-        .{ id, id, escaped, id },
+        .{ escaped_id, escaped_id, escaped, escaped_id },
         0,
     ) catch return;
     defer allocator.free(js);
@@ -754,10 +758,14 @@ fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8
 /// Send an error response back to the JavaScript IPC bridge.
 fn sendIPCError(handle: *GossamerHandle, id: []const u8, msg: []const u8) void {
     const allocator = std.heap.c_allocator;
+    const escaped_id = escapeForJS(allocator, id) catch return;
+    defer allocator.free(escaped_id);
+    const escaped_msg = escapeForJS(allocator, msg) catch return;
+    defer allocator.free(escaped_msg);
     const js = std.fmt.allocPrintSentinel(
         allocator,
         "if (window.__gossamer_callbacks[\"{s}\"]) {{ window.__gossamer_callbacks[\"{s}\"].reject(new Error(\"{s}\")); delete window.__gossamer_callbacks[\"{s}\"]; }}",
-        .{ id, id, msg, id },
+        .{ escaped_id, escaped_id, escaped_msg, escaped_id },
         0,
     ) catch return;
     defer allocator.free(js);

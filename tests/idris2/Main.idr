@@ -20,6 +20,7 @@ import IPCTest
 import ContractsTest
 import SecurityTest
 import TransmuteTest
+import EstateMathTest
 
 -- `covering` rather than `total` because SecurityTest's HTML sanitiser
 -- is partial (non-structurally-recursive) — the looseness travels up through
@@ -36,6 +37,7 @@ suites =
   , (ContractsTest.suiteName,  ContractsTest.tests)
   , (SecurityTest.suiteName,   SecurityTest.tests)
   , (TransmuteTest.suiteName,  TransmuteTest.tests)
+  , (EstateMathTest.suiteName, EstateMathTest.tests)
   ]
 
 runEach : List (String, List TestCase) -> Nat -> Nat -> IO (Nat, Nat)

@@ -93,10 +93,20 @@ const ExtractionState = struct {
 
 var global_state: ExtractionState = .{};
 
+/// Validate that an app or asset identifier is non-empty and free of
+/// path-traversal sequences (`..`) or null bytes (Gossamer.ABI.ReversibleFS.ValidPath).
+fn isSafeBundlePath(name: []const u8) bool {
+    if (name.len == 0) return false;
+    if (std.mem.indexOf(u8, name, "..") != null) return false;
+    if (std.mem.indexOfScalar(u8, name, 0) != null) return false;
+    return true;
+}
+
 /// Initialize extraction for an app.
 /// Creates the extraction directory.
 fn initExtraction(app_name_z: [*:0]const u8) ?[]u8 {
     const app_name = std.mem.span(app_name_z);
+    if (!isSafeBundlePath(app_name) or std.mem.indexOfAny(u8, app_name, "/\\") != null) return null;
     if (global_state.initialized) {
         if (global_state.app_name) |stored| {
             if (std.mem.eql(u8, stored, app_name)) {
@@ -132,8 +142,10 @@ fn initExtraction(app_name_z: [*:0]const u8) ?[]u8 {
 /// Build the full path of an asset inside the extraction directory.
 /// Caller frees the returned slice with `allocator`.
 fn assetFullPath(allocator: std.mem.Allocator, app_name: [*:0]const u8, asset_name: [*:0]const u8) ?[]u8 {
+    const asset = std.mem.span(asset_name);
+    if (!isSafeBundlePath(asset) or std.fs.path.isAbsolute(asset)) return null;
     const dir = initExtraction(app_name) orelse return null;
-    return std.fmt.allocPrint(allocator, "{s}/{s}", .{ dir, std.mem.span(asset_name) }) catch null;
+    return std.fmt.allocPrint(allocator, "{s}/{s}", .{ dir, asset }) catch null;
 }
 
 // ===========================================================================

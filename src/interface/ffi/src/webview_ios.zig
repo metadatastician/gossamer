@@ -379,14 +379,22 @@ fn onIPCMessage(
     if (name.len == 0) return;
     const payload = parsed.value.payload;
 
-    const callback = handle.bindings.get(name) orelse {
+    const entry = handle.bindings.get(name) orelse {
         sendIPCError(handle, id, "No handler bound for command");
         return;
     };
+    if (!@import("plugin.zig").isPluginLoaded(entry.plugin_id)) {
+        sendIPCError(handle, id, "Plugin unloaded — handler no longer available");
+        return;
+    }
 
     const payload_z = allocator.dupeZ(u8, payload) catch return;
     defer allocator.free(payload_z);
-    const response_ptr = callback(payload_z);
+    const response_ptr = entry.callback(payload_z, entry.user_data);
+    if (@intFromPtr(response_ptr) == 0) {
+        sendIPCError(handle, id, "Sync callback returned null");
+        return;
+    }
     const response = std.mem.span(response_ptr);
     sendIPCResponse(handle, id, response);
 }
@@ -395,12 +403,14 @@ fn onIPCMessage(
 
 fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8) void {
     const allocator = std.heap.c_allocator;
+    const escaped_id = escapeForJS(allocator, id) catch return;
+    defer allocator.free(escaped_id);
     const escaped = escapeForJS(allocator, response) catch return;
     defer allocator.free(escaped);
     const js = std.fmt.allocPrintSentinel(
         allocator,
         "if (window.__gossamer_callbacks[\"{s}\"]) {{ window.__gossamer_callbacks[\"{s}\"].resolve(JSON.parse(\"{s}\")); delete window.__gossamer_callbacks[\"{s}\"]; }}",
-        .{ id, id, escaped, id },
+        .{ escaped_id, escaped_id, escaped, escaped_id },
         0,
     ) catch return;
     defer allocator.free(js);
@@ -409,10 +419,14 @@ fn sendIPCResponse(handle: *GossamerHandle, id: []const u8, response: []const u8
 
 fn sendIPCError(handle: *GossamerHandle, id: []const u8, msg_text: []const u8) void {
     const allocator = std.heap.c_allocator;
+    const escaped_id = escapeForJS(allocator, id) catch return;
+    defer allocator.free(escaped_id);
+    const escaped_msg = escapeForJS(allocator, msg_text) catch return;
+    defer allocator.free(escaped_msg);
     const js = std.fmt.allocPrintSentinel(
         allocator,
         "if (window.__gossamer_callbacks[\"{s}\"]) {{ window.__gossamer_callbacks[\"{s}\"].reject(new Error(\"{s}\")); delete window.__gossamer_callbacks[\"{s}\"]; }}",
-        .{ id, id, msg_text, id },
+        .{ escaped_id, escaped_id, escaped_msg, escaped_id },
         0,
     ) catch return;
     defer allocator.free(js);

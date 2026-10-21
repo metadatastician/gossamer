@@ -57,7 +57,27 @@ extern fn gossamer_groove_undock(handle: u64) c_int;
 // Shell-exec IPC handler for OPSM runtime commands
 //==============================================================================
 
-/// Execute a shell command and return stdout as a JSON-escaped string.
+/// Validate that an OPSM argument token contains only safe characters
+/// (`[A-Za-z0-9._:@/-]`), does not start with `-` (no flag injection), and
+/// contains no `..` traversal sequence.
+fn isSafeOpsmToken(tok: []const u8) bool {
+    if (tok.len == 0 or tok.len > 256) return false;
+    if (tok[0] == '-') return false;
+    if (std.mem.indexOf(u8, tok, "..") != null) return false;
+    for (tok) |ch| {
+        const ok = (ch >= 'a' and ch <= 'z') or
+            (ch >= 'A' and ch <= 'Z') or
+            (ch >= '0' and ch <= '9') or
+            ch == '.' or ch == '_' or ch == '-' or ch == ':' or ch == '@' or ch == '/';
+        if (!ok) return false;
+    }
+    return true;
+}
+
+threadlocal var shell_resp_buf: [65536]u8 = undefined;
+threadlocal var group_resp_buf: [64]u8 = undefined;
+
+/// Execute an opsm-runtime command and return stdout as a JSON-escaped string.
 /// The payload is a JSON object: {"cmd":"list"} or {"cmd":"install","tool":"bun","version":"1.3.0"}
 fn shellExecHandler(payload: [*:0]const u8, _: ?*anyopaque) callconv(.c) [*:0]const u8 {
     const allocator = std.heap.c_allocator;
@@ -67,37 +87,43 @@ fn shellExecHandler(payload: [*:0]const u8, _: ?*anyopaque) callconv(.c) [*:0]co
     const cmd_str = extractSimpleJsonField(payload_slice, "cmd") orelse {
         return @ptrCast(@constCast("{\"error\":\"missing cmd field\"}"));
     };
+    if (!isSafeOpsmToken(cmd_str)) {
+        return @ptrCast(@constCast("{\"error\":\"invalid cmd field\"}"));
+    }
+
     const tool_str = extractSimpleJsonField(payload_slice, "tool");
-    const version_str = extractSimpleJsonField(payload_slice, "version");
-
-    // Build the opsm-runtime command
-    var cmd_buf: [2048]u8 = undefined;
-    var cmd_len: usize = 0;
-    const prefix = "opsm-runtime ";
-
-    @memcpy(cmd_buf[cmd_len..][0..prefix.len], prefix);
-    cmd_len += prefix.len;
-    @memcpy(cmd_buf[cmd_len..][0..cmd_str.len], cmd_str);
-    cmd_len += cmd_str.len;
-
     if (tool_str) |t| {
-        cmd_buf[cmd_len] = ' ';
-        cmd_len += 1;
-        @memcpy(cmd_buf[cmd_len..][0..t.len], t);
-        cmd_len += t.len;
+        if (!isSafeOpsmToken(t)) {
+            return @ptrCast(@constCast("{\"error\":\"invalid tool field\"}"));
+        }
+    }
+
+    const version_str = extractSimpleJsonField(payload_slice, "version");
+    if (version_str) |v| {
+        if (!isSafeOpsmToken(v)) {
+            return @ptrCast(@constCast("{\"error\":\"invalid version field\"}"));
+        }
+    }
+
+    // Build argv array directly (no /bin/sh -c shell interpretation)
+    var argv_buf: [4][]const u8 = undefined;
+    var argc: usize = 0;
+    argv_buf[argc] = "opsm-runtime";
+    argc += 1;
+    argv_buf[argc] = cmd_str;
+    argc += 1;
+    if (tool_str) |t| {
+        argv_buf[argc] = t;
+        argc += 1;
     }
     if (version_str) |v| {
-        cmd_buf[cmd_len] = ' ';
-        cmd_len += 1;
-        @memcpy(cmd_buf[cmd_len..][0..v.len], v);
-        cmd_len += v.len;
+        argv_buf[argc] = v;
+        argc += 1;
     }
-    cmd_buf[cmd_len] = 0;
 
-    // Execute via /bin/sh
     const result = std.process.Child.run(.{
         .allocator = allocator,
-        .argv = &[_][]const u8{ "/bin/sh", "-c", cmd_buf[0..cmd_len] },
+        .argv = argv_buf[0..argc],
     }) catch {
         return @ptrCast(@constCast("{\"error\":\"exec failed\"}"));
     };
@@ -107,57 +133,68 @@ fn shellExecHandler(payload: [*:0]const u8, _: ?*anyopaque) callconv(.c) [*:0]co
     const stdout = result.stdout;
     defer allocator.free(stdout);
 
-    // Build JSON response: {"output":"...","exit_code":0}
-    var resp_buf = allocator.alloc(u8, stdout.len * 2 + 64) catch {
-        return @ptrCast(@constCast("{\"error\":\"out of memory\"}"));
-    };
+    // Build JSON response in thread-local buffer: {"output":"...","exit_code":0}
     var pos: usize = 0;
     const hdr = "{\"output\":\"";
-    @memcpy(resp_buf[pos..][0..hdr.len], hdr);
+    @memcpy(shell_resp_buf[pos..][0..hdr.len], hdr);
     pos += hdr.len;
 
+    const max_body = shell_resp_buf.len - 32;
     for (stdout) |ch| {
+        if (pos + 2 >= max_body) break;
         switch (ch) {
-            '\n' => { resp_buf[pos] = '\\'; resp_buf[pos + 1] = 'n'; pos += 2; },
-            '\r' => { resp_buf[pos] = '\\'; resp_buf[pos + 1] = 'r'; pos += 2; },
-            '"' => { resp_buf[pos] = '\\'; resp_buf[pos + 1] = '"'; pos += 2; },
-            '\\' => { resp_buf[pos] = '\\'; resp_buf[pos + 1] = '\\'; pos += 2; },
-            else => { resp_buf[pos] = ch; pos += 1; },
+            '\n' => { shell_resp_buf[pos] = '\\'; shell_resp_buf[pos + 1] = 'n'; pos += 2; },
+            '\r' => { shell_resp_buf[pos] = '\\'; shell_resp_buf[pos + 1] = 'r'; pos += 2; },
+            '\t' => { shell_resp_buf[pos] = '\\'; shell_resp_buf[pos + 1] = 't'; pos += 2; },
+            '"' => { shell_resp_buf[pos] = '\\'; shell_resp_buf[pos + 1] = '"'; pos += 2; },
+            '\\' => { shell_resp_buf[pos] = '\\'; shell_resp_buf[pos + 1] = '\\'; pos += 2; },
+            else => { shell_resp_buf[pos] = ch; pos += 1; },
         }
     }
 
-    const exit_str = switch (result.term.Exited) {
-        0 => "\",\"exit_code\":0}",
-        else => "\",\"exit_code\":1}",
+    const exited_zero = switch (result.term) {
+        .Exited => |code| code == 0,
+        else => false,
     };
-    @memcpy(resp_buf[pos..][0..exit_str.len], exit_str);
+    const exit_str = if (exited_zero) "\",\"exit_code\":0}" else "\",\"exit_code\":1}";
+    @memcpy(shell_resp_buf[pos..][0..exit_str.len], exit_str);
     pos += exit_str.len;
-    resp_buf[pos] = 0;
+    shell_resp_buf[pos] = 0;
 
-    return @ptrCast(resp_buf.ptr);
+    return shell_resp_buf[0..pos :0];
 }
 
-/// Extract a simple string value from JSON like {"key":"value"}.
+/// Extract a simple string or primitive value from JSON like {"key":"value"} or {"key":1024}.
 /// Stack-only, no allocations. Returns null if not found.
 fn extractSimpleJsonField(json: []const u8, key: []const u8) ?[]const u8 {
-    // Search for "key":"
+    // Search for "key":
     var i: usize = 0;
-    while (i + key.len + 4 < json.len) : (i += 1) {
+    while (i + key.len + 3 <= json.len) : (i += 1) {
         if (json[i] == '"' and i + key.len + 1 < json.len) {
             if (std.mem.eql(u8, json[i + 1 ..][0..key.len], key) and
                 json[i + 1 + key.len] == '"')
             {
-                // Found "key" — now look for :"
+                // Found "key" — now look for :
                 var j = i + 1 + key.len + 1;
-                while (j < json.len and json[j] == ' ') : (j += 1) {}
+                while (j < json.len and (json[j] == ' ' or json[j] == '\t' or json[j] == '\n' or json[j] == '\r')) : (j += 1) {}
                 if (j < json.len and json[j] == ':') {
                     j += 1;
-                    while (j < json.len and json[j] == ' ') : (j += 1) {}
-                    if (j < json.len and json[j] == '"') {
+                    while (j < json.len and (json[j] == ' ' or json[j] == '\t' or json[j] == '\n' or json[j] == '\r')) : (j += 1) {}
+                    if (j >= json.len) return null;
+                    if (json[j] == '"') {
                         j += 1;
                         const start = j;
-                        while (j < json.len and json[j] != '"') : (j += 1) {}
+                        while (j < json.len and json[j] != '"') : (j += 1) {
+                            if (json[j] == '\\' and j + 1 < json.len) j += 1;
+                        }
                         return json[start..j];
+                    } else {
+                        // Unquoted primitive (number / bool) or object
+                        const start = j;
+                        while (j < json.len and json[j] != ',' and json[j] != '}' and json[j] != ']' and
+                            json[j] != ' ' and json[j] != '\t' and json[j] != '\n' and json[j] != '\r') : (j += 1)
+                        {}
+                        if (j > start) return json[start..j];
                     }
                 }
             }
@@ -358,12 +395,10 @@ fn groupCreateHandler(payload: [*:0]const u8, _: ?*anyopaque) callconv(.c) [*:0]
         return @ptrCast(@constCast("{\"ok\":false,\"error\":\"group limit reached\"}"));
     }
 
-    // Return the group ID in the response
-    const allocator = std.heap.c_allocator;
-    var buf = allocator.alloc(u8, 64) catch return @ptrCast(@constCast("{\"ok\":false,\"error\":\"alloc\"}"));
-    const resp = std.fmt.bufPrint(buf, "{{\"ok\":true,\"group_id\":{d}}}", .{gid}) catch return @ptrCast(@constCast("{\"ok\":false}"));
-    buf[resp.len] = 0;
-    return @ptrCast(buf.ptr);
+    // Return the group ID in the response (using thread-local buffer to avoid leak)
+    const resp = std.fmt.bufPrint(group_resp_buf[0 .. group_resp_buf.len - 1], "{{\"ok\":true,\"group_id\":{d}}}", .{gid}) catch return @ptrCast(@constCast("{\"ok\":false}"));
+    group_resp_buf[resp.len] = 0;
+    return group_resp_buf[0..resp.len :0];
 }
 
 /// IPC handler: add current window to a group.

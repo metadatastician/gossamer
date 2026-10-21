@@ -1371,10 +1371,14 @@ pub export fn gossamer_send_to(target_id: u32, event_name: [*:0]const u8, payloa
 
 /// Helper: inject a __gossamer_emit call into a handle's webview.
 fn emitToHandle(handle: *GossamerHandle, event: []const u8, payload: []const u8) void {
+    // Reject event names containing JS string-breaking characters.
+    for (event) |ch| {
+        if (ch == '\'' or ch == '\\' or ch == '\n' or ch == '\r' or ch == 0) return;
+    }
     // Build: window.__gossamer_emit&&window.__gossamer_emit('event',payload);
     var buf: [4096]u8 = undefined;
-    const js = std.fmt.bufPrint(&buf, "window.__gossamer_emit&&window.__gossamer_emit('{s}',{s});", .{ event, payload }) catch return;
-    buf[@min(js.len, buf.len - 1)] = 0;
+    const js = std.fmt.bufPrint(buf[0 .. buf.len - 1], "window.__gossamer_emit&&window.__gossamer_emit('{s}',{s});", .{ event, payload }) catch return;
+    buf[js.len] = 0;
     const js_z: [*:0]const u8 = buf[0..js.len :0];
     platform.eval(&handle.webview, js_z) catch {};
 }
@@ -3206,6 +3210,16 @@ pub export fn gossamer_cap_revoke(token: u64) void {
         }
     }
 
+    // CNO idempotence (Gossamer.ABI.NullOps.safeRevokeCap): if the token is
+    // already present in the revocation window, do not re-append it and evict
+    // older revocations (prevents ring-buffer poisoning).
+    for (revoked_tokens[0..revoked_count]) |revoked| {
+        if (revoked == token) {
+            clearError();
+            return;
+        }
+    }
+
     // Add to revocation set (belt-and-suspenders alongside Ephapax linear types)
     if (revoked_count < revoked_max) {
         revoked_tokens[revoked_count] = token;
@@ -3421,6 +3435,7 @@ fn u64FromPtr(ptr: anytype) u64 {
 fn cleanup(handle: *GossamerHandle) void {
     if (!handle.initialized) return;
 
+    gossamer_registry_remove(u64FromPtr(handle));
     gossamer_tray_clear_window();
 
     // Destroy platform webview

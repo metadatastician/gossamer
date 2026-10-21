@@ -43,23 +43,39 @@ typedef enum {
     GOSSAMER_GUARD_LOCKED = 11,
 } GossamerResult;
 
-// Guard mode
+// Guard mode (matches Gossamer.ABI.Types.GuardMode & main.zig GuardMode)
 typedef enum {
+    GOSSAMER_GUARD_MODE_FREE = 0,
+    GOSSAMER_GUARD_MODE_LOCKED = 1,
+    GOSSAMER_GUARD_MODE_READ_ONLY = 2,
+    // Legacy aliases (GOSSAMER_GUARD_LOCKED is Result code 11)
     GOSSAMER_GUARD_FREE = 0,
-    GOSSAMER_GUARD_LOCKED = 1,
     GOSSAMER_GUARD_READ_ONLY = 2,
 } GossamerGuardMode;
 
-// Transmute mode
+// Transmute mode (matches main.zig TransmuteMode & TransmuteStateMachine.idr)
 typedef enum {
+    GOSSAMER_TRANSMUTE_GUI = 0,
+    GOSSAMER_TRANSMUTE_TUI = 1,
+    GOSSAMER_TRANSMUTE_CLI = 2,
+    GOSSAMER_TRANSMUTE_TERMINAL_EXPORT = 3,
+    GOSSAMER_TRANSMUTE_PANLL_ATTACH = 4,
+    GOSSAMER_TRANSMUTE_PANLL_DETACH = 5,
+    // Legacy aliases preserved for source compatibility
     GOSSAMER_TRANSMUTE_NONE = 0,
     GOSSAMER_TRANSMUTE_VERTICAL = 1,
     GOSSAMER_TRANSMUTE_HORIZONTAL = 2,
     GOSSAMER_TRANSMUTE_TABS = 3,
 } GossamerTransmuteMode;
 
-// Activity level
+// Activity level (matches main.zig ActivityLevel & ResourceAlgebra.idr)
 typedef enum {
+    GOSSAMER_ACTIVITY_PAUSED = 0,
+    GOSSAMER_ACTIVITY_LOW = 1,
+    GOSSAMER_ACTIVITY_MID = 2,
+    GOSSAMER_ACTIVITY_HIGH = 3,
+    GOSSAMER_ACTIVITY_REALTIME = 4,
+    // Legacy aliases preserved for source compatibility
     GOSSAMER_ACTIVITY_IDLE = 0,
     GOSSAMER_ACTIVITY_NORMAL = 1,
     GOSSAMER_ACTIVITY_BUSY = 2,
@@ -521,6 +537,53 @@ const char* gossamer_updater_get_latest_version(GossamerHandle handle);
 /// Returns a C string that the caller must free with gossamer_free().
 /// Returns NULL if no update is available.
 const char* gossamer_updater_get_update_version(GossamerHandle handle);
+
+// ===========================================================================
+// Window Registry, Grouping, Z-Order, & Cross-Window Bus
+// ===========================================================================
+
+uint32_t gossamer_registry_add(GossamerHandle handle);
+void gossamer_registry_remove(GossamerHandle handle);
+uint32_t gossamer_registry_count(void);
+
+uint32_t gossamer_group_create(const char* label);
+GossamerResult gossamer_group_add(uint32_t group_id, uint32_t window_id);
+GossamerResult gossamer_group_remove(uint32_t group_id, uint32_t window_id);
+GossamerResult gossamer_group_apply(uint32_t group_id, uint32_t op);
+
+GossamerResult gossamer_raise(GossamerHandle handle);
+GossamerResult gossamer_lower(GossamerHandle handle);
+GossamerResult gossamer_raise_group(uint32_t group_id);
+GossamerResult gossamer_arrange(uint32_t strategy);
+
+uint32_t gossamer_broadcast(const char* event_name, const char* payload_json);
+GossamerResult gossamer_send_to(uint32_t target_id, const char* event_name, const char* payload_json);
+
+// ===========================================================================
+// Platform Detection, Hot-Reload Watcher, & Built-in IPC Defaults
+// ===========================================================================
+
+const char* gossamer_platform(void);
+const char* gossamer_arch(void);
+const char* gossamer_webview_engine(void);
+uint8_t gossamer_is_desktop(void);
+const char* gossamer_platform_json(void);
+
+void gossamer_channel_register_defaults(ChannelHandle channel, void* handle_ptr);
+uint32_t gossamer_set_max_inflight(uint32_t max);
+uint32_t gossamer_get_max_inflight(void);
+
+uint32_t gossamer_cap_resource_kind(uint64_t token);
+uint32_t gossamer_cap_set_max(uint32_t max);
+uint32_t gossamer_cap_get_max(void);
+
+int32_t gossamer_watcher_start(
+    GossamerHandle handle,
+    const char* config_path,
+    const char* config_json,
+    const char* frontend_dist
+);
+void gossamer_watcher_stop(void);
 
 // ===========================================================================
 // Memory Management

@@ -40,6 +40,10 @@ modules = Gossamer.ABI.Types
         , Gossamer.ABI.PanelIsolation
         , Gossamer.ABI.ResourceCleanup
         , Gossamer.ABI.AndroidComponents
+        , Gossamer.ABI.ResourceAlgebra
+        , Gossamer.ABI.NullOps
+        , Gossamer.ABI.EpistemicTransport
+        , Gossamer.ABI.ReversibleFS
 
 -- All formerly-deferred ABI proof modules from gossamer#22's OWED list
 -- are now wired and `idris2 --typecheck` green:

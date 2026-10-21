@@ -35,6 +35,10 @@ pub export fn gossamer_fs_read_text(
 
     const allocator = std.heap.c_allocator;
     const path_slice = std.mem.span(path);
+    if (!std.fs.path.isAbsolute(path_slice) or std.mem.indexOf(u8, path_slice, "..") != null) {
+        main.setError("Invalid filesystem path — must be absolute and traversal-free");
+        return null;
+    }
 
     const file = std.fs.openFileAbsolute(path_slice, .{}) catch {
         main.setError("Failed to open file for reading");
@@ -83,6 +87,10 @@ pub export fn gossamer_fs_write_text(
 
     const path_slice = std.mem.span(path);
     const contents_slice = std.mem.span(contents);
+    if (!std.fs.path.isAbsolute(path_slice) or std.mem.indexOf(u8, path_slice, "..") != null) {
+        main.setError("Invalid filesystem path — must be absolute and traversal-free");
+        return .invalid_param;
+    }
 
     const file = std.fs.createFileAbsolute(path_slice, .{ .truncate = true }) catch {
         main.setError("Failed to create/open file for writing");
@@ -113,8 +121,16 @@ pub export fn gossamer_fs_exists(
         main.setError("FileSystem capability denied");
         return 0xFFFFFFFF;
     }
+    if (main.gossamer_cap_resource_kind(cap_token) != 0) {
+        main.setError("Wrong capability kind — expected FileSystem (0)");
+        return 0xFFFFFFFF;
+    }
 
     const path_slice = std.mem.span(path);
+    if (!std.fs.path.isAbsolute(path_slice) or std.mem.indexOf(u8, path_slice, "..") != null) {
+        main.setError("Invalid filesystem path — must be absolute and traversal-free");
+        return 0xFFFFFFFF;
+    }
 
     // Use accessAbsolute to check existence without opening
     std.fs.accessAbsolute(path_slice, .{}) catch {
@@ -137,9 +153,17 @@ pub export fn gossamer_fs_list_dir(
         main.setError("FileSystem capability denied");
         return null;
     }
+    if (main.gossamer_cap_resource_kind(cap_token) != 0) {
+        main.setError("Wrong capability kind — expected FileSystem (0)");
+        return null;
+    }
 
     const allocator = std.heap.c_allocator;
     const path_slice = std.mem.span(path);
+    if (!std.fs.path.isAbsolute(path_slice) or std.mem.indexOf(u8, path_slice, "..") != null) {
+        main.setError("Invalid filesystem path — must be absolute and traversal-free");
+        return null;
+    }
 
     var dir = std.fs.openDirAbsolute(path_slice, .{ .iterate = true }) catch {
         main.setError("Failed to open directory");
@@ -189,8 +213,16 @@ pub export fn gossamer_fs_remove(
         main.setError("FileSystem capability denied");
         return .capability_denied;
     }
+    if (main.gossamer_cap_resource_kind(cap_token) != 0) {
+        main.setError("Wrong capability kind — expected FileSystem (0)");
+        return .capability_denied;
+    }
 
     const path_slice = std.mem.span(path);
+    if (!std.fs.path.isAbsolute(path_slice) or std.mem.indexOf(u8, path_slice, "..") != null) {
+        main.setError("Invalid filesystem path — must be absolute and traversal-free");
+        return .invalid_param;
+    }
 
     std.fs.deleteFileAbsolute(path_slice) catch {
         main.setError("Failed to delete file");
