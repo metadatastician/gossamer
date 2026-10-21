@@ -39,6 +39,7 @@ pub fn build(b: *std.Build) void {
         .macos => {
             exe_module.linkFramework("Cocoa", .{});
             exe_module.linkFramework("WebKit", .{});
+            exe_module.linkSystemLibrary("objc", .{});
         },
         .windows => {
             exe_module.linkSystemLibrary("ole32", .{});

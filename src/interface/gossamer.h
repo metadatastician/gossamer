@@ -228,6 +228,14 @@ ChannelHandle gossamer_channel_open(GossamerHandle handle);
 /// Close an IPC channel.
 void gossamer_channel_close(ChannelHandle channel);
 
+/// Close dispatch and call cleanup once this channel's queued/running callbacks finish.
+/// Cleanup may run immediately or on the last worker thread; it must not unwind.
+void gossamer_channel_close_with_cleanup(
+    ChannelHandle channel,
+    void (*cleanup)(void* user_data),
+    void* user_data
+);
+
 /// Bind a synchronous IPC command handler.
 /// The callback receives a JSON-encoded request string and optional user data.
 /// It must return a JSON-encoded response string (will be copied before return).

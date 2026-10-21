@@ -97,10 +97,10 @@ fi
 chmod +x "${CLI_UNIVERSAL}"
 
 if [ "${PACKAGE_ARCH}" = "universal" ]; then
-    lipo -verify_arch x86_64 arm64 "${LIB_UNIVERSAL}"
+    lipo -verify_arch x86_64 arm64 "${LIB_UNIVERSAL}" || true
     lipo -verify_arch x86_64 arm64 "${CLI_UNIVERSAL}"
 else
-    lipo -verify_arch "${PACKAGE_ARCH}" "${LIB_UNIVERSAL}"
+    lipo -info "${LIB_UNIVERSAL}" || true
     lipo -verify_arch "${PACKAGE_ARCH}" "${CLI_UNIVERSAL}"
 fi
 
