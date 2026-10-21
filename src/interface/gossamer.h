@@ -553,7 +553,6 @@ GossamerResult gossamer_group_apply(uint32_t group_id, uint32_t op);
 
 GossamerResult gossamer_raise(GossamerHandle handle);
 GossamerResult gossamer_lower(GossamerHandle handle);
-GossamerResult gossamer_raise_group(uint32_t group_id);
 GossamerResult gossamer_arrange(uint32_t strategy);
 
 uint32_t gossamer_broadcast(const char* event_name, const char* payload_json);
@@ -577,13 +576,12 @@ uint32_t gossamer_cap_resource_kind(uint64_t token);
 uint32_t gossamer_cap_set_max(uint32_t max);
 uint32_t gossamer_cap_get_max(void);
 
-int32_t gossamer_watcher_start(
+void* gossamer_watcher_start(
     GossamerHandle handle,
-    const char* config_path,
     const char* config_json,
     const char* frontend_dist
 );
-void gossamer_watcher_stop(void);
+void gossamer_watcher_stop(void* opaque_handle);
 
 // ===========================================================================
 // Memory Management

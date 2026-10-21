@@ -291,6 +291,16 @@ pub export fn gossamer_updater_configure(handle_ptr: u64, source_type: u32, para
         return .null_pointer;
     }
 
+    const validated_type: UpdateSource.SourceType = switch (source_type) {
+        0 => .http_json,
+        1 => .github_releases,
+        2 => .local_file,
+        else => {
+            setError("Updater configure: invalid source type");
+            return .invalid_param;
+        },
+    };
+
     const param_slice = std.mem.span(param1);
     if (param_slice.len == 0 or param_slice.len >= update_param_buf.len) {
         setError("Updater configure: parameter empty or too long");
@@ -301,15 +311,7 @@ pub export fn gossamer_updater_configure(handle_ptr: u64, source_type: u32, para
     const owned_param: [*:0]const u8 = update_param_buf[0..param_slice.len :0].ptr;
 
     const source = UpdateSource{
-        .source_type = switch (source_type) {
-            0 => .http_json,
-            1 => .github_releases,
-            2 => .local_file,
-            else => {
-                setError("Updater configure: invalid source type");
-                return .invalid_param;
-            },
-        },
+        .source_type = validated_type,
         .url = if (source_type == 0) owned_param else null,
         .github_repo = if (source_type == 1) owned_param else null,
         .local_path = if (source_type == 2) owned_param else null,

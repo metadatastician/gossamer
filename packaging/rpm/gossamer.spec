@@ -91,7 +91,7 @@ install -Dm644 generated/abi/gossamer.h \
 
 %files
 %license LICENSE
-%doc README.adoc
+%doc README.md
 %{_libdir}/libgossamer.so
 %{_bindir}/gossamer
 %{_datadir}/gossamer/cli.wasm

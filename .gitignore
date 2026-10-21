@@ -114,8 +114,8 @@ site/dist/
 
 # asdf version manager
 .tool-versions
-generated/
-# Exception: directory README, abi header symlink, and tlaiser specs are source-controlled
+generated/*
+# Exception: directory README, abi header, and tlaiser specs are source-controlled
 !generated/README.adoc
 !generated/abi/
 !generated/abi/gossamer.h

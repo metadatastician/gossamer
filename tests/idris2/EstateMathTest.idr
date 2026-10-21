@@ -52,25 +52,29 @@ tests =
            , assertEq altPath (Val 16)
            ]
 
-  , test "estate/algebra: ActivityLevel frame budgets decrease with activity" $
+  , test "estate/algebra: ActivityLevel frame budgets increase monotonically with activity" $
       allPass
-        [ assertEq (activityBudgetMs ActivityActive) 16
-        , assertEq (activityBudgetMs ActivityIdle)   100
-        , assertEq (activityBudgetMs ActivityHidden) 1000
+        [ assertEq (activityBudget Paused)   (Val 0)
+        , assertEq (activityBudget Low)      (Val 1)
+        , assertEq (activityBudget Mid)      (Val 15)
+        , assertEq (activityBudget High)     (Val 30)
+        , assertEq (activityBudget Realtime) (Val 60)
         ]
 
     -- 3. ResourceAlgebra: HWMGrade (occupancy-types reclaim law & cut factor)
   , test "estate/algebra: HWMGrade reclaim law prevents peak additivity" $
-      let step1 = MkHWM 4 0 LTEZero   -- allocate 4, release 4 (net 0)
-          step2 = MkHWM 5 0 LTEZero   -- allocate 5, release 5 (net 0)
+      let step1 = MkHWM 4 0 LTEZero   -- allocate 4, release 4 (drift 0)
+          step2 = MkHWM 5 0 LTEZero   -- allocate 5, release 5 (drift 0)
           seq12 = hwmSeq step1 step2
       in allPass
-           [ assertEq seq12.peak 5
-           , assertEq seq12.net  0
+           [ assertEq seq12.peak  5
+           , assertEq seq12.drift 0
            ]
 
-  , test "estate/algebra: HWMGrade cutFactor reduces peak from 5 to 2" $
-      assertEq (cutFactor 1 2 5) (2, 5)
+  , test "estate/algebra: HWMGrade timelineGrade factors across cuts" $
+      let xs = [MkHWM 2 0 LTEZero]
+          ys = [MkHWM 3 0 LTEZero]
+      in assertEq (timelineGrade (xs ++ ys)) (otimes (timelineGrade xs) (timelineGrade ys))
 
     -- 4. NullOps: CNO guard enforcement & revocation ring protection
   , test "estate/nullops: Locked and ReadOnly GuardMode operations are CNOs" $

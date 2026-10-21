@@ -460,20 +460,20 @@ joinUpper2 HostHigh  HostHigh  = FlowHighHigh
 public export
 joinLowLeft : {x, y : SecLabel} -> secJoin x y = PublicLow -> x = PublicLow
 joinLowLeft {x = PublicLow} _   = Refl
-joinLowLeft {x = PluginMid} {y = PublicLow} prf = absurd prf
-joinLowLeft {x = PluginMid} {y = PluginMid} prf = absurd prf
-joinLowLeft {x = PluginMid} {y = HostHigh}  prf = absurd prf
-joinLowLeft {x = HostHigh}  prf = absurd prf
+joinLowLeft {x = PluginMid} {y = PublicLow} Refl impossible
+joinLowLeft {x = PluginMid} {y = PluginMid} Refl impossible
+joinLowLeft {x = PluginMid} {y = HostHigh}  Refl impossible
+joinLowLeft {x = HostHigh}  Refl impossible
 
 public export
 joinLowRight : {x, y : SecLabel} -> secJoin x y = PublicLow -> y = PublicLow
 joinLowRight {x = PublicLow} e = e
 joinLowRight {x = PluginMid} {y = PublicLow} _   = Refl
-joinLowRight {x = PluginMid} {y = PluginMid} prf = absurd prf
-joinLowRight {x = PluginMid} {y = HostHigh}  prf = absurd prf
+joinLowRight {x = PluginMid} {y = PluginMid} Refl impossible
+joinLowRight {x = PluginMid} {y = HostHigh}  Refl impossible
 joinLowRight {x = HostHigh}  {y = PublicLow} _   = Refl
-joinLowRight {x = HostHigh}  {y = PluginMid} prf = absurd prf
-joinLowRight {x = HostHigh}  {y = HostHigh}  prf = absurd prf
+joinLowRight {x = HostHigh}  {y = PluginMid} Refl impossible
+joinLowRight {x = HostHigh}  {y = HostHigh}  Refl impossible
 
 --------------------------------------------------------------------------------
 -- 5. Residual Evidence Diagnostics (residual-evidence-types Core.agda)

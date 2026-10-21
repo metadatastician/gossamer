@@ -13,6 +13,10 @@
 const std = @import("std");
 const main = @import("main.zig");
 
+fn isValidFsPath(path_slice: []const u8) bool {
+    return std.fs.path.isAbsolute(path_slice) and std.mem.indexOf(u8, path_slice, "..") == null;
+}
+
 /// Read a text file and return its contents as a C string.
 /// The caller is responsible for freeing the returned string via std.heap.c_allocator.
 ///
@@ -35,7 +39,7 @@ pub export fn gossamer_fs_read_text(
 
     const allocator = std.heap.c_allocator;
     const path_slice = std.mem.span(path);
-    if (!std.fs.path.isAbsolute(path_slice) or std.mem.indexOf(u8, path_slice, "..") != null) {
+    if (!isValidFsPath(path_slice)) {
         main.setError("Invalid filesystem path — must be absolute and traversal-free");
         return null;
     }
@@ -87,7 +91,7 @@ pub export fn gossamer_fs_write_text(
 
     const path_slice = std.mem.span(path);
     const contents_slice = std.mem.span(contents);
-    if (!std.fs.path.isAbsolute(path_slice) or std.mem.indexOf(u8, path_slice, "..") != null) {
+    if (!isValidFsPath(path_slice)) {
         main.setError("Invalid filesystem path — must be absolute and traversal-free");
         return .invalid_param;
     }
@@ -127,7 +131,7 @@ pub export fn gossamer_fs_exists(
     }
 
     const path_slice = std.mem.span(path);
-    if (!std.fs.path.isAbsolute(path_slice) or std.mem.indexOf(u8, path_slice, "..") != null) {
+    if (!isValidFsPath(path_slice)) {
         main.setError("Invalid filesystem path — must be absolute and traversal-free");
         return 0xFFFFFFFF;
     }
@@ -160,7 +164,7 @@ pub export fn gossamer_fs_list_dir(
 
     const allocator = std.heap.c_allocator;
     const path_slice = std.mem.span(path);
-    if (!std.fs.path.isAbsolute(path_slice) or std.mem.indexOf(u8, path_slice, "..") != null) {
+    if (!isValidFsPath(path_slice)) {
         main.setError("Invalid filesystem path — must be absolute and traversal-free");
         return null;
     }
@@ -219,7 +223,7 @@ pub export fn gossamer_fs_remove(
     }
 
     const path_slice = std.mem.span(path);
-    if (!std.fs.path.isAbsolute(path_slice) or std.mem.indexOf(u8, path_slice, "..") != null) {
+    if (!isValidFsPath(path_slice)) {
         main.setError("Invalid filesystem path — must be absolute and traversal-free");
         return .invalid_param;
     }
@@ -251,6 +255,10 @@ pub export fn gossamer_fs_mkdir_p(
     }
 
     const path_slice = std.mem.span(path);
+    if (!isValidFsPath(path_slice)) {
+        main.setError("Invalid filesystem path — must be absolute and traversal-free");
+        return .invalid_param;
+    }
 
     std.fs.cwd().makePath(path_slice) catch |e| {
         switch (e) {
@@ -290,6 +298,10 @@ pub export fn gossamer_fs_copy_file(
 
     const src_slice = std.mem.span(src);
     const dst_slice = std.mem.span(dst);
+    if (!isValidFsPath(src_slice) or !isValidFsPath(dst_slice)) {
+        main.setError("Invalid filesystem path — must be absolute and traversal-free");
+        return .invalid_param;
+    }
 
     std.fs.cwd().copyFile(src_slice, std.fs.cwd(), dst_slice, .{}) catch {
         main.setError("Failed to copy file");

@@ -63,12 +63,11 @@ fn isSafeHost(host: []const u8) bool {
 fn isSafeConfigIdentifier(s: []const u8) bool {
     if (s.len == 0 or s.len > 256) return false;
     for (s) |ch| {
-        if (ch == '\'' or ch == '"' or ch == '/' or ch == '\\' or
-            ch == ';' or ch == '&' or ch == '|' or ch == '$' or
-            ch == '`' or ch == '\n' or ch == '\r' or ch == 0)
-        {
-            return false;
-        }
+        const ok = (ch >= 'a' and ch <= 'z') or
+            (ch >= 'A' and ch <= 'Z') or
+            (ch >= '0' and ch <= '9') or
+            ch == '.' or ch == '_' or ch == '-';
+        if (!ok) return false;
     }
     return true;
 }
@@ -239,7 +238,7 @@ export fn bridge_build_sed(fmt_ptr: i64, key_ptr: i64, val_ptr: i64, path_ptr: i
     const value = ptrToSlice(val_ptr) orelse return 0;
     const path = ptrToSlice(path_ptr) orelse return 0;
 
-    if (!isSafeConfigIdentifier(key) or !isSafeConfigIdentifier(value) or !isSafeConfigPath(path)) {
+    if (!isSafeConfigIdentifier(format) or !isSafeConfigIdentifier(key) or !isSafeConfigIdentifier(value) or !isSafeConfigPath(path)) {
         return allocToI64(allocator, "error: invalid sed parameters");
     }
 
@@ -250,7 +249,7 @@ export fn bridge_build_sed(fmt_ptr: i64, key_ptr: i64, val_ptr: i64, path_ptr: i
         // INI: sed -i 's/^key *=.*/key = newvalue/' file
         std.fmt.allocPrint(allocator, "sed -i 's/^{s} *=.*/{s} = {s}/' {s}", .{ key, key, value, path })
     else
-        std.fmt.allocPrint(allocator, "echo 'unsupported format: {s}'", .{format});
+        return allocToI64(allocator, "error: unsupported config format");
 
     const result_str = cmd catch return 0;
     const result_z = allocator.dupeZ(u8, result_str) catch return 0;
@@ -280,7 +279,7 @@ export fn bridge_build_action_cmd(action_ptr: i64, container_ptr: i64, _: i64, _
     else if (std.mem.eql(u8, action, "logs"))
         std.fmt.allocPrint(allocator, "podman logs --tail 50 {s}", .{container})
     else
-        std.fmt.allocPrint(allocator, "echo 'unknown action: {s}'", .{action});
+        return allocToI64(allocator, "error: invalid action");
 
     const result_str = cmd catch return 0;
     const result_z = allocator.dupeZ(u8, result_str) catch return 0;

@@ -61,34 +61,40 @@ HAVE_PKGBUILD=false
 command -v hdiutil  >/dev/null 2>&1 && HAVE_HDIUTIL=true  || log "hdiutil not found — DMG creation skipped"
 command -v pkgbuild >/dev/null 2>&1 && HAVE_PKGBUILD=true || log "pkgbuild not found — PKG creation skipped"
 
-# ── Step 1: Cross-compile for both architectures ───────────────────────────────
-
-log "Building for macOS x86_64..."
-just build-macos-x64
-
-log "Building for macOS aarch64 (Apple Silicon)..."
-just build-macos-arm
-
-# ── Step 2: Create universal binaries with lipo ────────────────────────────────
+# ── Step 1: Build macOS library and CLI ────────────────────────────────────────
 
 mkdir -p "${DIST_DIR}"
 
-log "Creating universal library with lipo..."
-lipo -create \
-    "${LIB_X64}" \
-    "${LIB_ARM}" \
-    -output "${LIB_UNIVERSAL}"
+if [ -f "${LIB_X64}" ] && [ -f "${LIB_ARM}" ] && [ -f "${CLI_X64}" ] && [ -f "${CLI_ARM}" ]; then
+    log "Creating universal library with lipo..."
+    lipo -create \
+        "${LIB_X64}" \
+        "${LIB_ARM}" \
+        -output "${LIB_UNIVERSAL}"
 
-log "Creating universal CLI binary with lipo..."
-lipo -create \
-    "${CLI_X64}" \
-    "${CLI_ARM}" \
-    -output "${CLI_UNIVERSAL}"
+    log "Creating universal CLI binary with lipo..."
+    lipo -create \
+        "${CLI_X64}" \
+        "${CLI_ARM}" \
+        -output "${CLI_UNIVERSAL}"
+else
+    log "Building native macOS FFI library (ReleaseSafe)..."
+    (cd src/interface/ffi && zig build -Dtarget=native -Doptimize=ReleaseSafe)
+    log "Building native macOS CLI binary (ReleaseSafe)..."
+    (cd cli && zig build -Dtarget=native -Doptimize=ReleaseSafe)
+
+    if [ -f "src/interface/ffi/zig-out/lib/libgossamer.dylib" ]; then
+        cp "src/interface/ffi/zig-out/lib/libgossamer.dylib" "${LIB_UNIVERSAL}"
+    else
+        cp "src/interface/ffi/zig-out/lib/libgossamer.a" "${LIB_UNIVERSAL}"
+    fi
+    cp "cli/zig-out/bin/gossamer" "${CLI_UNIVERSAL}"
+fi
 
 chmod +x "${CLI_UNIVERSAL}"
 
-lipo -info "${LIB_UNIVERSAL}"
-lipo -info "${CLI_UNIVERSAL}"
+lipo -info "${LIB_UNIVERSAL}" || true
+lipo -info "${CLI_UNIVERSAL}" || true
 
 # ── Step 3: Assemble staging tree ─────────────────────────────────────────────
 
@@ -129,8 +135,8 @@ if "${HAVE_HDIUTIL}"; then
     cp "${LIB_UNIVERSAL}"        "${DMG_STAGING}/libgossamer.dylib"
     cp "${CLI_UNIVERSAL}"        "${DMG_STAGING}/gossamer"
     cp generated/abi/gossamer.h  "${DMG_STAGING}/gossamer.h"
-    cp README.adoc               "${DMG_STAGING}/README.adoc" 2>/dev/null || true
-    cp LICENSE                   "${DMG_STAGING}/LICENSE"     2>/dev/null || true
+    cp README.md                 "${DMG_STAGING}/README.md" 2>/dev/null || true
+    cp LICENSE                   "${DMG_STAGING}/LICENSE"   2>/dev/null || true
 
     hdiutil create \
         -volname "Gossamer ${VERSION}" \

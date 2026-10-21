@@ -537,7 +537,7 @@ package-flatpak:
     flatpak build-bundle packaging/flatpak/repo gossamer.flatpak io.gossamer.Gossamer
 
 # Build macOS DMG/pkg (requires macOS or cross-compilation sysroot)
-package-macos: build-macos-x64 build-macos-arm
+package-macos:
     bash packaging/macos/package.sh
 
 # Build Windows MSI installer (requires WiX 4 and zig cross-compilation)

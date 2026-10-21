@@ -503,8 +503,8 @@ const AsyncIPCContext = struct {
     user_data: ?*anyopaque,
     /// Inflight slot index for cleanup after completion
     inflight_slot: usize,
-    /// Response from the callback (set by worker, read by idle callback)
-    response: ?[]const u8 = null,
+    /// Heap-copied response from the callback (allocated by worker, freed by idle callback)
+    response: ?[]u8 = null,
     /// Error message if something went wrong (set by worker)
     err_msg: ?[]const u8 = null,
 };
@@ -691,8 +691,14 @@ fn asyncWorkerFn(ctx: *AsyncIPCContext) void {
     // Guard against null returns from C callbacks.
     // std.mem.span on a null sentinel pointer is UB; leave ctx.response as
     // null and let asyncIdleCallback send the error instead.
+    // Copy the response slice on the worker thread before returning so
+    // thread-local callback buffers (e.g. shellExecHandler / Rust trampoline)
+    // remain valid until asyncIdleCallback runs on the GTK main thread.
     if (@intFromPtr(response_ptr) != 0) {
-        ctx.response = std.mem.span(response_ptr);
+        ctx.response = ctx.allocator.dupe(u8, std.mem.span(response_ptr)) catch blk: {
+            ctx.err_msg = "Out of memory copying async response";
+            break :blk null;
+        };
     }
 
     // Schedule response delivery on the GTK main thread.
@@ -725,6 +731,7 @@ fn asyncIdleCallback(user_data: ?*anyopaque) callconv(.c) c_int {
     async_ipc.releaseSlot(ctx.inflight_slot);
 
     // Clean up heap-allocated context
+    if (ctx.response) |resp| allocator.free(resp);
     allocator.free(ctx.payload_z);
     allocator.free(ctx.id);
     allocator.destroy(ctx);

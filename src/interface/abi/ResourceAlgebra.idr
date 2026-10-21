@@ -160,7 +160,7 @@ interface ResourceAlgebra g => IsAnnihilating g where
   annihilR : (a : g) -> otimes a (zeroG {g}) = zeroG {g}
 
 --------------------------------------------------------------------------------
--- 2. Arithmetic & Order Lemmas on Nat
+-- 2. Self-Contained Arithmetic & Order Lemmas on Nat
 --------------------------------------------------------------------------------
 
 public export
@@ -184,8 +184,107 @@ lteIrrelevant LTEZero     LTEZero     = Refl
 lteIrrelevant (LTESucc p) (LTESucc q) = cong LTESucc (lteIrrelevant p q)
 
 public export
+plusZeroR : (n : Nat) -> n + 0 = n
+plusZeroR Z     = Refl
+plusZeroR (S k) = cong S (plusZeroR k)
+
+public export
+plusSuccR : (m, n : Nat) -> S (m + n) = m + S n
+plusSuccR Z     n = Refl
+plusSuccR (S m) n = cong S (plusSuccR m n)
+
+public export
+plusComm : (m, n : Nat) -> m + n = n + m
+plusComm Z     n = sym (plusZeroR n)
+plusComm (S m) n = trans (cong S (plusComm m n)) (plusSuccR n m)
+
+public export
+plusAssoc : (m, n, p : Nat) -> (m + n) + p = m + (n + p)
+plusAssoc Z     n p = Refl
+plusAssoc (S m) n p = cong S (plusAssoc m n p)
+
+public export
+minusZeroR : (n : Nat) -> minus n 0 = n
+minusZeroR Z     = Refl
+minusZeroR (S k) = Refl
+
+public export
+maxZeroRight : (n : Nat) -> maximum n 0 = n
+maxZeroRight Z     = Refl
+maxZeroRight (S k) = Refl
+
+public export
+minZeroRight : (n : Nat) -> minimum n 0 = 0
+minZeroRight Z     = Refl
+minZeroRight (S k) = Refl
+
+public export
+maxIdem : (n : Nat) -> maximum n n = n
+maxIdem Z     = Refl
+maxIdem (S k) = cong S (maxIdem k)
+
+public export
+minIdem : (n : Nat) -> minimum n n = n
+minIdem Z     = Refl
+minIdem (S k) = cong S (minIdem k)
+
+public export
+maxComm : (m, n : Nat) -> maximum m n = maximum n m
+maxComm Z     Z     = Refl
+maxComm Z     (S n) = Refl
+maxComm (S m) Z     = Refl
+maxComm (S m) (S n) = cong S (maxComm m n)
+
+public export
+minComm : (m, n : Nat) -> minimum m n = minimum n m
+minComm Z     Z     = Refl
+minComm Z     (S n) = Refl
+minComm (S m) Z     = Refl
+minComm (S m) (S n) = cong S (minComm m n)
+
+public export
 maxAssoc : (m, n, p : Nat) -> maximum (maximum m n) p = maximum m (maximum n p)
-maxAssoc m n p = sym (maximumAssociative m n p)
+maxAssoc Z     n     p     = Refl
+maxAssoc (S m) Z     p     = Refl
+maxAssoc (S m) (S n) Z     = Refl
+maxAssoc (S m) (S n) (S p) = cong S (maxAssoc m n p)
+
+public export
+minAssoc : (m, n, p : Nat) -> minimum (minimum m n) p = minimum m (minimum n p)
+minAssoc Z     n     p     = Refl
+minAssoc (S m) Z     p     = Refl
+minAssoc (S m) (S n) Z     = Refl
+minAssoc (S m) (S n) (S p) = cong S (minAssoc m n p)
+
+public export
+maxLeftUpperBound : (m, n : Nat) -> LTE m (maximum m n)
+maxLeftUpperBound Z     n     = LTEZero
+maxLeftUpperBound (S m) Z     = lteRefl (S m)
+maxLeftUpperBound (S m) (S n) = LTESucc (maxLeftUpperBound m n)
+
+public export
+maxRightUpperBound : (m, n : Nat) -> LTE n (maximum m n)
+maxRightUpperBound Z     n     = lteRefl n
+maxRightUpperBound (S m) Z     = LTEZero
+maxRightUpperBound (S m) (S n) = LTESucc (maxRightUpperBound m n)
+
+public export
+lteAddRightNat : (m, n : Nat) -> LTE m (m + n)
+lteAddRightNat Z     n = LTEZero
+lteAddRightNat (S m) n = LTESucc (lteAddRightNat m n)
+
+public export
+plusLteMonoR : (c, a, b : Nat) -> LTE a b -> LTE (a + c) (b + c)
+plusLteMonoR c Z     b     LTEZero     =
+  rewrite plusComm b c in lteAddRightNat c b
+plusLteMonoR c (S a) (S b) (LTESucc p) = LTESucc (plusLteMonoR c a b p)
+
+public export
+plusMinusLteNat : (n, p : Nat) -> LTE n p -> minus p n + n = p
+plusMinusLteNat Z     p     LTEZero     =
+  trans (cong (\x => x + 0) (minusZeroR p)) (plusZeroR p)
+plusMinusLteNat (S n) (S p) (LTESucc q) =
+  trans (sym (plusSuccR (minus p n) n)) (cong S (plusMinusLteNat n p q))
 
 public export
 maxDup : (p, x, y : Nat) ->
@@ -193,10 +292,10 @@ maxDup : (p, x, y : Nat) ->
 maxDup p x y =
   trans (maxAssoc p x (maximum p y))
   (trans (cong (maximum p) (sym (maxAssoc x p y)))
-  (trans (cong (\z => maximum p (maximum z y)) (maximumCommutative x p))
+  (trans (cong (\z => maximum p (maximum z y)) (maxComm x p))
   (trans (cong (maximum p) (maxAssoc p x y))
   (trans (sym (maxAssoc p p (maximum x y)))
-         (cong (\z => maximum z (maximum x y)) (maximumIdempotent p))))))
+         (cong (\z => maximum z (maximum x y)) (maxIdem p))))))
 
 public export
 maxInterchange : (a, b, c, d : Nat) ->
@@ -206,7 +305,7 @@ maxInterchange a b c d =
   trans (maxAssoc a b (maximum c d))
   (trans (cong (maximum a)
     (trans (sym (maxAssoc b c d))
-    (trans (cong (\z => maximum z d) (maximumCommutative b c))
+    (trans (cong (\z => maximum z d) (maxComm b c))
            (maxAssoc c b d))))
   (sym (maxAssoc a c (maximum b d))))
 
@@ -218,28 +317,24 @@ plusDistribLMax (S a) b c = cong S (plusDistribLMax a b c)
 public export
 plusDistribRMax : (a, b, c : Nat) -> maximum a b + c = maximum (a + c) (b + c)
 plusDistribRMax a b c =
-  trans (plusCommutative (maximum a b) c)
+  trans (plusComm (maximum a b) c)
   (trans (plusDistribLMax c a b)
-  (trans (cong (\z => maximum z (c + b)) (plusCommutative c a))
-         (cong (maximum (a + c)) (plusCommutative c b))))
+  (trans (cong (\z => maximum z (c + b)) (plusComm c a))
+         (cong (maximum (a + c)) (plusComm c b))))
 
 public export
 maxMonoLTE : {a, a', b, b' : Nat} -> LTE a a' -> LTE b b' ->
              LTE (maximum a b) (maximum a' b')
 maxMonoLTE {a' = a'}            LTEZero     q       =
-  lteTrans q (maximumRightUpperBound a' _)
+  lteTrans q (maxRightUpperBound a' _)
 maxMonoLTE {a' = S k} {b' = b'} (LTESucc p) LTEZero =
-  lteTrans (LTESucc p) (maximumLeftUpperBound (S k) b')
+  lteTrans (LTESucc p) (maxLeftUpperBound (S k) b')
 maxMonoLTE                      (LTESucc p) (LTESucc q) = LTESucc (maxMonoLTE p q)
 
 public export
 maxAbsorbLTE : {n, p : Nat} -> LTE n p -> maximum p n = p
-maxAbsorbLTE {p} LTEZero     = maximumZeroNLeft p
+maxAbsorbLTE {p} LTEZero     = maxZeroRight p
 maxAbsorbLTE     (LTESucc q) = cong S (maxAbsorbLTE q)
-
-public export
-minAssoc : (m, n, p : Nat) -> minimum (minimum m n) p = minimum m (minimum n p)
-minAssoc m n p = sym (minimumAssociative m n p)
 
 public export
 plusDistribLMin : (a, b, c : Nat) -> a + minimum b c = minimum (a + b) (a + c)
@@ -249,14 +344,10 @@ plusDistribLMin (S a) b c = cong S (plusDistribLMin a b c)
 public export
 plusDistribRMin : (a, b, c : Nat) -> minimum a b + c = minimum (a + c) (b + c)
 plusDistribRMin a b c =
-  trans (plusCommutative (minimum a b) c)
+  trans (plusComm (minimum a b) c)
   (trans (plusDistribLMin c a b)
-  (trans (cong (\z => minimum z (c + b)) (plusCommutative c a))
-         (cong (minimum (a + c)) (plusCommutative c b))))
-
-public export
-plusAssoc : (m, n, p : Nat) -> (m + n) + p = m + (n + p)
-plusAssoc m n p = sym (plusAssociative m n p)
+  (trans (cong (\z => minimum z (c + b)) (plusComm c a))
+         (cong (minimum (a + c)) (plusComm c b))))
 
 public export
 succInj : {m, n : Nat} -> S m = S n -> m = n
@@ -264,14 +355,14 @@ succInj Refl = Refl
 
 public export
 minimumOfLTE : {k, n : Nat} -> LTE k n -> minimum n k = k
-minimumOfLTE {n} LTEZero     = minimumZeroZeroLeft n
+minimumOfLTE {n} LTEZero     = minZeroRight n
 minimumOfLTE     (LTESucc q) = cong S (minimumOfLTE q)
 
 public export
 lteOfMinimum : (n, k : Nat) -> minimum n k = k -> LTE k n
-lteOfMinimum n     Z     _   = LTEZero
-lteOfMinimum Z     (S k) prf = absurd prf
-lteOfMinimum (S n) (S k) prf = LTESucc (lteOfMinimum n k (succInj prf))
+lteOfMinimum n     Z     _    = LTEZero
+lteOfMinimum Z     (S k) Refl impossible
+lteOfMinimum (S n) (S k) prf  = LTESucc (lteOfMinimum n k (succInj prf))
 
 public export
 maximumOfLTE : {m, n : Nat} -> LTE m n -> maximum m n = n
@@ -280,9 +371,9 @@ maximumOfLTE (LTESucc q) = cong S (maximumOfLTE q)
 
 public export
 lteOfMaximum : (m, n : Nat) -> maximum m n = n -> LTE m n
-lteOfMaximum Z     n     _   = LTEZero
-lteOfMaximum (S m) Z     prf = absurd prf
-lteOfMaximum (S m) (S n) prf = LTESucc (lteOfMaximum m n (succInj prf))
+lteOfMaximum Z     n     _    = LTEZero
+lteOfMaximum (S m) Z     Refl impossible
+lteOfMaximum (S m) (S n) prf  = LTESucc (lteOfMaximum m n (succInj prf))
 
 public export
 maxLub : {a, b, c : Nat} -> LTE a c -> LTE b c -> LTE (maximum a b) c
@@ -292,23 +383,23 @@ maxLub (LTESucc p) (LTESucc q) = LTESucc (maxLub p q)
 
 public export
 minOfLTE : {m, n : Nat} -> LTE m n -> minimum m n = m
-minOfLTE {m} {n} le = trans (minimumCommutative m n) (minimumOfLTE le)
+minOfLTE {m} {n} le = trans (minComm m n) (minimumOfLTE le)
 
 public export
 maxDistribLMin : (a, b, c : Nat) ->
                  maximum a (minimum b c) = minimum (maximum a b) (maximum a c)
 maxDistribLMin Z     b     c     = Refl
-maxDistribLMin (S a) Z     c     = sym (minOfLTE (maximumLeftUpperBound (S a) c))
-maxDistribLMin (S a) (S b) Z     = cong S (sym (minimumOfLTE (maximumLeftUpperBound a b)))
+maxDistribLMin (S a) Z     c     = sym (minOfLTE (maxLeftUpperBound (S a) c))
+maxDistribLMin (S a) (S b) Z     = cong S (sym (minimumOfLTE (maxLeftUpperBound a b)))
 maxDistribLMin (S a) (S b) (S c) = cong S (maxDistribLMin a b c)
 
 public export
 maxDistribRMin : (a, b, c : Nat) ->
                  maximum (minimum a b) c = minimum (maximum a c) (maximum b c)
 maxDistribRMin a b c =
-  trans (maximumCommutative (minimum a b) c)
+  trans (maxComm (minimum a b) c)
   (trans (maxDistribLMin c a b)
-         (cong2 minimum (maximumCommutative c a) (maximumCommutative c b)))
+         (cong2 minimum (maxComm c a) (maxComm c b)))
 
 --------------------------------------------------------------------------------
 -- 3. Instance 1: LossGrade (Min-Plus on Nat ∪ {∞} — echo-types & januskey)
@@ -359,14 +450,14 @@ lossAltAssoc Infinity   b          c          = Refl
 
 public export
 lossAltComm : (a, b : LossGrade) -> lossAlt a b = lossAlt b a
-lossAltComm (Finite a) (Finite b) = cong Finite (minimumCommutative a b)
+lossAltComm (Finite a) (Finite b) = cong Finite (minComm a b)
 lossAltComm (Finite a) Infinity   = Refl
 lossAltComm Infinity   (Finite b) = Refl
 lossAltComm Infinity   Infinity   = Refl
 
 public export
 lossAltIdem : (a : LossGrade) -> lossAlt a a = a
-lossAltIdem (Finite a) = cong Finite (minimumIdempotent a)
+lossAltIdem (Finite a) = cong Finite (minIdem a)
 lossAltIdem Infinity   = Refl
 
 public export
@@ -384,7 +475,7 @@ lossSeqUnitL Infinity   = Refl
 
 public export
 lossSeqUnitR : (a : LossGrade) -> lossSeq a (Finite 0) = a
-lossSeqUnitR (Finite a) = cong Finite (plusZeroRightNeutral a)
+lossSeqUnitR (Finite a) = cong Finite (plusZeroR a)
 lossSeqUnitR Infinity   = Refl
 
 public export
@@ -452,7 +543,7 @@ lteOfLossLe n k prf = lteOfMinimum n k (finiteInjective prf)
 
 public export
 lossLeOne : (g : LossGrade) -> LeG g (Finite 0)
-lossLeOne (Finite n) = cong Finite (minimumZeroZeroLeft n)
+lossLeOne (Finite n) = cong Finite (minZeroRight n)
 lossLeOne Infinity   = Refl
 
 --------------------------------------------------------------------------------
@@ -502,14 +593,14 @@ maxPlusAltAssoc Bot     b       c       = Refl
 
 public export
 maxPlusAltComm : (a, b : MaxPlusGrade) -> maxPlusAlt a b = maxPlusAlt b a
-maxPlusAltComm (Val a) (Val b) = cong Val (maximumCommutative a b)
+maxPlusAltComm (Val a) (Val b) = cong Val (maxComm a b)
 maxPlusAltComm (Val a) Bot     = Refl
 maxPlusAltComm Bot     (Val b) = Refl
 maxPlusAltComm Bot     Bot     = Refl
 
 public export
 maxPlusAltIdem : (a : MaxPlusGrade) -> maxPlusAlt a a = a
-maxPlusAltIdem (Val a) = cong Val (maximumIdempotent a)
+maxPlusAltIdem (Val a) = cong Val (maxIdem a)
 maxPlusAltIdem Bot     = Refl
 
 public export
@@ -527,7 +618,7 @@ maxPlusSeqUnitL Bot     = Refl
 
 public export
 maxPlusSeqUnitR : (a : MaxPlusGrade) -> maxPlusSeq a (Val 0) = a
-maxPlusSeqUnitR (Val a) = cong Val (plusZeroRightNeutral a)
+maxPlusSeqUnitR (Val a) = cong Val (plusZeroR a)
 maxPlusSeqUnitR Bot     = Refl
 
 public export
@@ -620,23 +711,8 @@ minMaxSeqUnitL Infinity   = Refl
 
 public export
 minMaxSeqUnitR : (a : LossGrade) -> minMaxSeq a (Finite 0) = a
-minMaxSeqUnitR (Finite a) = cong Finite (maximumZeroNLeft a)
+minMaxSeqUnitR (Finite a) = cong Finite (maxZeroRight a)
 minMaxSeqUnitR Infinity   = Refl
-
-||| Named `MinMax` implementation over `LossGrade`: alternatives = `min`, sequence = `max`.
-public export
-[minMax] ResourceAlgebra LossGrade where
-  oplus    = lossAlt
-  otimes   = minMaxSeq
-  zeroG    = Infinity
-  oneG     = Finite 0
-  altAssoc = lossAltAssoc
-  altComm  = lossAltComm
-  altIdem  = lossAltIdem
-  altUnitL = \_ => Refl
-  seqAssoc = minMaxSeqAssoc
-  seqUnitL = minMaxSeqUnitL
-  seqUnitR = minMaxSeqUnitR
 
 public export
 minMaxDistribL : (a, b, c : LossGrade) ->
@@ -655,16 +731,6 @@ minMaxDistribR (Finite a) Infinity   (Finite c) = Refl
 minMaxDistribR (Finite a) Infinity   Infinity   = Refl
 minMaxDistribR Infinity   b          c          = Refl
 
-public export
-[minMaxDioid] IsDioid LossGrade using minMax where
-  distribL = minMaxDistribL
-  distribR = minMaxDistribR
-
-public export
-[minMaxOrdered] IsOrdered LossGrade using minMax where
-  otimesMonoL = dioidMonoL @{minMaxDioid}
-  otimesMonoR = dioidMonoR @{minMaxDioid}
-
 ||| Bottleneck of a path of confinement/adapter gates.
 public export
 pathBottleneck : List LossGrade -> LossGrade
@@ -677,7 +743,7 @@ minMaxUpperL : (a, b : LossGrade) -> LeG (minMaxSeq a b) a
 minMaxUpperL Infinity   _          = Refl
 minMaxUpperL (Finite m) Infinity   = Refl
 minMaxUpperL (Finite m) (Finite n) =
-  cong Finite (minimumOfLTE (maximumLeftUpperBound m n))
+  cong Finite (minimumOfLTE (maxLeftUpperBound m n))
 
 ||| Right upper bound for `minMaxSeq` in the `LossGrade` order.
 public export
@@ -685,15 +751,15 @@ minMaxUpperR : (a, b : LossGrade) -> LeG (minMaxSeq a b) b
 minMaxUpperR Infinity   _          = Refl
 minMaxUpperR (Finite m) Infinity   = Refl
 minMaxUpperR (Finite m) (Finite n) =
-  cong Finite (minimumOfLTE (maximumRightUpperBound m n))
+  cong Finite (minimumOfLTE (maxRightUpperBound m n))
 
 ||| `hubCeiling` (tropical-types `hub_ceiling`): the bottleneck of a gate chain
 ||| ceilings every individual gate along the path (`LeG (pathBottleneck edges) e`).
 public export
 hubCeiling : {edges : List LossGrade} -> (e : LossGrade) ->
              Elem e edges -> LeG (pathBottleneck edges) e
-hubCeiling {edges = (e :: xs)} e Here =
-  minMaxUpperL e (pathBottleneck xs)
+hubCeiling {edges = (x :: xs)} x Here =
+  minMaxUpperL x (pathBottleneck xs)
 hubCeiling {edges = (y :: xs)} e (There later) =
   leTrans (minMaxUpperR y (pathBottleneck xs)) (hubCeiling e later)
 
@@ -728,7 +794,7 @@ public export
 hwmSeq : HWMGrade -> HWMGrade -> HWMGrade
 hwmSeq (MkHWM p1 n1 b1) (MkHWM p2 n2 b2) =
   MkHWM (maximum p1 (n1 + p2)) (n1 + n2)
-        (lteTrans (plusMonoRLTE n1 b2) (maximumRightUpperBound p1 (n1 + p2)))
+        (lteTrans (plusMonoRLTE n1 b2) (maxRightUpperBound p1 (n1 + p2)))
 
 ||| Alternatives: componentwise `max`.
 public export
@@ -749,11 +815,11 @@ hwmAltAssoc (MkHWM p n _) (MkHWM p' n' _) (MkHWM p'' n'' _) =
 public export
 hwmAltComm : (a, b : HWMGrade) -> hwmAlt a b = hwmAlt b a
 hwmAltComm (MkHWM p n _) (MkHWM p' n' _) =
-  hwmEq (maximumCommutative p p') (maximumCommutative n n')
+  hwmEq (maxComm p p') (maxComm n n')
 
 public export
 hwmAltIdem : (a : HWMGrade) -> hwmAlt a a = a
-hwmAltIdem (MkHWM p n _) = hwmEq (maximumIdempotent p) (maximumIdempotent n)
+hwmAltIdem (MkHWM p n _) = hwmEq (maxIdem p) (maxIdem n)
 
 public export
 hwmAltUnitL : (a : HWMGrade) -> hwmAlt ResourceAlgebra.hwmZero a = a
@@ -775,8 +841,8 @@ hwmSeqUnitL (MkHWM p n _) = hwmEq Refl Refl
 public export
 hwmSeqUnitR : (a : HWMGrade) -> hwmSeq a ResourceAlgebra.hwmZero = a
 hwmSeqUnitR (MkHWM p n b) =
-  hwmEq (trans (cong (maximum p) (plusZeroRightNeutral n)) (maxAbsorbLTE b))
-        (plusZeroRightNeutral n)
+  hwmEq (trans (cong (maximum p) (plusZeroR n)) (maxAbsorbLTE b))
+        (plusZeroR n)
 
 public export
 ResourceAlgebra HWMGrade where
@@ -825,7 +891,7 @@ IsOrdered HWMGrade where
 private
 ltPlusPositive : (m : Nat) -> {n : Nat} -> LT 0 n -> LT m (m + n)
 ltPlusPositive m {n = S k} _ =
-  rewrite sym (plusSuccRightSucc m k) in LTESucc (lteAddRight m)
+  rewrite sym (plusSuccR m k) in LTESucc (lteAddRightNat m k)
 
 ||| Grade of a multi-phase timeline in any `ResourceAlgebra`.
 public export
@@ -852,7 +918,7 @@ reclaimLaw (MkHWM _ _ _) (MkHWM _ _ _) = Refl
 public export
 occupancyLeCost : (a, b : HWMGrade) -> LTE (peak (hwmSeq a b)) (peak a + peak b)
 occupancyLeCost (MkHWM p1 n1 b1) (MkHWM p2 n2 b2) =
-  maxLub (lteAddRight p1) (plusLteMonotoneRight p2 n1 p1 b1)
+  maxLub (lteAddRightNat p1 p2) (plusLteMonoR p2 n1 p1 b1)
 
 ||| R-4a (`no-reclaim`): When `peak a = drift a`, nothing is reclaimed and occupancy = cost.
 public export
@@ -860,14 +926,14 @@ noReclaim : (a : HWMGrade) -> peak a = drift a -> (c : HWMGrade) ->
             peak (hwmSeq a c) = peak a + peak c
 noReclaim (MkHWM p n b) eq (MkHWM p2 n2 b2) =
   rewrite sym eq in
-  trans (maximumCommutative p (p + p2)) (maxAbsorbLTE (lteAddRight p))
+  trans (maxComm p (p + p2)) (maxAbsorbLTE (lteAddRightNat p p2))
 
 ||| R-4b (`reclaimed`): When `drift a < peak a` and `0 < peak c`, occupancy is strictly below cost.
 public export
 reclaimed : (a, c : HWMGrade) -> LT (drift a) (peak a) -> LT 0 (peak c) ->
             LT (peak (hwmSeq a c)) (peak a + peak c)
 reclaimed (MkHWM p1 n1 b1) (MkHWM p2 n2 b2) lt pos =
-  maxLub (ltPlusPositive p1 pos) (plusLteMonotoneRight p2 (S n1) p1 lt)
+  maxLub (ltPlusPositive p1 pos) (plusLteMonoR p2 (S n1) p1 lt)
 
 ||| R-2 for multi-phase timelines (`occupancy-at-cut`).
 public export
@@ -886,7 +952,7 @@ reclaimedAt g = minus (peak g) (drift g)
 ||| Reclaimed state plus remaining drift equals the peak exactly.
 public export
 reclaimedPlusDrift : (g : HWMGrade) -> reclaimedAt g + drift g = peak g
-reclaimedPlusDrift (MkHWM p n b) = plusMinusLte n p b
+reclaimedPlusDrift (MkHWM p n b) = plusMinusLteNat n p b
 
 --------------------------------------------------------------------------------
 -- 8. Separation Theorems S-1..S-4 (Why the 4 Algebras Cannot Collapse)

@@ -241,6 +241,16 @@ revokeInactiveIsCNO : (tok : Bits64) -> (st : CapRevocationState) ->
 revokeInactiveIsCNO tok st notActive =
   rewrite notActive in Refl
 
+||| Theorem: Revoking a token that is already recorded in `revokedRing`
+||| (`elem tok revokedRing = True`) is also a Certified Null Operation (`IsCNO`).
+public export
+revokeAlreadyRevokedIsCNO : (tok : Bits64) -> (st : CapRevocationState) ->
+                            elem tok st.revokedRing = True ->
+                            safeRevokeCap tok st = st
+revokeAlreadyRevokedIsCNO tok st alreadyRevoked with (elem tok st.activeTokens)
+  _ | False = Refl
+  _ | True  = rewrite alreadyRevoked in Refl
+
 --------------------------------------------------------------------------------
 -- 4. Pillar 2 of Absolute Zero: Observational Null Disclosure (OND) & OND-3
 --------------------------------------------------------------------------------

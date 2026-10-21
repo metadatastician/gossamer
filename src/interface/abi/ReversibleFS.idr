@@ -51,11 +51,15 @@ validatePath s with (choose (length s > 0), choose (not (isInfixOf "\0" s)), cho
   _ | _                           = Nothing
 
 --------------------------------------------------------------------------------
--- 2. Loss-Graded Steps, Traces, & Reversibility Theorems (januskey Reversibility.agda)
+-- 2. Loss-Graded Steps, Traces, & Grade-Accounting Theorems (januskey Reversibility.agda)
 --------------------------------------------------------------------------------
 
-||| A state-transforming step graded in `LossGrade` (`Finite 0` = lossless,
-||| `Finite (S k)` = bounded loss, `Infinity` = irreversible obliteration).
+||| A state-transforming step annotated with a `LossGrade` metadata label
+||| (`Finite 0` = lossless grade, `Finite (S k)` = bounded loss grade,
+||| `Infinity` = irreversible obliteration grade).
+||| Note: `stepGrade` is an algebraic grade annotation on `Step`; constructive
+||| state-restoration inverses (`unwrap (wrap st) = st`) are carried by
+||| `ReversiblePair` in Section 3 below.
 public export
 record Step (S : Type) where
   constructor MkStep
@@ -79,19 +83,20 @@ runTrace : Trace s -> s -> s
 runTrace []        st = st
 runTrace (x :: xs) st = runTrace xs (x.runStep st)
 
-||| A step is lossless when its grade is `Finite 0` (`oneG`).
+||| A step has a lossless grade annotation when `x.stepGrade = Finite 0` (`oneG`).
 public export
 Lossless : Step s -> Type
 Lossless x = x.stepGrade = Finite 0
 
-||| Every step in a trace is lossless (`AllLossless`).
+||| Every step in a trace has a lossless grade annotation (`AllLossless`).
 public export
 data AllLossless : Trace s -> Type where
   LosslessNil  : AllLossless []
   LosslessCons : {x : Step s} -> {xs : Trace s} ->
                  Lossless x -> AllLossless xs -> AllLossless (x :: xs)
 
-||| Theorem 1 (`all-lossless-trace`): A trace of lossless steps has total grade `Finite 0`.
+||| Theorem 1 (`all-lossless-trace`): A trace whose steps all have grade `Finite 0`
+||| has total trace grade `Finite 0`.
 public export
 allLosslessTrace : (ts : Trace s) -> AllLossless ts -> traceGrade ts = Finite 0
 allLosslessTrace []        LosslessNil          = Refl
@@ -102,30 +107,21 @@ allLosslessTrace (x :: xs) (LosslessCons p ps)  =
 ||| Left factor of a zero-loss product must be `Finite 0` (`+g-zero-left`).
 public export
 lossSeqZeroLeft : (a, b : LossGrade) -> lossSeq a b = Finite 0 -> a = Finite 0
-lossSeqZeroLeft (Finite Z)     (Finite _) _   = Refl
-lossSeqZeroLeft (Finite (S _)) (Finite _) prf = absurd (succNotZ (finiteInjective prf))
-  where
-    succNotZ : S k = Z -> Void
-    succNotZ Refl impossible
-lossSeqZeroLeft (Finite _)     Infinity   prf = absurd (finiteNotInfinity (sym prf))
-lossSeqZeroLeft Infinity       _          prf = absurd (finiteNotInfinity (sym prf))
+lossSeqZeroLeft (Finite Z)     (Finite _) _    = Refl
+lossSeqZeroLeft (Finite (S _)) (Finite _) Refl impossible
+lossSeqZeroLeft (Finite _)     Infinity   Refl impossible
+lossSeqZeroLeft Infinity       _          Refl impossible
 
 ||| Right factor of a zero-loss product must be `Finite 0` (`+g-zero-right`).
 public export
 lossSeqZeroRight : (a, b : LossGrade) -> lossSeq a b = Finite 0 -> b = Finite 0
-lossSeqZeroRight (Finite Z)     (Finite Z)     _   = Refl
-lossSeqZeroRight (Finite Z)     (Finite (S _)) prf = absurd (succNotZ (finiteInjective prf))
-  where
-    succNotZ : S k = Z -> Void
-    succNotZ Refl impossible
-lossSeqZeroRight (Finite (S _)) (Finite _)     prf = absurd (succNotZ (finiteInjective prf))
-  where
-    succNotZ : S k = Z -> Void
-    succNotZ Refl impossible
-lossSeqZeroRight (Finite _)     Infinity       prf = absurd (finiteNotInfinity (sym prf))
-lossSeqZeroRight Infinity       _              prf = absurd (finiteNotInfinity (sym prf))
+lossSeqZeroRight (Finite Z)     (Finite Z)     _    = Refl
+lossSeqZeroRight (Finite Z)     (Finite (S _)) Refl impossible
+lossSeqZeroRight (Finite (S _)) (Finite _)     Refl impossible
+lossSeqZeroRight (Finite _)     Infinity       Refl impossible
+lossSeqZeroRight Infinity       _              Refl impossible
 
-||| Theorem 2 (`lossless-trace-all`): A lossless trace hides NO lossy step —
+||| Theorem 2 (`lossless-trace-all`): A zero-grade trace hides NO nonzero-grade step —
 ||| if `traceGrade ts = Finite 0`, then EVERY individual step in `ts` has grade `Finite 0`.
 public export
 losslessTraceAll : (ts : Trace s) -> traceGrade ts = Finite 0 -> AllLossless ts

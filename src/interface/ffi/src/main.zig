@@ -1339,8 +1339,9 @@ pub export fn gossamer_broadcast(event_name: [*:0]const u8, payload_json: [*:0]c
     for (window_registry) |slot| {
         if (slot) |handle| {
             if (handle.initialized and !handle.closed) {
-                emitToHandle(handle, name_span, payload_span);
-                delivered += 1;
+                if (emitToHandle(handle, name_span, payload_span)) {
+                    delivered += 1;
+                }
             }
         }
     }
@@ -1365,22 +1366,56 @@ pub export fn gossamer_send_to(target_id: u32, event_name: [*:0]const u8, payloa
         return .@"error";
     }
 
-    emitToHandle(h, std.mem.span(event_name), std.mem.span(payload_json));
+    if (!emitToHandle(h, std.mem.span(event_name), std.mem.span(payload_json))) {
+        setError("Invalid event name or JSON payload");
+        return .invalid_param;
+    }
     return .ok;
 }
 
 /// Helper: inject a __gossamer_emit call into a handle's webview.
-fn emitToHandle(handle: *GossamerHandle, event: []const u8, payload: []const u8) void {
+/// Validates `event` and `payload` (must be valid JSON), embeds `payload`
+/// as an escaped JS string literal parsed via `JSON.parse(...)`, and returns
+/// `true` iff the event was delivered.
+fn emitToHandle(handle: *GossamerHandle, event: []const u8, payload: []const u8) bool {
+    if (event.len == 0) return false;
     // Reject event names containing JS string-breaking characters.
     for (event) |ch| {
-        if (ch == '\'' or ch == '\\' or ch == '\n' or ch == '\r' or ch == 0) return;
+        if (ch == '\'' or ch == '\\' or ch == '\n' or ch == '\r' or ch == 0) return false;
     }
-    // Build: window.__gossamer_emit&&window.__gossamer_emit('event',payload);
+    // Validate that payload is well-formed JSON before embedding.
+    if (!(std.json.validate(std.heap.c_allocator, payload) catch false)) {
+        return false;
+    }
+    var escaped_buf: [3584]u8 = undefined;
+    var esc_len: usize = 0;
+    for (payload) |ch| {
+        const seq: []const u8 = switch (ch) {
+            '\\' => "\\\\",
+            '"' => "\\\"",
+            '\n' => "\\n",
+            '\r' => "\\r",
+            '\t' => "\\t",
+            0x08 => "\\b",
+            0x0C => "\\f",
+            else => if (ch < 0x20) return false else &[_]u8{ch},
+        };
+        if (esc_len + seq.len > escaped_buf.len) return false;
+        @memcpy(escaped_buf[esc_len .. esc_len + seq.len], seq);
+        esc_len += seq.len;
+    }
+    const escaped_payload = escaped_buf[0..esc_len];
+    // Build: window.__gossamer_emit&&window.__gossamer_emit('event',JSON.parse("..."));
     var buf: [4096]u8 = undefined;
-    const js = std.fmt.bufPrint(buf[0 .. buf.len - 1], "window.__gossamer_emit&&window.__gossamer_emit('{s}',{s});", .{ event, payload }) catch return;
+    const js = std.fmt.bufPrint(
+        buf[0 .. buf.len - 1],
+        "window.__gossamer_emit&&window.__gossamer_emit('{s}',JSON.parse(\"{s}\"));",
+        .{ event, escaped_payload },
+    ) catch return false;
     buf[js.len] = 0;
     const js_z: [*:0]const u8 = buf[0..js.len :0];
-    platform.eval(&handle.webview, js_z) catch {};
+    platform.eval(&handle.webview, js_z) catch return false;
+    return true;
 }
 
 //==============================================================================
