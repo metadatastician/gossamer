@@ -99,6 +99,7 @@ extern "C" {
         cleanup: Option<extern "C" fn(*mut c_void)>,
         user_data: *mut c_void,
     );
+    fn gossamer_channel_authorize_opsm(channel: u64, shell_token: u64) -> c_int;
     fn gossamer_async_inflight_count() -> u32;
 
     fn gossamer_cap_grant(resource_kind: u32) -> u64;
@@ -538,6 +539,13 @@ impl App {
     pub fn async_inflight_count() -> u32 {
         // SAFETY: read-only FFI call, always safe
         unsafe { gossamer_async_inflight_count() }
+    }
+
+    /// Authorize the built-in `opsm_runtime` shell-exec handler on this app's
+    /// channel using a valid 64-bit Shell capability token (`resource_kind == 2`).
+    pub fn authorize_opsm(&self, shell_token: u64) -> Result<(), Error> {
+        // SAFETY: channel and shell_token are validated by the Zig FFI layer
+        check_result(unsafe { gossamer_channel_authorize_opsm(self.channel, shell_token) })
     }
 
     /// Load HTML content into the webview.

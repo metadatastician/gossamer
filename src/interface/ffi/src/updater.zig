@@ -254,7 +254,7 @@ fn fetchVersionFromGitHub(repo: [*:0]const u8) ?SemVer {
 fn readVersionFromFile(path: [*:0]const u8) ?SemVer {
     const allocator = std.heap.page_allocator;
 
-    const file = std.fs.cwd().openFile(std.mem.span(path), .{}) catch {
+    const file = @import("unified_api_adapter.zig").fs.cwd().openFile(std.mem.span(path), .{}) catch {
         setError("Updater: failed to open version file");
         return null;
     };

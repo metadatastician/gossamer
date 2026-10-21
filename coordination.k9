@@ -1,0 +1,63 @@
+K9!
+# SPDX-License-Identifier: MPL-2.0
+# SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+# coordination.k9 — Gossamer AI coordination protocol manifest (ABNF v1.2.0)
+
+metadata:
+  schema: k9-coordination
+  schema_version: 1.2.0
+  generated_by: "hyperpolymath/standards"
+  last_updated: 2026-10-21
+
+project:
+  name: "gossamer"
+  description: "Linearly-typed webview shell with Idris2 ABI proofs, Ephapax linear core, and Zig FFI"
+  license: MPL-2.0
+  repo: metadatastician/gossamer
+  deed_ref: gossamer_chora.deed
+  languages:
+    - Idris2
+    - Zig
+    - Ephapax
+    - AffineScript
+    - Rust
+  build_system: just
+  runtime: bun
+
+build_commands:
+  - command: "just build"
+    purpose: "Build the Zig FFI library and CLI"
+  - command: "just test"
+    purpose: "Run the FFI integration and ABI test suites"
+  - command: "just abi-check"
+    purpose: "Typecheck all Idris2 ABI modules under %default total"
+  - command: "just abi-gen"
+    purpose: "Regenerate src/interface/abi/ForeignGen.idr from Zig exports"
+
+invariants:
+  - id: no-typescript
+    rule: "Do not introduce TypeScript — AffineScript is the frontend binding language"
+    reason: "Estate language policy requires AffineScript over TypeScript"
+    severity: critical
+  - id: bun-over-deno
+    rule: "Prefer Bun over Deno for JavaScript/WASM runtime tasks"
+    reason: "Estate runtime policy standardises on Bun"
+    severity: high
+  - id: unified-api-adapter
+    rule: "All Zig host filesystem and I/O calls route through UnifiedApiAdapter"
+    reason: "Enforced by zig-unified-api-adapter-check in Central Estate CI/CD Audit"
+    severity: critical
+  - id: deed-only-manifests
+    rule: "Do not add .a2ml files — all machine-readable manifests use .deed and .k9.ncl"
+    reason: "A2ML is retired under standards#837 in favour of DEED v1.2.0 and K9 Contract v1.0.0"
+    severity: critical
+
+protected:
+  - path: gossamer_chora.deed
+    reason: "Canonical repository deed (one-deed-per-repo doctrine)"
+  - path: 0-AI-MANIFEST.deed
+    reason: "Canonical AI gatekeeper manifest"
+  - path: .machine_readable/contractiles/
+    reason: "Canonical K9 v1.0.0 contractiles"
+  - path: coordination.k9
+    reason: "Source of truth for AI coordination protocol"

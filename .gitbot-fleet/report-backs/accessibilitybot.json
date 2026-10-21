@@ -1,0 +1,8 @@
+{
+  "reporter": "accessibilitybot",
+  "title": "accessibilitybot (WCAG / AT-SPI2 / UIAutomation)",
+  "status": "ran",
+  "reason": null,
+  "ref": "main",
+  "findings": []
+}

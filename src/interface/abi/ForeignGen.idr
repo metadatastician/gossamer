@@ -124,6 +124,10 @@ export
 prim__gossamer_cap_set_max : Bits32 -> PrimIO Bits32
 
 export
+%foreign "C:gossamer_channel_authorize_opsm, libgossamer"
+prim__gossamer_channel_authorize_opsm : Bits64 -> Bits64 -> PrimIO Bits32
+
+export
 %foreign "C:gossamer_channel_bind, libgossamer"
 prim__gossamer_channel_bind : Bits64 -> String -> Bits64 -> Bits64 -> PrimIO Bits32
 

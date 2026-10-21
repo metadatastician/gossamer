@@ -25,12 +25,12 @@ K9!
 
   # Project configuration
   project = {
-    name = "my-project",
+    name = "gossamer",
     version = "0.1.0",
     description = "A project following Rhodium Standard Repositories",
 
     repository = {
-      url = "https://github.com/hyperpolymath/my-project",
+      url = "https://github.com/metadatastician/gossamer",
       type = "git",
     },
 
@@ -45,7 +45,7 @@ K9!
     keywords = [
       "rhodium-standard",
       "rsr",
-      "hyperpolymath",
+      "metadatastician",
     ],
   },
 

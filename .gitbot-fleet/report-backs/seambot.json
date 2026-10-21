@@ -1,0 +1,8 @@
+{
+  "reporter": "seambot",
+  "title": "seambot (integration health: ABI/FFI seams)",
+  "status": "ran",
+  "reason": null,
+  "ref": "main",
+  "findings": []
+}
