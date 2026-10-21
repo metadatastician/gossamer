@@ -830,7 +830,6 @@ fn autoInferSchema(allocator: std.mem.Allocator, pairs_json: []const u8) i64 {
     while (std.mem.indexOfPos(u8, pairs_json, pos, "{\"key\":\"")) |obj_start| {
         const key_start = obj_start + "{\"key\":\"".len;
         const key_end = std.mem.indexOfScalarPos(u8, pairs_json, key_start, '"') orelse break;
-        const key = pairs_json[key_start..key_end];
 
         const obj_end = std.mem.indexOfScalarPos(u8, pairs_json, key_end, '}') orelse break;
         const obj_slice = pairs_json[obj_start .. obj_end + 1];
