@@ -106,8 +106,8 @@ fn shellExecHandler(payload: [*:0]const u8, user_data: ?*anyopaque) callconv(.c)
     const payload_slice = std.mem.span(payload);
 
     const token = if (user_data) |ud| @as(u64, @intFromPtr(ud)) else 0;
-    // Result.ok == 0; deny on null token, non-ok check result, or wrong resource kind.
-    if (token == 0 or gossamer_cap_check(token) != 0 or gossamer_cap_resource_kind(token) != 0) {
+    // Result.ok == 0; deny on null token, non-ok check result, or wrong resource kind (Shell == 2).
+    if (token == 0 or gossamer_cap_check(token) != 0 or gossamer_cap_resource_kind(token) != 2) {
         return @ptrCast(@constCast("{\"error\":\"capability denied\"}"));
     }
 
