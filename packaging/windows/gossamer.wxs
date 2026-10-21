@@ -26,7 +26,7 @@
     Name="Gossamer"
     Manufacturer="Jonathan D.A. Jewell"
     Version="0.3.0.0"
-    UpgradeCode="A1B2C3D4-E5F6-7890-ABCD-EF1234567890"
+    UpgradeCode="A1B2C3D4-E5F6-8890-ABCD-EF1234567890"
     Language="1033"
     Codepage="1252"
     InstallerVersion="500"
@@ -73,7 +73,7 @@
       Component: CLI
       Installs gossamer.exe — the command-line tool.
     -->
-    <Component Id="Cmp_gossamer_exe" Directory="INSTALLDIR" Guid="C3D4E5F6-A7B8-9012-CDEF-123456789012">
+    <Component Id="Cmp_gossamer_exe" Directory="INSTALLDIR" Guid="C3D4E5F6-A7B8-8012-8DEF-123456789012">
       <File
         Id="File_gossamer_exe"
         Source="..\..\cli\zig-out\bin\gossamer.exe"
@@ -85,7 +85,7 @@
       Component: Import library
       Installs libgossamer.lib — for linking from MSVC or Zig on Windows.
     -->
-    <Component Id="Cmp_libgossamer_lib" Directory="INSTALLDIR" Guid="D4E5F6A7-B8C9-0123-DEF0-234567890123">
+    <Component Id="Cmp_libgossamer_lib" Directory="INSTALLDIR" Guid="D4E5F6A7-B8C9-8123-9EF0-234567890123">
       <File
         Id="File_libgossamer_lib"
         Source="..\..\src\interface\ffi\zig-out\lib\libgossamer.lib"
@@ -97,7 +97,7 @@
       Component: Header
       Installs gossamer.h to the include\ subdirectory.
     -->
-    <Component Id="Cmp_gossamer_h" Directory="INCLUDEDIR" Guid="E5F6A7B8-C9D0-1234-EF01-345678901234">
+    <Component Id="Cmp_gossamer_h" Directory="INCLUDEDIR" Guid="E5F6A7B8-C9D0-8234-AF01-345678901234">
       <File
         Id="File_gossamer_h"
         Source="..\..\generated\abi\gossamer.h"
@@ -110,7 +110,7 @@
       Appends the install directory to the system PATH so `gossamer` can be
       invoked from any command prompt without a full path.
     -->
-    <Component Id="Cmp_PATH" Directory="INSTALLDIR" Guid="F6A7B8C9-D0E1-2345-F012-456789012345">
+    <Component Id="Cmp_PATH" Directory="INSTALLDIR" Guid="F6A7B8C9-D0E1-8345-B012-456789012345">
       <KeyPath Id="Cmp_PATH_KeyPath" />
       <Environment
         Id="PATH_Env"
