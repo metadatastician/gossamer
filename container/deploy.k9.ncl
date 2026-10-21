@@ -41,6 +41,7 @@ let component_pedigree = {
   # ─────────────────────────────────────────────────────────────
   security = {
     trust_level = 'Hunt,
+    security_level = 'Hunt,
     allow_network = true,
     allow_filesystem_write = true,
     allow_subprocess = true,
