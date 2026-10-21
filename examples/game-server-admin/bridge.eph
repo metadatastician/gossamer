@@ -101,9 +101,9 @@ fn bridge_server_action(payload: String): String =
 
 // bridge_cluster_action: String -> String
 // Accepts JSON: {"hosts": "host1,host2", "server": "...", "action": "start|stop|restart|status|logs"}
-// Executes the podman action in parallel across all specified hosts via estate pssh.
+// Executes the podman action via trusted host configuration (same source as other bridge actions).
 fn bridge_cluster_action(payload: String): String =
-    let hosts = __ffi("json_field", payload, "hosts") in
+    let hosts = __ffi("bridge_get_vps_host") in
     let server = __ffi("json_field", payload, "server") in
     let action = __ffi("json_field", payload, "action") in
     let container = __ffi("bridge_resolve_container", server) in
