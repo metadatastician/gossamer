@@ -94,9 +94,11 @@ fn isAllowedOpsmCommand(cmd: []const u8) bool {
 /// Returns an error object when the capability gate denies the call, cmd is
 /// missing or not allowed, a cmd/tool/version token is invalid, or execution fails.
 /// Commands are limited to install, remove, update, list, search, and info.
+/// Blocks until the child finishes; stderr is discarded.
 /// Otherwise returns output (truncated to fit a 64 KiB response buffer) and
 /// exit_code, normalized to 0 for successful exit and 1 for all other terminations.
-/// The result is borrowed; copy it before the next call on the same thread.
+/// The result is borrowed; copy it before the next call on the same thread
+/// or before thread exit.
 fn shellExecHandler(payload: [*:0]const u8, _: ?*anyopaque) callconv(.c) [*:0]const u8 {
     const allocator = std.heap.c_allocator;
     const payload_slice = std.mem.span(payload);
@@ -405,7 +407,8 @@ fn windowLowerHandler(_: [*:0]const u8, user_data: ?*anyopaque) callconv(.c) [*:
 /// JS: gossamer.group_create({label: "My Group"})
 /// The optional label is truncated to 63 bytes. Returns an ok object with
 /// group_id, or an error object if the group limit is reached.
-/// The success response is borrowed until the next call on the same thread.
+/// The success response is borrowed until the next call on the same thread
+/// or thread exit.
 fn groupCreateHandler(payload: [*:0]const u8, _: ?*anyopaque) callconv(.c) [*:0]const u8 {
     const payload_slice = std.mem.span(payload);
     const label = extractSimpleJsonField(payload_slice, "label");
