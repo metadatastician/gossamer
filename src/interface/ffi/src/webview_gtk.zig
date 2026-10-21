@@ -716,15 +716,15 @@ fn asyncIdleCallback(user_data: ?*anyopaque) callconv(.c) c_int {
     const ctx: *AsyncIPCContext = @ptrCast(@alignCast(user_data orelse return 0));
     const allocator = ctx.allocator;
 
-    // Deliver the response or error to JavaScript only if the window is still open
-    if (ctx.handle.initialized and !ctx.handle.closed) {
-        if (ctx.err_msg) |err_msg| {
-            sendIPCError(ctx.handle, ctx.id, err_msg);
-        } else if (ctx.response) |response| {
-            sendIPCResponse(ctx.handle, ctx.id, response);
-        } else {
-            sendIPCError(ctx.handle, ctx.id, "Async callback returned null");
-        }
+    // Deliver the response or error to JavaScript.
+    // Do not dereference handle liveness flags here: the window may have been
+    // closed and the handle freed while this async callback was in flight.
+    if (ctx.err_msg) |err_msg| {
+        sendIPCError(ctx.handle, ctx.id, err_msg);
+    } else if (ctx.response) |response| {
+        sendIPCResponse(ctx.handle, ctx.id, response);
+    } else {
+        sendIPCError(ctx.handle, ctx.id, "Async callback returned null");
     }
 
     // Release the inflight slot
