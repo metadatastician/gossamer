@@ -14,7 +14,12 @@ const std = @import("std");
 const main = @import("main.zig");
 
 fn isValidFsPath(path_slice: []const u8) bool {
-    return std.fs.path.isAbsolute(path_slice) and std.mem.indexOf(u8, path_slice, "..") == null;
+    if (!std.fs.path.isAbsolute(path_slice)) return false;
+    var it = std.mem.tokenizeAny(u8, path_slice, "/\\");
+    while (it.next()) |part| {
+        if (std.mem.eql(u8, part, "..")) return false;
+    }
+    return true;
 }
 
 /// Read a text file and return its contents as a C string.
