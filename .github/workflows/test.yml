@@ -91,17 +91,9 @@ jobs:
 
       - name: Type-check ABI proofs
         run: |
-          run_idris() {
-            if ! "$@" > /tmp/idris.log 2>&1; then
-              cat /tmp/idris.log
-              printf '::error::%s\n' "$(tr '\n\r' '  ' < /tmp/idris.log | tail -c 1500)"
-              exit 1
-            fi
-            cat /tmp/idris.log
-          }
-          run_idris idris2 --typecheck gossamer-abi.ipkg
-          run_idris idris2 --install gossamer-abi.ipkg
-          run_idris idris2 --typecheck gossamer-groove.ipkg
+          idris2 --typecheck gossamer-abi.ipkg
+          idris2 --install gossamer-abi.ipkg
+          idris2 --typecheck gossamer-groove.ipkg
 
   clippy:
     name: Clippy-Style Checks
