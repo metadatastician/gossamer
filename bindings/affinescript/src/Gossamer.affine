@@ -161,6 +161,137 @@ pub extern fn window_navigate(url: String) -> Unit / { IO, Async };
 /// Evaluate JavaScript in the webview context.
 pub extern fn window_eval(js: String) -> Unit / { IO, Async };
 
+/// Show the window.
+pub extern fn window_show() -> Unit / { IO, Async };
+
+/// Hide the window.
+pub extern fn window_hide() -> Unit / { IO, Async };
+
+/// Minimize the window to the dock/taskbar.
+pub extern fn window_minimize() -> Unit / { IO, Async };
+
+/// Maximize the window to fill the work area.
+pub extern fn window_maximize() -> Unit / { IO, Async };
+
+/// Restore the window from minimized or maximized state.
+pub extern fn window_restore() -> Unit / { IO, Async };
+
+/// Request the window to close (checked against the active GuardMode).
+pub extern fn window_close() -> Unit / { IO, Async };
+
+/// Raise the window above sibling windows (z-order).
+pub extern fn window_raise() -> Unit / { IO, Async };
+
+/// Lower the window below sibling windows (z-order).
+pub extern fn window_lower() -> Unit / { IO, Async };
+
+// ---------------------------------------------------------------------------
+// Guard — accidental-close protection (v0.2+)
+// ---------------------------------------------------------------------------
+
+/// Accidental-close protection mode matching Gossamer.ABI.WindowState.GuardMode.
+pub type GuardMode =
+  | GuardOff
+  | GuardConfirm
+  | GuardLocked
+
+/// Set the accidental-close protection mode on the current window.
+pub extern fn window_guard_set(mode: GuardMode) -> Unit / { IO, Async };
+
+/// Query the current accidental-close protection mode.
+pub extern fn window_guard_get() -> GuardMode / { IO, Async };
+
+// ---------------------------------------------------------------------------
+// Transmute — live window presentation morphing (v0.2+)
+// ---------------------------------------------------------------------------
+
+/// Transmute mode matching Gossamer.ABI.WindowState.TransmuteMode (ordinals 0..3).
+pub type TransmuteMode =
+  | TransmuteDisabled
+  | TransmuteOverlay
+  | TransmuteMaximized
+  | TransmuteFullscreen
+
+/// Apply a transmute mode (chromeless/transparent/always-on-top/fullscreen).
+pub extern fn transmute(mode: TransmuteMode) -> Unit / { IO, Async };
+
+/// Query the active transmute mode of the current window.
+pub extern fn transmute_get() -> TransmuteMode / { IO, Async };
+
+// ---------------------------------------------------------------------------
+// Activity — power/refresh throttling (v0.3+)
+// ---------------------------------------------------------------------------
+
+/// Activity level matching Gossamer.ABI.WindowState.ActivityLevel (ordinals 0..4).
+pub type ActivityLevel =
+  | ActivityPaused
+  | ActivityLow
+  | ActivityMid
+  | ActivityHigh
+  | ActivityRealtime
+
+/// Set the window activity/power throttling level.
+pub extern fn activity_set(level: ActivityLevel) -> Unit / { IO, Async };
+
+/// Query the current window activity/power throttling level.
+pub extern fn activity_get() -> ActivityLevel / { IO, Async };
+
+// ---------------------------------------------------------------------------
+// Window groups, broadcast, and arrangement (v0.2+)
+// ---------------------------------------------------------------------------
+
+/// Batch operation applied to a window group (ordinals 0..4).
+pub type GroupOp =
+  | GroupMinimizeAll
+  | GroupRestoreAll
+  | GroupCloseAll
+  | GroupShowAll
+  | GroupHideAll
+
+/// Window tiling/arrangement strategy (ordinals 0..3).
+pub type ArrangeStrategy =
+  | ArrangeSideBySide
+  | ArrangeStacked
+  | ArrangeGrid
+  | ArrangeCascade
+
+/// Create a named window group and return its group_id.
+pub extern fn group_create(label: String) -> Int / { IO, Async };
+
+/// Add a window to an existing group.
+pub extern fn group_join(group_id: Int, window_id: Int) -> Unit / { IO, Async };
+
+/// Remove a window from a group.
+pub extern fn group_leave(group_id: Int, window_id: Int) -> Unit / { IO, Async };
+
+/// Apply a batch lifecycle operation to every window in a group.
+pub extern fn group_apply(group_id: Int, op: GroupOp) -> Unit / { IO, Async };
+
+/// Broadcast a JSON event payload to all open windows. Returns recipient count.
+pub extern fn broadcast(event_name: String, payload_json: String) -> Int / { IO, Async };
+
+/// Arrange all managed windows according to the given layout strategy.
+pub extern fn arrange(strategy: ArrangeStrategy) -> Unit / { IO, Async };
+
+// ---------------------------------------------------------------------------
+// Debug drawer & Groove panel docking (v0.3+)
+// ---------------------------------------------------------------------------
+
+/// Open the built-in developer debug drawer.
+pub extern fn debug_open() -> Unit / { IO, Async };
+
+/// Close the built-in developer debug drawer.
+pub extern fn debug_close() -> Unit / { IO, Async };
+
+/// Toggle the built-in developer debug drawer.
+pub extern fn debug_toggle() -> Unit / { IO, Async };
+
+/// Dock a Groove peer panel URL into the right side of the window.
+pub extern fn groove_dock(url: String, width: Int) -> Unit / { IO, Async };
+
+/// Undock the currently docked Groove peer panel.
+pub extern fn groove_undock() -> Unit / { IO, Async };
+
 // ---------------------------------------------------------------------------
 // Event — streaming IPC (backend -> frontend push)
 // ---------------------------------------------------------------------------

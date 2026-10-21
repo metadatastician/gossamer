@@ -135,7 +135,6 @@
           "type": "string",
           "description": "Task runner used for beforeDevCommand and beforeBuildCommand. Bun is the supported estate runtime.",
           "enum": [
-            "deno",
             "bun"
           ],
           "default": "bun"

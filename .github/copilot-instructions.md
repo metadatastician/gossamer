@@ -33,8 +33,8 @@
 
 ## Banned Languages
 
-- No TypeScript (use ReScript)
-- No Node.js / npm / bun (use Deno)
+- No TypeScript or ReScript (use AffineScript)
+- No Node.js / npm / Deno (use Bun)
 - No Go (use Rust)
 - No Python (use Julia or Rust)
 
