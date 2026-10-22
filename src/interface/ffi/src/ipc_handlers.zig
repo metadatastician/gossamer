@@ -109,7 +109,7 @@ fn resolveOpsmToken(user_data: ?*anyopaque) u64 {
     return @as(u64, addr);
 }
 
-fn clearOpsmSlotForChannel(channel: u64) void {
+pub fn clearOpsmSlotForChannel(channel: u64) void {
     opsm_auth_mutex.lock();
     defer opsm_auth_mutex.unlock();
     for (&opsm_slots) |*slot| {
@@ -817,7 +817,11 @@ pub export fn gossamer_channel_authorize_opsm(channel: u64, shell_token: u64) ca
     }
 
     const sp = slot_ptr orelse return -99;
-    return gossamer_channel_bind_async(channel, "opsm_runtime", &shellExecHandler, @ptrCast(sp));
+    const rc = gossamer_channel_bind_async(channel, "opsm_runtime", &shellExecHandler, @ptrCast(sp));
+    if (rc != 0) {
+        clearOpsmSlotForChannel(channel);
+    }
+    return rc;
 }
 
 //==============================================================================

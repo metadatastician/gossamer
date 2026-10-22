@@ -157,8 +157,9 @@ comptime {
 // bind by hand; libgossamer now registers them on demand so both the native
 // CLI and the future Ephapax-wasm CLI share one implementation. Without this
 // import the export is absent from libgossamer and the CLI fails to link.
+const ipc_handlers = @import("ipc_handlers.zig");
 comptime {
-    _ = @import("ipc_handlers.zig");
+    _ = ipc_handlers;
 }
 
 // Shell execution FFI functions (gossamer_shell_spawn, gossamer_shell_kill).
@@ -510,10 +511,12 @@ pub const ChannelHandle = struct {
     pub fn endCall(self: *ChannelHandle) void {
         self.mutex.lock();
         self.inflight -= 1;
-        const cb = if (!self.open and self.inflight == 0) self.cleanup_callback else null;
+        const should_clean = !self.open and self.inflight == 0;
+        const cb = if (should_clean) self.cleanup_callback else null;
         const data = self.cleanup_data;
         if (cb != null) self.cleanup_callback = null;
         self.mutex.unlock();
+        if (should_clean) ipc_handlers.clearOpsmSlotForChannel(@intCast(@intFromPtr(self)));
         if (cb) |cleanup_cb| cleanup_cb(data);
         self.release();
     }
@@ -3176,14 +3179,19 @@ pub export fn gossamer_channel_close_with_cleanup(
     cleanup_data: ?*anyopaque,
 ) void {
     clearError();
-    const raw_ptr = @as(?*ChannelHandle, @ptrFromInt(@as(usize, @intCast(channel_ptr)))) orelse return;
+    const raw_ptr = @as(?*ChannelHandle, @ptrFromInt(@as(usize, @intCast(channel_ptr)))) orelse {
+        ipc_handlers.clearOpsmSlotForChannel(channel_ptr);
+        return;
+    };
     raw_ptr.mutex.lock();
     raw_ptr.open = false;
     raw_ptr.cleanup_callback = cleanup_callback;
     raw_ptr.cleanup_data = cleanup_data;
-    const cb = if (raw_ptr.inflight == 0) raw_ptr.cleanup_callback else null;
+    const should_clean = raw_ptr.inflight == 0;
+    const cb = if (should_clean) raw_ptr.cleanup_callback else null;
     if (cb != null) raw_ptr.cleanup_callback = null;
     raw_ptr.mutex.unlock();
+    if (should_clean) ipc_handlers.clearOpsmSlotForChannel(channel_ptr);
     if (cb) |cleanup_cb| cleanup_cb(cleanup_data);
     raw_ptr.release();
 }

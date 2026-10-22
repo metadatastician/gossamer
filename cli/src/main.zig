@@ -148,12 +148,58 @@ fn parseConfig(json_str: []const u8) Config {
     return config;
 }
 
+fn extractObjectSlice(json: []const u8, quoted_key: []const u8) ?[]const u8 {
+    var search_pos: usize = 0;
+    while (std.mem.indexOfPos(u8, json, search_pos, quoted_key)) |key_pos| {
+        var i = key_pos + quoted_key.len;
+        while (i < json.len and (json[i] == ' ' or json[i] == '\t' or json[i] == '\n' or json[i] == '\r')) : (i += 1) {}
+        if (i >= json.len or json[i] != ':') {
+            search_pos = key_pos + quoted_key.len;
+            continue;
+        }
+        i += 1;
+        while (i < json.len and (json[i] == ' ' or json[i] == '\t' or json[i] == '\n' or json[i] == '\r')) : (i += 1) {}
+        if (i >= json.len or json[i] != '{') return null;
+
+        const obj_start = i;
+        var depth: usize = 0;
+        var in_str = false;
+        while (i < json.len) : (i += 1) {
+            const ch = json[i];
+            if (in_str) {
+                if (ch == '\\') {
+                    i += 1;
+                } else if (ch == '"') {
+                    in_str = false;
+                }
+            } else {
+                if (ch == '"') {
+                    in_str = true;
+                } else if (ch == '{') {
+                    depth += 1;
+                } else if (ch == '}') {
+                    depth -= 1;
+                    if (depth == 0) {
+                        return json[obj_start .. i + 1];
+                    }
+                }
+            }
+        }
+        return null;
+    }
+    return null;
+}
+
 fn extractCapabilitiesHasShell(json: []const u8) bool {
-    const key = "\"capabilities\":";
-    const key_pos = std.mem.indexOf(u8, json, key) orelse return false;
-    const after_key = json[key_pos + key.len ..];
+    const scope = extractObjectSlice(json, "\"security\"") orelse return false;
+    const key = "\"capabilities\"";
+    const key_pos = std.mem.indexOf(u8, scope, key) orelse return false;
+    const after_key = scope[key_pos + key.len ..];
 
     var i: usize = 0;
+    while (i < after_key.len and (after_key[i] == ' ' or after_key[i] == '\t' or after_key[i] == '\n' or after_key[i] == '\r')) : (i += 1) {}
+    if (i >= after_key.len or after_key[i] != ':') return false;
+    i += 1;
     while (i < after_key.len and (after_key[i] == ' ' or after_key[i] == '\t' or after_key[i] == '\n' or after_key[i] == '\r')) : (i += 1) {}
     if (i >= after_key.len or after_key[i] != '[') return false;
     i += 1;

@@ -1,8 +1,0 @@
-{
-  "reporter": "rhodibot",
-  "title": "rhodibot (RSR compliance)",
-  "status": "ran",
-  "reason": null,
-  "ref": "main",
-  "findings": []
-}

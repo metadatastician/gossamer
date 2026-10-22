@@ -66,7 +66,7 @@ jobs:
 
       - name: Build and run Hypatia scanner
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           git init "$HOME/hypatia"
@@ -186,7 +186,53 @@ jobs:
         run: |
           set -uo pipefail
           renderer=.standards-grid/scripts/verdict-grid.sh
-          mkdir -p verdict-grid
+          mkdir -p verdict-grid .gitbot-fleet/report-backs
+          emit_bot() {
+            jq -n --arg tool "$1" --arg status "$2" --arg ref "$HEAD_SHA" \
+              --argjson exit_code "$3" --argjson err "$4" --argjson warn "$5" --argjson info "$6" \
+              --arg reason "${7:-}" \
+              '{status: $status, tool: $tool, ref: $ref,
+                reason: (if $reason == "" then null else $reason end),
+                exit_code: $exit_code,
+                counts: (if $status == "ran" then {error: $err, warn: $warn, info: $info} else null end),
+                findings: (if $status == "ran" then
+                  ([range(0; $err) | {severity: "error", message: ($tool + " check failed")}] +
+                   [range(0; $warn) | {severity: "warn", message: ($tool + " warning")}] +
+                   [range(0; $info) | {severity: "info", message: ($tool + " info")}])
+                else [] end)}' \
+              > ".gitbot-fleet/report-backs/$1.json"
+          }
+          # 1. rhodibot — RSR layout & DEED/K9 presence probe
+          rhodi_err=0
+          [ -f gossamer_chora.deed ] && [ -f 0-AI-MANIFEST.deed ] && [ -f coordination.k9 ] || rhodi_err=1
+          emit_bot rhodibot ran "$rhodi_err" "$rhodi_err" 0 0
+          # 2. panicbot — verify panic-attack ran and assail-classifications_praxis.deed is active
+          pa_status=$(jq -r '.status // "not_run"' panic-attack-findings.json 2>/dev/null || echo "not_run")
+          pa_reason=$(jq -r '.reason // ""' panic-attack-findings.json 2>/dev/null || echo "")
+          pa_exit=$(jq '.exit_code // null' panic-attack-findings.json 2>/dev/null || echo "null")
+          if [ "$pa_status" = "ran" ]; then
+            pb_err=0
+            [ "$(bash scripts/deed-field.sh audits/assail-classifications_praxis.deed metadata status 2>/dev/null || true)" = "active" ] || pb_err=1
+            emit_bot panicbot ran "$pb_err" "$pb_err" 0 0
+          else
+            emit_bot panicbot "$pa_status" "$pa_exit" 0 0 0 "$pa_reason"
+          fi
+          # 3. echidnabot — Idris 2 ABI proof totality check (ignoring -- and ||| comments)
+          echidna_err=0
+          grep -vhE '^[[:space:]]*(--|\|\|\|)' src/interface/abi/*.idr | grep -E '\b(believe_me|assert_total|sorry)\b' >/dev/null 2>&1 && echidna_err=1
+          emit_bot echidnabot ran "$echidna_err" "$echidna_err" 0 0
+          # 4. seambot — C header & ABI seam sync check
+          seam_err=0
+          cmp -s src/interface/gossamer.h generated/abi/gossamer.h || seam_err=1
+          emit_bot seambot ran "$seam_err" "$seam_err" 0 0
+          # 5. finishingbot — zero legacy .a2ml files
+          finish_err=$(find . -name '*.a2ml' -not -path './.git/*' | wc -l | tr -d ' ')
+          emit_bot finishingbot ran "$finish_err" "$finish_err" 0 0
+          # 6. accessibilitybot — README & SECURITY.md presence
+          a11y_err=0
+          { [ -f README.md ] || [ -f README.adoc ]; } && [ -f SECURITY.md ] || a11y_err=1
+          emit_bot accessibilitybot ran "$a11y_err" "$a11y_err" 0 0
+
           findings=hypatia-findings.json
           [ -f hypatia-findings.relativized.json ] && findings=hypatia-findings.relativized.json
           enrolment=""
@@ -199,7 +245,7 @@ jobs:
             --url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
             --pr "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
             --hypatia-ref "$HYPATIA_SHA" --panic-ref "$PANIC_ATTACK_SHA" --pons-ref "$PONS_SHA" > /dev/null
-          rm -rf .standards-grid
+          rm -rf .standards-grid .gitbot-fleet/report-backs/*.json
 
       - name: Upload the verdict grid
         if: ${{ always() }}

@@ -145,8 +145,10 @@ pub extern fn cap_check(t: CapToken) -> Bool / { IO, Async };
 /// Revoke a capability token. After this the token is consumed.
 pub extern fn cap_revoke(t: CapToken) -> Unit / { IO, Async };
 
-/// Authorize the built-in `opsm_runtime` IPC handler with a Shell capability token.
-pub extern fn opsm_authorize(shell_cap: CapToken) -> Unit / { IO, Async };
+// Note: OPSM runtime authorization (`gossamer_channel_authorize_opsm`) is
+// performed on the native host side during channel setup when `"shell"` is
+// declared in `gossamer.conf.json` (`security.capabilities`), never exposed
+// as a frontend self-service IPC command.
 
 // ---------------------------------------------------------------------------
 // Window — webview window management
