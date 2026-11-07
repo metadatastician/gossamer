@@ -41,7 +41,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh extension install github/gh-actions-lock --pin v0.1.6
+          gh extension install github/gh-actions-lock --pin v0.4.1
           # Standards' reviewed wrapper accounts for the released tool's
           # reusable-workflow gap; ordinary stale/wrong-ref findings still fail.
           curl -fsSL --retry 3 -o "$RUNNER_TEMP/update-actions-lock.sh" https://raw.githubusercontent.com/hyperpolymath/standards/fcb566cfb8a86cea2d3666bf65a4f177a49b1313/scripts/update-actions-lock.sh
