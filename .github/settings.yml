@@ -7,23 +7,23 @@
 # applied by the probot/settings app when changes are pushed to the default
 # branch. Install the app at: https://github.com/apps/settings
 #
-# Repository settings — configured for paint-type.
+# Repository settings — configured for metadatastician/gossamer.
 
 # ─── Repository Settings ───────────────────────────────────────────────────────
 
 repository:
-  name: "paint-type"
-  description: "Cross-platform open-source image editor — capable enough for real work, simple enough to reach for without thinking"
-  homepage: "https://github.com/metadatastician/paint-type"
+  name: "gossamer"
+  description: "A resource-aware desktop shell for web front ends, aiming to make webview handles and permissions statically checkable; Tauri/Electron-style packaging with optional Burble and PanLL integration."
+  homepage: ""
   private: false
   has_issues: true
   has_projects: true
-  has_wiki: false
-  has_downloads: true
+  has_wiki: true
+  has_downloads: false
   default_branch: main
   allow_squash_merge: true
-  allow_merge_commit: true
-  allow_rebase_merge: true
+  allow_merge_commit: false
+  allow_rebase_merge: false
   delete_branch_on_merge: true
   enable_automated_security_fixes: true
   enable_vulnerability_alerts: true
@@ -112,4 +112,11 @@ labels:
     description: "Formal proof has been completed and verified"
 
 # ─── Branch Protection ─────────────────────────────────────────────────────────
-
+#
+# Branch protection is governed by the live GitHub rulesets, not by probot/settings.
+# For metadatastician/gossamer the active default-branch rules come from the
+# organization rulesets EstateBranching (#18225024), Branch-Floor (#23868655),
+# and Branch-Signatures (#24634124), together with the other applicable active
+# rulesets returned by the repository rules API. No repository-owned ruleset is
+# currently returned by GET /repos/metadatastician/gossamer/rulesets?includes_parents=false.
+# Those live rulesets are authoritative; do not duplicate stale branches: protection here.
