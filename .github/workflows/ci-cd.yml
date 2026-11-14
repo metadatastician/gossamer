@@ -317,7 +317,7 @@ jobs:
           echo "Creating release for v$VERSION"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3.0.3
+        uses: softprops/action-gh-release@v3.0.4
         with:
           tag_name: v${{ steps.tag.outputs.version }}
           name: Gossamer v${{ steps.tag.outputs.version }}
